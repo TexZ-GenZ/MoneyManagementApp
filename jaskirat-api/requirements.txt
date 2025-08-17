@@ -1,0 +1,38 @@
+# FastAPI and Server
+fastapi
+uvicorn
+
+# Database
+sqlalchemy
+psycopg2-binary
+asyncpg
+alembic
+redis
+
+# Authentication & Security
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Configuration
+pydantic_settings
+python-dotenv
+
+# AWS SDK (for deployment)
+boto3
+botocore
+
+# Development & Testing
+pytest
+pytest-asyncio
+httpx
+
+# Utilities
+python-dateutil
+pytz
+email-validator
+
+# Celery
+celery
+
+# Flower
+flower

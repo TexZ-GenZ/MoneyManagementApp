@@ -1,0 +1,326 @@
+# JASKIRAT TEXTILES API - POSTMAN TEST COLLECTION
+
+This document provides sample requests for testing the Jaskirat Textiles API in Postman.
+
+## ENVIRONMENT SETUP
+
+1. Create a new Postman environment with the following variables:
+- `base_url`: http://localhost:8000
+- `token`: (leave empty initially)
+- `admin_token`: (leave empty initially)
+- `accountant_token`: (leave empty initially)
+- `executive_token`: (leave empty initially)
+- `company_code`: (leave empty initially)
+- `bill_id`: (leave empty initially)
+- `payment_id`: (leave empty initially)
+
+## AUTHENTICATION TESTS
+
+### 1. Executive Login
+**Method**: POST
+**URL**: {{base_url}}/api/auth/login
+**Body**: raw (JSON)
+```json
+{
+    "phone": "9876543212",
+    "password": "executive123"
+}
+```
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.environment.set("token", jsonData.access_token);
+    pm.environment.set("executive_token", jsonData.access_token);
+    pm.test("Executive login successful", function () {
+        pm.expect(jsonData.user.role).to.equal("executive");
+    });
+}
+```
+
+### 2. Accountant Login
+**Method**: POST
+**URL**: {{base_url}}/api/auth/login
+**Body**: raw (JSON)
+```json
+{
+    "phone": "9876543211",
+    "password": "accountant123"
+}
+```
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.environment.set("accountant_token", jsonData.access_token);
+    pm.test("Accountant login successful", function () {
+        pm.expect(jsonData.user.role).to.equal("accountant");
+    });
+}
+```
+
+### 3. Admin Login
+**Method**: POST
+**URL**: {{base_url}}/api/auth/login
+**Body**: raw (JSON)
+```json
+{
+    "phone": "9876543210",
+    "password": "admin123"
+}
+```
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.environment.set("admin_token", jsonData.access_token);
+    pm.test("Admin login successful", function () {
+        pm.expect(jsonData.user.role).to.equal("admin");
+    });
+}
+```
+
+### 4. Get Current User
+**Method**: GET
+**URL**: {{base_url}}/api/auth/me
+**Headers**:
+- Authorization: Bearer {{token}}
+
+## COMPANY MANAGEMENT TESTS
+
+### 5. Get Companies (Executive View)
+**Method**: GET
+**URL**: {{base_url}}/api/companies
+**Headers**:
+- Authorization: Bearer {{executive_token}}
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    if (jsonData.length > 0) {
+        pm.environment.set("company_code", jsonData[0].code);
+    }
+    pm.test("Companies retrieved successfully", function () {
+        pm.expect(jsonData).to.be.an("array");
+    });
+}
+```
+
+### 6. Get Company Details
+**Method**: GET
+**URL**: {{base_url}}/api/companies/{{company_code}}
+**Headers**:
+- Authorization: Bearer {{executive_token}}
+
+## BILL MANAGEMENT TESTS
+
+### 7. Get Bills for Company
+**Method**: GET
+**URL**: {{base_url}}/api/bills?company_code={{company_code}}
+**Headers**:
+- Authorization: Bearer {{executive_token}}
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    if (jsonData.length > 0) {
+        pm.environment.set("bill_id", jsonData[0].id);
+    }
+    pm.test("Bills retrieved successfully", function () {
+        pm.expect(jsonData).to.be.an("array");
+    });
+}
+```
+
+### 8. Get Bill Details
+**Method**: GET
+**URL**: {{base_url}}/api/bills/{{bill_id}}
+**Headers**:
+- Authorization: Bearer {{executive_token}}
+
+## PAYMENT WORKFLOW TESTS
+
+### 9. Create Payment (Executive)
+**Method**: POST
+**URL**: {{base_url}}/api/payments
+**Headers**:
+- Authorization: Bearer {{executive_token}}
+**Body**: raw (JSON)
+```json
+{
+    "bill_ids": [{{bill_id}}],
+    "company_code": "{{company_code}}",
+    "amount": 1000,
+    "payment_method": "cash",
+    "next_promise_date": "2025-08-30T00:00:00Z",
+    "location_verified": true,
+    "comments": "Payment collected in person"
+}
+```
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.environment.set("payment_id", jsonData.id);
+    pm.test("Payment created successfully", function () {
+        pm.expect(jsonData.status).to.equal("pending");
+    });
+}
+```
+
+### 10. Get Executive's Payments
+**Method**: GET
+**URL**: {{base_url}}/api/payments/
+**Headers**:
+- Authorization: Bearer {{executive_token}}
+
+### 11. Accountant Approval
+**Method**: PUT
+**URL**: {{base_url}}/api/payments/{{payment_id}}/approve
+**Headers**:
+- Authorization: Bearer {{accountant_token}}
+**Body**: raw (JSON)
+```json
+{
+    "approved": true,
+    "comments": "Payment verified and approved"
+}
+```
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.test("Payment approved by accountant", function () {
+        pm.expect(jsonData.accountant_approved).to.equal(true);
+    });
+}
+```
+
+### 12. Get Pending Admin Approvals
+**Method**: GET
+**URL**: {{base_url}}/api/payments/pending
+**Headers**:
+- Authorization: Bearer {{admin_token}}
+
+### 13. Admin Approval
+**Method**: PUT
+**URL**: {{base_url}}/api/payments/{{payment_id}}/admin-approve
+**Headers**:
+- Authorization: Bearer {{admin_token}}
+**Body**: raw (JSON)
+```json
+{
+    "approved": true,
+    "comments": "Final approval granted"
+}
+```
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.test("Payment approved by admin", function () {
+        pm.expect(jsonData.admin_approved).to.equal(true);
+        pm.expect(jsonData.status).to.equal("completed");
+    });
+}
+```
+
+### 14. Verify Payment Status
+**Method**: GET
+**URL**: {{base_url}}/api/payments/{{payment_id}}
+**Headers**:
+- Authorization: Bearer {{token}}
+
+## ADVANCED TESTS
+
+### 15. Get Company Statistics
+**Method**: GET
+**URL**: {{base_url}}/api/companies/{{company_code}}/stats
+**Headers**:
+- Authorization: Bearer {{token}}
+
+### 16. Get Overdue Bills
+**Method**: GET
+**URL**: {{base_url}}/api/bills/overdue/list
+**Headers**:
+- Authorization: Bearer {{token}}
+
+## PARTIAL PAYMENT WORKFLOW
+
+### 17. Create Partial Payment
+**Method**: POST
+**URL**: {{base_url}}/api/payments
+**Headers**:
+- Authorization: Bearer {{executive_token}}
+**Body**: raw (JSON)
+```json
+{
+    "bill_ids": [{{bill_id}}],
+    "company_code": "{{company_code}}",
+    "amount": 500,
+    "payment_method": "cash",
+    "next_promise_date": "2025-09-10T00:00:00Z",
+    "location_verified": true,
+    "comments": "Partial payment collected"
+}
+```
+
+**Response Handling (Tests Tab)**:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.environment.set("partial_payment_id", jsonData.id);
+    pm.test("Partial payment created successfully", function () {
+        pm.expect(jsonData.status).to.equal("pending");
+    });
+}
+```
+
+## TESTING NOTES
+
+1. **Authentication Flow**:
+   - Use the login endpoint to get tokens for different user roles
+   - Store tokens in environment variables
+   - Use appropriate token for each request based on required permissions
+
+2. **Company & Bill Access**:
+   - Executives can only see companies assigned to them
+   - All roles can view bills, but with different permissions
+
+3. **Payment Approval Workflow**:
+   - Executive creates payment → Status: PENDING
+   - Accountant approves → accountant_approved: true
+   - Admin approves → admin_approved: true, Status: COMPLETED
+   - Bill status updated to PAID or PARTIALLY_PAID
+
+4. **Error Testing**:
+   - Try accessing unauthorized resources
+   - Try payment approval without proper role
+   - Try admin approval before accountant approval
+
+5. **Common Issues**:
+   - Make sure all tokens are valid and not expired
+   - Check that bill_ids is an array, even for single bill
+   - Ensure company_code in payment matches bill's company
+   - Payment amount should be valid (greater than 0)
+
+## TYPICAL WORKFLOW EXAMPLE
+
+1. Login as Executive → Get token
+2. Get assigned companies → Select company_code
+3. Get bills for selected company → Select bill_id
+4. Create payment for selected bill
+5. Login as Accountant → Get token
+6. Get pending payments → Approve payment
+7. Login as Admin → Get token
+8. Get pending admin approvals → Give final approval
+9. Verify bill status is updated to PAID
+10. Verify company information is updated (promise_date, credit_date)

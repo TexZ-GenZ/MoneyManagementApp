@@ -1,0 +1,540 @@
+# JASKIRAT TEXTILES API DOCUMENTATION
+
+This document provides a complete list of all API endpoints, required schemas, and their functions.
+
+## ENVIRONMENT INFORMATION
+- Backend is running in Docker
+- API is accessible at port 8000
+- PostgreSQL database at port 5432
+- Redis at port 6379
+- PGAdmin at port 5050
+
+## AUTHENTICATION ENDPOINTS
+
+### POST /api/auth/login
+**Purpose**: Login user and return JWT tokens
+**Schema**:
+```
+{
+  "phone": "string",
+  "password": "string"
+}
+```
+**Returns**: JWT access token, refresh token and user details
+**Notes**: Phone-based authentication, not email
+
+### POST /api/auth/refresh
+**Purpose**: Refresh access token using refresh token
+**Schema**:
+```
+{
+  "refresh_token": "string"
+}
+```
+**Returns**: New access token, refresh token and user details
+
+### GET /api/auth/me
+**Purpose**: Get current user information
+**Authentication**: Requires valid JWT
+**Returns**: Current user details
+
+### POST /api/auth/logout
+**Purpose**: Logout user (client should remove tokens)
+**Authentication**: Requires valid JWT
+**Returns**: Success message
+
+## USER ENDPOINTS
+
+### GET /api/users/
+**Purpose**: Get all users with pagination and filters
+**Authentication**: Admin only
+**Query Parameters**:
+- skip (default: 0)
+- limit (default: 100)
+- role (optional): filter by role
+- active_only (optional): filter active users
+**Returns**: List of users
+
+### POST /api/users/
+**Purpose**: Create new user
+**Authentication**: Admin only
+**Schema**:
+```
+{
+  "name": "string",
+  "phone": "string",
+  "role": "admin|accountant|executive",
+  "password": "string"
+}
+```
+**Returns**: Created user details
+
+### GET /api/users/{user_id}
+**Purpose**: Get user by ID
+**Authentication**: Admin or self
+**Returns**: User details
+
+### PUT /api/users/{user_id}
+**Purpose**: Update user
+**Authentication**: Admin or self
+**Schema**:
+```
+{
+  "name": "string", (optional)
+  "phone": "string", (optional)
+  "role": "admin|accountant|executive", (optional)
+  "is_active": boolean (optional)
+}
+```
+**Returns**: Updated user details
+
+### DELETE /api/users/{user_id}
+**Purpose**: Delete user (soft delete)
+**Authentication**: Admin only
+**Returns**: Success message
+
+## COMPANY ENDPOINTS
+
+### GET /api/companies/
+**Purpose**: Get all companies with pagination and search
+**Authentication**: Any authenticated user
+**Query Parameters**:
+- skip (default: 0)
+- limit (default: 100)
+- search (optional): search by company name, code, area
+- active_only (default: true): filter active companies
+- executive_id (optional): filter by executive
+- area (optional): filter by area
+**Notes**: Executives can only see companies assigned to them
+**Returns**: List of companies with financial details
+
+### POST /api/companies/
+**Purpose**: Create new company
+**Authentication**: Admin or Accountant
+**Schema**:
+```
+{
+  "code": "string", 
+  "account_n": "string", 
+  "area": "string", 
+  "outbal": decimal, 
+  "amount": decimal,
+  "promise_date": datetime, (optional)
+  "credit_date": datetime, (optional)
+  "location": "string", (optional)
+  "phone": "string", (optional)
+  "address": "string", (optional)
+  "assigned_executive_id": int (optional)
+}
+```
+**Returns**: Created company details
+
+### GET /api/companies/{company_code}
+**Purpose**: Get company by code
+**Authentication**: Any authenticated user (executives can only see assigned companies)
+**Returns**: Company details with financial overview
+
+### PUT /api/companies/{company_code}
+**Purpose**: Update company
+**Authentication**: Admin or Accountant
+**Schema**: Same as company create with all fields optional
+**Returns**: Updated company details
+
+### DELETE /api/companies/{company_code}
+**Purpose**: Delete company (soft delete)
+**Authentication**: Admin only
+**Returns**: Success message
+
+### GET /api/companies/{company_code}/stats
+**Purpose**: Get company statistics
+**Authentication**: Any authenticated user (executives can only see assigned companies)
+**Returns**: Company financial statistics
+
+## BILL ENDPOINTS
+
+### GET /api/bills/
+**Purpose**: Get all bills with pagination and filters
+**Authentication**: Any authenticated user
+**Query Parameters**:
+- skip (default: 0)
+- limit (default: 100)
+- company_code (optional): filter by company
+- status (optional): filter by bill status
+- overdue_only (optional): filter overdue bills
+**Returns**: List of bills with company details
+
+### POST /api/bills/
+**Purpose**: Create new bill
+**Authentication**: Admin or Accountant
+**Schema**:
+```
+{
+  "bill_number": "string",
+  "company_code": "string",
+  "amount": decimal,
+  "due_date": datetime,
+  "description": "string", (optional)
+  "debit": decimal,
+  "date": datetime
+}
+```
+**Returns**: Created bill details
+
+### GET /api/bills/{bill_id}
+**Purpose**: Get bill by ID
+**Authentication**: Any authenticated user
+**Returns**: Bill details with company information
+
+### PUT /api/bills/{bill_id}
+**Purpose**: Update bill
+**Authentication**: Admin or Accountant
+**Schema**: Same as bill create with all fields optional
+**Returns**: Updated bill details
+
+### DELETE /api/bills/{bill_id}
+**Purpose**: Delete bill
+**Authentication**: Admin only
+**Returns**: Success message
+
+### GET /api/bills/overdue/list
+**Purpose**: Get overdue bills
+**Authentication**: Any authenticated user
+**Returns**: List of overdue bills
+
+## PAYMENT ENDPOINTS
+
+### GET /api/payments/
+**Purpose**: Get all payments with pagination and filters
+**Authentication**: Any authenticated user (executives can only see their own)
+**Query Parameters**:
+- bill_id (optional): filter by bill
+- collected_by_id (optional): filter by collector
+- start_date (optional): filter by start date
+- end_date (optional): filter by end date
+- skip (default: 0)
+- limit (default: 100)
+**Returns**: List of payments
+
+### POST /api/payments/
+**Purpose**: Create new payment (supports multiple bills)
+**Authentication**: Any authenticated user
+**Schema**:
+```
+{
+  "bill_ids": [int],
+  "company_code": "string",
+  "amount": decimal,
+  "payment_method": "string", (optional - cash/cheque/online/card)
+  "reference_number": "string", (optional)
+  "next_promise_date": datetime, (optional)
+  "location_latitude": decimal, (optional)
+  "location_longitude": decimal, (optional)
+  "location_address": "string", (optional)
+  "location_verified": boolean, (optional)
+  "comments": "string", (optional)
+  "notes": "string" (optional)
+}
+```
+**Returns**: Created payment details
+
+### GET /api/payments/pending
+**Purpose**: Get payments pending approval based on user role
+**Authentication**: Admin or Accountant
+**Notes**: Accountants see payments pending their approval, Admins see accountant-approved payments
+**Returns**: List of pending payments
+
+### GET /api/payments/executive/{executive_id}
+**Purpose**: Get payments by executive
+**Authentication**: Any authenticated user (executives can only see their own)
+**Returns**: List of payments by executive
+
+### GET /api/payments/{payment_id}
+**Purpose**: Get payment by ID
+**Authentication**: Any authenticated user (executives can only see their own)
+**Returns**: Payment details
+
+### PUT /api/payments/{payment_id}/approve
+**Purpose**: Approve/reject payment (accountant level)
+**Authentication**: Admin or Accountant
+**Schema**:
+```
+{
+  "approved": boolean,
+  "comments": "string" (optional)
+}
+```
+**Returns**: Updated payment details
+
+### PUT /api/payments/{payment_id}/admin-approve
+**Purpose**: Final admin approval
+**Authentication**: Admin only
+**Schema**:
+```
+{
+  "approved": boolean,
+  "comments": "string" (optional)
+}
+```
+**Notes**: Payment must be approved by accountant first
+**Returns**: Updated payment details
+**Side Effects**: When approved, updates bill statuses and company information
+
+### DELETE /api/payments/{payment_id}
+**Purpose**: Delete payment (only if not approved)
+**Authentication**: Admin only
+**Returns**: Success message
+
+## NOTIFICATION ENDPOINTS
+
+### GET /api/notifications/
+**Purpose**: Get all notifications for the current user
+**Authentication**: Any authenticated user
+**Query Parameters**:
+- skip (default: 0)
+- limit (default: 100)
+- unread_only (default: false)
+**Returns**: List of notifications
+
+### POST /api/notifications/
+**Purpose**: Create new notification
+**Authentication**: Admin only
+**Schema**:
+```
+{
+  "title": "string",
+  "message": "string",
+  "type": "string",
+  "user_id": int
+}
+```
+**Returns**: Created notification details
+
+### PUT /api/notifications/{notification_id}/read
+**Purpose**: Mark notification as read
+**Authentication**: Any authenticated user (only for own notifications)
+**Returns**: Updated notification details
+
+## SYSTEM ENDPOINTS
+
+### GET /
+**Purpose**: API root endpoint
+**Returns**: API information and version
+
+### GET /health
+**Purpose**: Health check endpoint
+**Returns**: API health status and environment
+
+## USER ROLES AND PERMISSIONS
+
+### Admin
+- Full access to all endpoints
+- Can create/update/delete users
+- Can create/update/delete companies
+- Can assign companies to executives
+- Can create/update/delete bills
+- Final payment approval
+- Can create notifications
+
+### Accountant
+- Can create/update companies
+- Can create/update bills
+- First-level payment approval
+- Can view all executives and payments
+
+### Executive
+- Can view assigned companies
+- Can create payments
+- Can view own payments
+- Limited access to other endpoints
+
+## DATA MODELS
+
+### User
+- id (primary key)
+- name
+- phone (unique)
+- hashed_password
+- role (admin, accountant, executive)
+- is_active
+- created_at
+- updated_at
+
+### Company
+- code (primary key)
+- account_n (company name)
+- area (executive name/area)
+- outbal (overdue amount)
+- amount (total amount to be collected)
+- promise_date
+- credit_date
+- location
+- phone
+- address
+- assigned_executive_id (foreign key to User)
+- last_collection_date
+- is_active
+- created_at
+- updated_at
+
+### Bill
+- id (primary key)
+- bill_number (unique)
+- company_code (foreign key to Company)
+- amount
+- due_date
+- status (pending, partially_paid, paid, overdue)
+- description
+- debit
+- date
+- paid_amount
+- remaining_amount
+- created_at
+- updated_at
+
+### Payment
+- id (primary key)
+- company_code (foreign key to Company)
+- bill_ids (JSON array of bill IDs)
+- amount
+- payment_date
+- payment_method (cash, cheque, online, card)
+- reference_number
+- status (pending, completed, failed)
+- collected_by_id (foreign key to User)
+- next_promise_date
+- location_latitude
+- location_longitude
+- location_address
+- location_verified
+- comments
+- notes
+- accountant_approved
+- accountant_approved_by_id (foreign key to User)
+- accountant_approved_at
+- accountant_comments
+- admin_approved
+- admin_approved_by_id (foreign key to User)
+- admin_approved_at
+- admin_comments
+- created_at
+- updated_at
+
+### Notification
+- id (primary key)
+- user_id (foreign key to User)
+- title
+- message
+- type
+- is_read
+- created_at
+
+## AUTHENTICATION FLOW
+
+1. Client calls `/api/auth/login` with phone and password
+2. Server returns access token, refresh token, and user details
+3. Client includes access token in Authorization header for subsequent requests
+4. When access token expires, client uses refresh token to get new tokens
+5. Client should remove tokens on logout
+
+## PAYMENT APPROVAL WORKFLOW
+
+1. Executive creates payment with `/api/payments/` endpoint
+2. Payment status is set to PENDING
+3. Accountant approves/rejects with `/api/payments/{id}/approve` endpoint
+4. If approved, Admin gives final approval with `/api/payments/{id}/admin-approve`
+5. If admin approves, payment status becomes COMPLETED
+   - Bill statuses are updated (paid or partially_paid)
+   - Bill paid_amount and remaining_amount are updated
+   - Company information is updated (promise_date, credit_date)
+6. If rejected at any stage, payment status becomes FAILED
+
+## POSTMAN TESTING DATA
+
+### Test Users (Sample)
+1. Admin:
+   - Phone: "9876543210"
+   - Password: "admin123"
+2. Accountant:
+   - Phone: "9876543211"
+   - Password: "accountant123"
+3. Executive:
+   - Phone: "9876543212"
+   - Password: "executive123"
+
+### Testing Flow
+1. **Authentication**:
+   - Login as executive to get token
+   - Use token in subsequent requests
+
+2. **Company Management**:
+   - Get list of companies assigned to executive
+   - Get details for a specific company
+
+3. **Bill Management**:
+   - Get bills for a specific company
+   - Check for overdue bills
+
+4. **Payment Collection**:
+   - Create payment for selected bills
+   - Check payment status
+
+5. **Payment Approval**:
+   - Login as accountant
+   - Approve payment
+   - Login as admin
+   - Give final approval
+   - Check bill status updates
+
+### Sample Requests
+
+1. **Login (POST /api/auth/login)**
+```json
+{
+  "phone": "9876543212",
+  "password": "executive123"
+}
+```
+
+2. **Create Payment (POST /api/payments/)**
+```json
+{
+  "bill_ids": [1, 2],
+  "company_code": "COMP001",
+  "amount": 5000,
+  "payment_method": "cash",
+  "next_promise_date": "2025-08-30T00:00:00Z",
+  "location_verified": true,
+  "comments": "Collected in person"
+}
+```
+
+3. **Accountant Approval (PUT /api/payments/{payment_id}/approve)**
+```json
+{
+  "approved": true,
+  "comments": "Verified payment details"
+}
+```
+
+4. **Admin Approval (PUT /api/payments/{payment_id}/admin-approve)**
+```json
+{
+  "approved": true,
+  "comments": "Payment approved and processed"
+}
+```
+
+## BACKEND STATUS
+
+According to the TODO.md file, the backend API is fully implemented with the following features:
+
+- ✅ User authentication and authorization
+- ✅ Company data models and API
+- ✅ Bill data models and API
+- ✅ Payment data models and API with approval workflow
+- ✅ Database schema and models
+- ✅ Docker environment configuration
+- ✅ API testing and validation
+- ✅ CORS configuration for mobile app compatibility
+
+There are no mock endpoints - all endpoints connect to a real PostgreSQL database and implement the full business logic.
