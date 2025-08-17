@@ -1,0 +1,87 @@
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { COLORS } from '../../utils/constants';
+
+const ExecutiveDashboardScreen: React.FC = () => {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Executive Dashboard</Text>
+      <Text style={styles.subtitle}>Welcome to Jaskirat Textiles Payment System</Text>
+
+      <View style={styles.statsContainer}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>12</Text>
+          <Text style={styles.statLabel}>Companies Assigned</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>₹2,45,000</Text>
+          <Text style={styles.statLabel}>Total Pending</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>5</Text>
+          <Text style={styles.statLabel}>Overdue Companies</Text>
+        </View>
+
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>₹15,000</Text>
+          <Text style={styles.statLabel}>Today's Target</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.LIGHT,
+    padding: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: COLORS.GRAY,
+    marginBottom: 24,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    backgroundColor: COLORS.WHITE,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    width: '48%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: COLORS.GRAY,
+    textAlign: 'center',
+  },
+});
+
+export default ExecutiveDashboardScreen;
