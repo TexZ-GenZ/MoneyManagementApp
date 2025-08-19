@@ -10,13 +10,13 @@ export default function TabLayout() {
   const dispatch = useAppDispatch();
   const { user, isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
 
-  useEffect(() => {
-    // Authentication is handled in the root layout
-    // Just redirect to login if not authenticated
-    if (!isAuthenticated && !isLoading) {
-      router.replace('/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
+  // useEffect(() => {
+  //   // Authentication is handled in the root layout
+  //   // Just redirect to login if not authenticated
+  //   if (!isAuthenticated && !isLoading) {
+  //     router.replace('/login');
+  //   }
+  // }, [isAuthenticated, isLoading, router]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -39,9 +39,9 @@ export default function TabLayout() {
     );
   };
 
-  if (!isAuthenticated) {
-    return null; // Will redirect to login
-  }
+  // if (!isAuthenticated) {
+  //   return null; // Will redirect to login
+  // }
 
   // Get user role for conditional tab rendering
   const userRole = user?.role || 'executive';
@@ -66,7 +66,7 @@ export default function TabLayout() {
         }),
       }}>
 
-      {/* Dashboard - Available to all roles */}
+      {/* Dashboard - Available to all roles
       <Tabs.Screen
         name="index"
         options={{
@@ -76,15 +76,15 @@ export default function TabLayout() {
           ),
           headerTitle: `${userRole.charAt(0).toUpperCase() + userRole.slice(1)} Dashboard`,
         }}
-      />
+      /> */}
 
       {/* Executive Navigation */}
       {userRole === 'executive' && (
         <>
           <Tabs.Screen
-            name="explore"
+            name="Home"
             options={{
-              title: 'Companies',
+              title: '../../src/screens/executive/DashboardScreen',
               tabBarIcon: ({ color, focused }) => (
                 <TabBarIcon name={focused ? 'business' : 'business-outline'} color={color} />
               ),
