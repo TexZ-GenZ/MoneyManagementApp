@@ -8,11 +8,9 @@ const { width } = Dimensions.get('window');
 
 export default function ExecutiveDashboard() {
   const buttons = [
-    { label: 'Overdue', icon: 'alert-circle-outline' },
-    { label: 'Executives', icon: 'people-outline', action:()=>{router.push('../screens/ExecutiveActivity')} },
-    { label: 'Recent', icon: 'trending-up', action:()=>{router.push('../(others)/RecentCollections')} },
-    { label: 'Companies', icon: 'business-outline', action:()=>{router.push('../(others)/Companies')} },
-    { label: 'Block', icon: 'ban-outline', action:()=>{router.push('../(others)/BlockScreen')} },
+    { label: 'To-Do', icon: 'alert-circle-outline' },
+    { label: 'Companies', icon: 'business-outline', action:()=>{router.push('../CompanyList/ExecutiveCompanies')} },
+
   ];
   const router = useRouter()
   return (
