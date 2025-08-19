@@ -1,1 +1,0 @@
-# Jaskirat Textiles API Package
