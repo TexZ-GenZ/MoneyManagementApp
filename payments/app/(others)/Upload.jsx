@@ -1,142 +1,127 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
+import React from "react";
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import useUploadStore from "../../src/store/uploadStore";
 
-export default function UploadScreen() {
-  const [file, setFile] = useState(null);
+const UploadScreen = () => {
+  const { uploadCSV, isUploading, uploadError, lastUploadResult, resetUpload } = useUploadStore();
 
-  const handleUpload = () => {
-    // File picker logic goes here
-    console.log("Pick a file...");
-  };
-
-  const handleSubmit = () => {
-    if (file) {
-      console.log("Uploading ID...");
+  const handleUpload = async () => {
+    try {
+      await uploadCSV();
+    } catch (e) {
+      console.log("Upload failed:", e.message);
     }
   };
 
   return (
     <View style={styles.container}>
-
+  
       {/* Title */}
-      <Text style={styles.title}>Upload Data</Text>
+      <Text style={styles.title}>Upload File</Text>
       <Text style={styles.subtitle}>
-        Upload data files to database directly.
+        Upload a CSV or DBF file for processing.
       </Text>
 
-      {/* Upload box */}
-      <TouchableOpacity style={styles.uploadBox} onPress={handleUpload}>
-        <Image
-          source={{ uri: "https://img.icons8.com/ios/50/upload.png" }}
-          style={styles.uploadIcon}
-        />
-        <Text style={styles.uploadText}>Tap to upload Data</Text>
-        <Text style={styles.uploadNote}>DBF or Excel Files</Text>
-      </TouchableOpacity>
+      {/* Upload Box */}
+      <View style={styles.uploadBox}>
+        <TouchableOpacity onPress={handleUpload}>
+          <Text style={styles.uploadText}>
+            Tap to upload file {"\n"}
+            <Text style={styles.uploadHint}>CSV or DBF</Text>
+          </Text>
+        </TouchableOpacity>
 
+      </View>
 
-      {/* Submit button */}
+      {/* Bottom Upload Button */}
       <TouchableOpacity
-        style={[styles.submitButton, !file && styles.submitButtonDisabled]}
-        disabled={!file}
-        onPress={handleSubmit}
+        style={[styles.uploadButton, isUploading && { backgroundColor: "#ccc" }]}
+        onPress={handleUpload}
+        disabled={isUploading}
       >
-        <Text
-          style={[
-            styles.submitButtonText,
-            !file && styles.submitButtonTextDisabled,
-          ]}
-        >
-          Upload
-        </Text>
+        {isUploading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.uploadButtonText}>Upload File</Text>
+        )}
       </TouchableOpacity>
+
+      {/* Error / Success */}
+      {uploadError && <Text style={styles.errorText}>{uploadError}</Text>}
+      {lastUploadResult && (
+        <Text style={styles.successText}>✅ Upload successful!</Text>
+      )}
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
     padding: 20,
+    alignItems: "center",
   },
   skipButton: {
     alignSelf: "flex-end",
-    marginBottom: 10,
+    marginBottom: 20,
   },
   skipText: {
-    color: "#2563eb",
+    color: "#007bff",
     fontWeight: "500",
   },
   title: {
     fontSize: 22,
     fontWeight: "600",
-    marginBottom: 8,
+    marginBottom: 5,
   },
   subtitle: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#666",
     marginBottom: 20,
+    textAlign: "center",
   },
   uploadBox: {
+    width: "100%",
+    padding: 30,
     borderWidth: 1,
-    borderColor: "#d1d5db",
     borderStyle: "dashed",
-    borderRadius: 12,
-    paddingVertical: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f9fafb",
-    marginBottom: 45
-  },
-  uploadIcon: {
-    width: 40,
-    height: 40,
-    marginBottom: 10,
-  },
-  uploadText: {
-    color: "#2563eb",
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  uploadNote: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 4,
-  },
-  orText: {
-    textAlign: "center",
-    marginVertical: 15,
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  cameraButton: {
-    backgroundColor: "#2563eb",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 25,
-  },
-  cameraButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 15,
-  },
-  submitButton: {
-    backgroundColor: "#2563eb",
-    paddingVertical: 14,
+    borderColor: "#aaa",
     borderRadius: 10,
     alignItems: "center",
+    marginBottom: 30,
   },
-  submitButtonDisabled: {
-    backgroundColor: "#cbd5e1",
-  },
-  submitButtonText: {
-    color: "#fff",
+  uploadText: {
+    color: "#007bff",
     fontSize: 16,
-    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 10,
   },
-  submitButtonTextDisabled: {
-    color: "#e5e7eb",
+  uploadHint: {
+    fontSize: 12,
+    color: "#999",
+  },
+  uploadButton: {
+    marginTop: "auto",
+    backgroundColor: "#4a90e2",
+    paddingVertical: 15,
+    borderRadius: 8,
+    width: "100%",
+    alignItems: "center",
+  },
+  uploadButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
+  },
+  errorText: {
+    marginTop: 10,
+    color: "red",
+  },
+  successText: {
+    marginTop: 10,
+    color: "green",
   },
 });
+
+export default UploadScreen;
