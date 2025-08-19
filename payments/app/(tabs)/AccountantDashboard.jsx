@@ -11,7 +11,7 @@ export default function AccountantDashboard() {
     { label: 'Approve', icon: 'alert-circle-outline' },
     { label: 'Companies', icon: 'business-outline', action:()=>{router.push('../CompanyList/ExecutiveCompanies')}},
     { label: 'Executives', icon: 'person-outline', action:()=>{router.push('../CompanyList/ExecutiveCompanies')}},
-    { label: 'Upload', icon: 'add-circle-outline', action:()=>{router.push('../upload')}}
+    { label: 'Upload', icon: 'add-circle-outline', action:()=>{router.push('../(others)/Upload')}}
 
 
   ];
