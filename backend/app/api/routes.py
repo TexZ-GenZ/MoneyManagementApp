@@ -1,0 +1,878 @@
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Header
+from pathlib import Path
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from typing import Optional, List
+from datetime import date, datetime
+from decimal import Decimal
+
+from app.db.session import get_db
+from app.schemas.auth import LoginRequest, Token
+from app.schemas.company import (
+    CompanyBase,
+    CompanyList,
+    CompanyUpdateCredit,
+    CompanyUpdatePromise,
+)
+from app.schemas.bill import BillList, BillOut
+from app.schemas.payment import (
+    PaymentSubmit,
+    PaymentOut,
+    PaymentList,
+    BillPaymentHistory,
+    BillPaymentHistoryItem,
+    PaymentDetailOut,
+    PaymentAllocationDetail,
+)
+from app.schemas.settings import SettingsOut, SettingsUpdate
+from app.schemas.user import UserCreate, UserOut, UserList
+from app.services.auth import (
+    create_access_token,
+    get_user_by_username,
+    get_user_by_mobile,
+    verify_password,
+    hash_password,
+    normalize_indian_mobile,
+)
+from app.services.security import get_current_user, require_roles
+from app.services.company import recalc_company_totals, ensure_settings_row
+from app.services.payments import create_payment_with_allocations, admin_approve_payment
+from app.services.imports import (
+    import_master as do_import_master,
+    import_transactions as do_import_transactions,
+)
+from app.models.models import (
+    User,
+    Company,
+    Bill,
+    Payment,
+    PaymentStatus,
+    Setting,
+    Role,
+    PaymentAllocation,
+    ExecAssignment,
+    Notification,
+    NotificationType,
+    NotificationStatus,
+)
+
+router = APIRouter()
+
+
+@router.post("/auth/login", response_model=Token)
+def login(body: LoginRequest, db: Session = Depends(get_db)):
+    # accept username or mobile in 'username' field for backward compatibility
+    user = get_user_by_username(db, body.username) or get_user_by_mobile(
+        db, body.username
+    )
+    if not user or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token(str(user.id))
+    return Token(access_token=token)
+
+
+@router.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# Settings
+@router.get(
+    "/settings",
+    response_model=SettingsOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def get_settings(db: Session = Depends(get_db)):
+    s = ensure_settings_row(db)
+    return SettingsOut(
+        credit_extension_days=s.credit_extension_days,
+        notif_every_hours=s.notif_every_hours,
+        payment_notif_daily_hour=s.payment_notif_daily_hour,
+    )
+
+
+@router.patch(
+    "/settings",
+    response_model=SettingsOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
+    s = ensure_settings_row(db)
+    if body.credit_extension_days is not None:
+        s.credit_extension_days = body.credit_extension_days
+    if body.notif_every_hours is not None:
+        s.notif_every_hours = body.notif_every_hours
+    if body.payment_notif_daily_hour is not None:
+        s.payment_notif_daily_hour = body.payment_notif_daily_hour
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return SettingsOut(
+        credit_extension_days=s.credit_extension_days,
+        notif_every_hours=s.notif_every_hours,
+        payment_notif_daily_hour=s.payment_notif_daily_hour,
+    )
+
+
+# Companies
+@router.get("/companies", response_model=CompanyList)
+def list_companies(
+    db: Session = Depends(get_db),
+    area: Optional[str] = None,
+    q: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+):
+    query = db.query(Company).filter(Company.is_archived == False)
+    if area:
+        query = query.filter(Company.area == area)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(Company.name.ilike(like))
+    total = query.count()
+    items = query.order_by(Company.code).offset(skip).limit(limit).all()
+    return CompanyList(items=items, total=total)
+
+
+@router.get("/companies/{code}", response_model=CompanyBase)
+def get_company(code: str, db: Session = Depends(get_db)):
+    c = db.get(Company, code)
+    if not c:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return c
+
+
+@router.patch(
+    "/companies/{code}/promise-date",
+    response_model=CompanyBase,
+    dependencies=[Depends(require_roles("executive", "admin"))],
+)
+def set_promise_date(
+    code: str, body: CompanyUpdatePromise, db: Session = Depends(get_db)
+):
+    c = db.get(Company, code)
+    if not c:
+        raise HTTPException(status_code=404, detail="Company not found")
+    c.promise_date = body.promise_date
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+@router.patch(
+    "/companies/{code}/credit-date",
+    response_model=CompanyBase,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def set_credit_date(
+    code: str, body: CompanyUpdateCredit, db: Session = Depends(get_db)
+):
+    c = db.get(Company, code)
+    if not c:
+        raise HTTPException(status_code=404, detail="Company not found")
+    c.credit_date = body.credit_date
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+# Bills
+@router.get("/companies/{code}/bills", response_model=BillList)
+def list_company_bills(
+    code: str,
+    db: Session = Depends(get_db),
+    status: Optional[str] = Query(None, pattern="^(pending|paid)$"),
+    sort: Optional[str] = Query(None, pattern="^(oldest|amount_desc|recent)$"),
+    skip: int = 0,
+    limit: int = 100,
+):
+    q = db.query(Bill).filter(Bill.company_code == code, Bill.is_archived == False)
+    if status:
+        q = q.filter(Bill.status == status)
+    if sort == "oldest":
+        q = q.order_by(Bill.bill_date.asc())
+    elif sort == "amount_desc":
+        q = q.order_by(Bill.amount.desc())
+    elif sort == "recent":
+        q = q.order_by(Bill.bill_date.desc())
+    total = q.count()
+    items = q.offset(skip).limit(limit).all()
+    return BillList(items=items, total=total)
+
+
+@router.get("/bills/{bill_id}", response_model=BillOut)
+def get_bill(bill_id: int, db: Session = Depends(get_db)):
+    b = db.get(Bill, bill_id)
+    if not b:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    return b
+
+
+@router.get("/bills/{bill_id}/payments", response_model=BillPaymentHistory)
+def bill_payment_history(bill_id: int, db: Session = Depends(get_db)):
+    allocs = (
+        db.query(PaymentAllocation, Payment)
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .filter(PaymentAllocation.bill_id == bill_id)
+        .all()
+    )
+    items = []
+    for alloc, payment in allocs:
+        items.append(
+            BillPaymentHistoryItem(
+                payment_id=payment.id,
+                amount=float(alloc.amount),
+                payment_status=(
+                    payment.status.value
+                    if hasattr(payment.status, "value")
+                    else str(payment.status)
+                ),
+                collected_at=payment.collected_at,
+                method=payment.method,
+                accountant_comment=payment.accountant_comment,
+                admin_comment=payment.admin_comment,
+                exec_location_verified=payment.exec_location_verified,
+            )
+        )
+    return BillPaymentHistory(items=items, total=len(items))
+
+
+# Payments
+@router.post(
+    "/payments",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("executive", "admin"))],
+)
+def submit_payment(
+    body: PaymentSubmit,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    # Optional policy: executive can submit only for assigned companies
+    if user.role == Role.executive:
+        assigned = (
+            db.query(ExecAssignment)
+            .filter(
+                ExecAssignment.executive_id == user.id,
+                ExecAssignment.company_code == body.company_code,
+            )
+            .first()
+        )
+        if not assigned:
+            raise HTTPException(status_code=403, detail="Not assigned to this company")
+    # Idempotency: if key provided and exists, validate request matches and return existing
+    if idempotency_key:
+        existing = (
+            db.query(Payment).filter(Payment.idempotency_key == idempotency_key).first()
+        )
+        if existing:
+            # minimal shape comparison to ensure same request
+            same_basic = (
+                existing.company_code == body.company_code
+                and existing.executive_id == user.id
+                and Decimal(str(existing.amount_collected))
+                == Decimal(str(body.amount_collected))
+                and existing.method == body.method
+                and existing.collected_at == body.collected_at
+            )
+            if same_basic:
+                # Compare allocations set
+                existing_allocs = (
+                    db.query(PaymentAllocation)
+                    .filter(PaymentAllocation.payment_id == existing.id)
+                    .all()
+                )
+                existing_set = sorted(
+                    [(a.bill_id, Decimal(str(a.amount))) for a in existing_allocs]
+                )
+                req_set = sorted(
+                    [(a.bill_id, Decimal(str(a.amount))) for a in body.bill_allocations]
+                )
+                if existing_set == req_set:
+                    return existing
+            raise HTTPException(
+                status_code=409,
+                detail="Idempotency-Key already used for a different request",
+            )
+    try:
+        p = create_payment_with_allocations(
+            db,
+            company_code=body.company_code,
+            executive_id=user.id,
+            collected_at=body.collected_at,
+            amount_collected=body.amount_collected,
+            method=body.method,
+            exec_lat=body.exec_lat,
+            exec_lng=body.exec_lng,
+            comments=body.comments,
+            next_promise_date=body.next_promise_date,
+            allocations=[a.model_dump() for a in body.bill_allocations],
+            idempotency_key=idempotency_key,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # idempotency_key already persisted by service if provided
+    # capture optional location verification
+    if body.exec_location_verified is not None:
+        p.exec_location_verified = body.exec_location_verified
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+    return p
+
+
+@router.get(
+    "/accountant/payments/pending",
+    response_model=PaymentList,
+    dependencies=[Depends(require_roles("accountant", "admin"))],
+)
+def accountant_pending(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+    q = db.query(Payment).filter(Payment.status == PaymentStatus.submitted)
+    total = q.count()
+    items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    return PaymentList(items=items, total=total)
+
+
+@router.get("/companies/{code}/payments", response_model=PaymentList)
+def list_company_payments(
+    code: str,
+    db: Session = Depends(get_db),
+    status: Optional[str] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    skip: int = 0,
+    limit: int = 50,
+):
+    q = db.query(Payment).filter(Payment.company_code == code)
+    if status:
+        q = q.filter(Payment.status == status)
+    if date_from:
+        q = q.filter(
+            Payment.collected_at >= datetime.combine(date_from, datetime.min.time())
+        )
+    if date_to:
+        q = q.filter(
+            Payment.collected_at <= datetime.combine(date_to, datetime.max.time())
+        )
+    total = q.count()
+    items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    return PaymentList(items=items, total=total)
+
+
+@router.get("/payments/{payment_id}", response_model=PaymentDetailOut)
+def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
+    p = db.get(Payment, payment_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    # build allocations with joined bill info
+    alloc_rows = (
+        db.query(PaymentAllocation, Bill)
+        .join(Bill, Bill.id == PaymentAllocation.bill_id)
+        .filter(PaymentAllocation.payment_id == payment_id)
+        .all()
+    )
+    allocations = [
+        PaymentAllocationDetail(
+            bill_id=b.id,
+            bill_number=b.bill_number,
+            bill_date=b.bill_date,
+            due_date=b.due_date,
+            amount_allocated=Decimal(str(a.amount)),
+            bill_status=b.status,
+        )
+        for a, b in alloc_rows
+    ]
+    return PaymentDetailOut(
+        id=p.id,
+        company_code=p.company_code,
+        executive_id=p.executive_id,
+        collected_at=p.collected_at,
+        amount_collected=p.amount_collected,
+        method=p.method,
+        status=p.status,
+        next_promise_date=p.next_promise_date,
+        exec_location_verified=p.exec_location_verified,
+        exec_lat=p.exec_lat,
+        exec_lng=p.exec_lng,
+        accountant_review_at=p.accountant_review_at,
+        admin_review_at=p.admin_review_at,
+        accountant_comment=p.accountant_comment,
+        admin_comment=p.admin_comment,
+        allocations=allocations,
+    )
+
+
+@router.post(
+    "/accountant/payments/{payment_id}/approve",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("accountant", "admin"))],
+)
+def accountant_approve(
+    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+):
+    p = db.get(Payment, payment_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if p.status != PaymentStatus.submitted:
+        raise HTTPException(
+            status_code=400,
+            detail="Only submitted payments can be approved by accountant",
+        )
+    p.status = PaymentStatus.accountant_approved
+    p.accountant_review_at = datetime.utcnow()
+    if comment:
+        p.accountant_comment = comment
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+# Admin: create user
+@router.post(
+    "/admin/users",
+    response_model=UserOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_create_user(body: UserCreate, db: Session = Depends(get_db)):
+    if get_user_by_username(db, body.username):
+        raise HTTPException(status_code=400, detail="Username already exists")
+    try:
+        role = Role(body.role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    mobile = None
+    if getattr(body, "mobile", None):
+        mobile = normalize_indian_mobile(body.mobile)
+        if db.query(User).filter(User.mobile == mobile).first():
+            raise HTTPException(status_code=400, detail="Mobile already exists")
+    user = User(
+        username=body.username,
+        mobile=mobile,
+        password_hash=hash_password(body.password),
+        role=role,
+        area=body.area,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+# Admin: update user mobile
+@router.patch(
+    "/admin/users/{user_id}/mobile",
+    response_model=UserOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_update_mobile(user_id: int, mobile: str, db: Session = Depends(get_db)):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    m = normalize_indian_mobile(mobile)
+    if db.query(User).filter(User.mobile == m, User.id != user_id).first():
+        raise HTTPException(status_code=400, detail="Mobile already in use")
+    u.mobile = m
+    db.commit()
+    db.refresh(u)
+    return u
+
+
+# Admin: update user password
+@router.patch(
+    "/admin/users/{user_id}/password",
+    response_model=UserOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_update_password(
+    user_id: int, new_password: str, db: Session = Depends(get_db)
+):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    u.password_hash = hash_password(new_password)
+    db.commit()
+    db.refresh(u)
+    return u
+
+
+# Admin: list executives
+@router.get(
+    "/admin/executives",
+    response_model=List[UserOut],
+    dependencies=[Depends(require_roles("admin"))],
+)
+def list_executives(db: Session = Depends(get_db)):
+    execs = db.query(User).filter(User.role == Role.executive).all()
+    # returning list; schema is single, but Pydantic can coerce list of UserOut if we wrap
+    return [UserOut.model_validate(e) for e in execs]
+
+
+# Admin: assign/unassign companies to an executive
+@router.post(
+    "/admin/executives/{executive_id}/assign/{company_code}",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def assign_company(executive_id: int, company_code: str, db: Session = Depends(get_db)):
+    if not db.get(User, executive_id):
+        raise HTTPException(status_code=404, detail="Executive not found")
+    if not db.get(Company, company_code):
+        raise HTTPException(status_code=404, detail="Company not found")
+    exists = (
+        db.query(ExecAssignment)
+        .filter(
+            ExecAssignment.executive_id == executive_id,
+            ExecAssignment.company_code == company_code,
+        )
+        .first()
+    )
+    if exists:
+        return {"ok": True}
+    db.add(ExecAssignment(executive_id=executive_id, company_code=company_code))
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete(
+    "/admin/executives/{executive_id}/assign/{company_code}",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def unassign_company(
+    executive_id: int, company_code: str, db: Session = Depends(get_db)
+):
+    row = (
+        db.query(ExecAssignment)
+        .filter(
+            ExecAssignment.executive_id == executive_id,
+            ExecAssignment.company_code == company_code,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
+# Executive: get my companies or by id
+@router.get(
+    "/executives/{executive_id}/companies",
+    dependencies=[Depends(require_roles("admin", "executive"))],
+)
+def get_executive_companies(
+    executive_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Enforce that executives can only view their own companies
+    if user.role.value == "executive" and user.id != executive_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    codes = [
+        r.company_code
+        for r in db.query(ExecAssignment)
+        .filter(ExecAssignment.executive_id == executive_id)
+        .all()
+    ]
+    items = (
+        db.query(Company)
+        .filter(Company.code.in_(codes), Company.is_archived == False)
+        .all()
+    )
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/me/companies", dependencies=[Depends(require_roles("executive"))])
+def my_companies(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    codes = [
+        r.company_code
+        for r in db.query(ExecAssignment)
+        .filter(ExecAssignment.executive_id == user.id)
+        .all()
+    ]
+    items = (
+        db.query(Company)
+        .filter(Company.code.in_(codes), Company.is_archived == False)
+        .all()
+    )
+    return {"items": items, "total": len(items)}
+
+
+# Admin: list users by role
+@router.get(
+    "/admin/users",
+    response_model=UserList,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
+    q = db.query(User)
+    if role:
+        try:
+            r = Role(role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        q = q.filter(User.role == r)
+    items = q.all()
+    return UserList(items=items, total=len(items))
+
+
+# Admin: change username
+@router.patch(
+    "/admin/users/{user_id}/username",
+    response_model=UserOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_update_username(user_id: int, username: str, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.username == username, User.id != user_id).first():
+        raise HTTPException(status_code=400, detail="Username already exists")
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    u.username = username
+    db.commit()
+    db.refresh(u)
+    return u
+
+
+# Admin: deactivate user
+@router.delete("/admin/users/{user_id}", dependencies=[Depends(require_roles("admin"))])
+def admin_deactivate_user(user_id: int, db: Session = Depends(get_db)):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    u.is_active = False
+    db.commit()
+    return {"ok": True}
+
+
+# Admin: hard delete user (only allowed for executives without references)
+@router.delete(
+    "/admin/users/{user_id}/hard-delete",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_hard_delete_user(user_id: int, db: Session = Depends(get_db)):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Do not allow deleting admin or accountant accounts
+    if u.role in [Role.admin, Role.accountant]:
+        raise HTTPException(
+            status_code=400, detail="Cannot delete admin or accountant users"
+        )
+    # Ensure no references exist (assignments or payments)
+    assigned = (
+        db.query(ExecAssignment).filter(ExecAssignment.executive_id == user_id).first()
+    )
+    has_payments = db.query(Payment).filter(Payment.executive_id == user_id).first()
+    if assigned or has_payments:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete user with assignments or payments; unassign and migrate first",
+        )
+    db.delete(u)
+    db.commit()
+    return {"ok": True, "deleted": user_id}
+
+
+# Notifications: pending lists
+@router.get(
+    "/notifications/pending",
+    dependencies=[Depends(require_roles("accountant", "admin"))],
+)
+def notifications_pending(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    # For non-admin, show company-related items only (could scope by assigned companies later)
+    items = (
+        db.query(Notification)
+        .filter(Notification.status == NotificationStatus.pending)
+        .all()
+    )
+    return {"items": items, "total": len(items)}
+
+
+@router.get(
+    "/admin/notifications/pending", dependencies=[Depends(require_roles("admin"))]
+)
+def admin_notifications_pending(db: Session = Depends(get_db)):
+    items = (
+        db.query(Notification)
+        .filter(Notification.status == NotificationStatus.pending)
+        .all()
+    )
+    return {"items": items, "total": len(items)}
+
+
+# Imports (stubs)
+@router.post("/imports/master", dependencies=[Depends(require_roles("admin"))])
+def import_master(db: Session = Depends(get_db)):
+    count = do_import_master(db)
+    return {"ok": True, "imported": count}
+
+
+@router.post("/imports/transactions", dependencies=[Depends(require_roles("admin"))])
+def import_transactions(db: Session = Depends(get_db)):
+    count = do_import_transactions(db)
+    return {"ok": True, "imported": count}
+
+
+# File upload variants (multipart) that save files then call import
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+
+
+@router.post("/uploads/master", dependencies=[Depends(require_roles("accountant"))])
+def upload_master(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    dest = DATA_DIR / "master.dbf"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    content = file.file.read()
+    dest.write_bytes(content)
+    count = do_import_master(db)
+    return {"ok": True, "saved": str(dest), "imported": count}
+
+
+@router.post(
+    "/uploads/transactions", dependencies=[Depends(require_roles("accountant"))]
+)
+def upload_transactions(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    dest = DATA_DIR / "transactions.dbf"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    content = file.file.read()
+    dest.write_bytes(content)
+    count = do_import_transactions(db)
+    return {"ok": True, "saved": str(dest), "imported": count}
+
+
+# Notifications (stub list)
+@router.get("/notifications")
+def list_notifications():
+    return {"items": []}
+
+
+@router.post(
+    "/accountant/payments/{payment_id}/decline",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("accountant", "admin"))],
+)
+def accountant_decline(
+    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+):
+    p = db.get(Payment, payment_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if p.status != PaymentStatus.submitted:
+        raise HTTPException(
+            status_code=400,
+            detail="Only submitted payments can be declined by accountant",
+        )
+    p.status = PaymentStatus.declined_by_accountant
+    p.accountant_review_at = datetime.utcnow()
+    if comment:
+        p.accountant_comment = comment
+    # Mark related notifications as stopped
+    db.query(Notification).filter(
+        Notification.company_code == p.company_code,
+        Notification.type == NotificationType.payment_review,
+        Notification.status == NotificationStatus.pending,
+    ).update(
+        {Notification.status: NotificationStatus.stopped}, synchronize_session=False
+    )
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@router.get(
+    "/admin/payments/pending",
+    response_model=PaymentList,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_pending(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+    q = db.query(Payment).filter(Payment.status == PaymentStatus.accountant_approved)
+    total = q.count()
+    items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    return PaymentList(items=items, total=total)
+
+
+@router.post(
+    "/admin/payments/{payment_id}/approve",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_approve(
+    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+):
+    try:
+        p_row = db.get(Payment, payment_id)
+        if not p_row:
+            raise ValueError
+        if p_row.status != PaymentStatus.accountant_approved:
+            raise HTTPException(
+                status_code=400,
+                detail="Only accountant-approved payments can be approved by admin",
+            )
+        p = admin_approve_payment(db, payment_id)
+        if comment:
+            p.admin_comment = comment
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+        return p
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+
+@router.post(
+    "/admin/payments/{payment_id}/decline",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_decline(
+    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+):
+    p = db.get(Payment, payment_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if p.status != PaymentStatus.accountant_approved:
+        raise HTTPException(
+            status_code=400,
+            detail="Only accountant-approved payments can be declined by admin",
+        )
+    p.status = PaymentStatus.declined_by_admin
+    p.admin_review_at = datetime.utcnow()
+    if comment:
+        p.admin_comment = comment
+    # Mark related notifications as stopped
+    db.query(Notification).filter(
+        Notification.company_code == p.company_code,
+        Notification.type == NotificationType.payment_review,
+        Notification.status == NotificationStatus.pending,
+    ).update(
+        {Notification.status: NotificationStatus.stopped}, synchronize_session=False
+    )
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+# Admin: hard reset database (dangerous). Truncates all tables and reseeds admin & settings.
+@router.post("/admin/reset", dependencies=[Depends(require_roles("admin"))])
+def admin_reset(db: Session = Depends(get_db)):
+    db.execute(
+        text(
+            "TRUNCATE TABLE notifications, payment_allocations, payments, bills, exec_assignments, companies, users, settings, imports RESTART IDENTITY CASCADE;"
+        )
+    )
+    db.commit()
+    # Reseed admin and settings
+    admin = User(
+        username="admin",
+        password_hash=hash_password("admin"),
+        role=Role.admin,
+        area=None,
+        is_active=True,
+    )
+    db.add(admin)
+    ensure_settings_row(db)
+    db.commit()
+    return {"ok": True}

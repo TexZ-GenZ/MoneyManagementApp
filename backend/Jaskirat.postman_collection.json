@@ -1,0 +1,1518 @@
+{
+  "info": {
+    "name": "Jaskirat Textiles API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "accountant_token",
+      "value": ""
+    },
+    {
+      "key": "exec_token",
+      "value": ""
+    },
+    {
+      "key": "exec_id",
+      "value": ""
+    },
+    {
+      "key": "accountant_id",
+      "value": ""
+    },
+    {
+      "key": "company_code",
+      "value": "C001"
+    },
+    {
+      "key": "bill_id_1",
+      "value": ""
+    },
+    {
+      "key": "payment_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/health",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "1) Login Admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/auth/login",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json && json.access_token) { pm.collectionVariables.set('admin_token', json.access_token); }",
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2) Admin - Create Accountant",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"accountant\",\n  \"password\": \"accountant\",\n  \"role\": \"accountant\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/admin/users",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code===400) { pm.test('accountant may already exist', ()=> true); } else { const u = pm.response.json(); pm.collectionVariables.set('accountant_id', u.id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3) Login Accountant",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"accountant\",\n  \"password\": \"accountant\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/auth/login",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const j=pm.response.json(); if(j&&j.access_token){ pm.collectionVariables.set('accountant_token', j.access_token); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4) Admin - Create Executive",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"exec1\",\n  \"password\": \"exec1\",\n  \"role\": \"executive\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/admin/users",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code===400) { pm.test('executive may already exist', ()=> true); } else { const u = pm.response.json(); pm.collectionVariables.set('exec_id', u.id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5) Login Executive",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"exec1\",\n  \"password\": \"exec1\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/auth/login",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const j=pm.response.json(); if(j&&j.access_token){ pm.collectionVariables.set('exec_token', j.access_token); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6) Settings - Get",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/settings",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "settings"
+          ]
+        }
+      }
+    },
+    {
+      "name": "7) Settings - Update",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"credit_extension_days\": 0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/settings",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "settings"
+          ]
+        }
+      }
+    },
+    {
+      "name": "8) Companies List",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8000/companies",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "companies"
+          ]
+        }
+      }
+    },
+    {
+      "name": "9) Get Company",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/companies/{{company_code}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "companies",
+            "{{company_code}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "10) Company Bills (pending, sort oldest)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/companies/{{company_code}}/bills?status=pending&sort=oldest&skip=0&limit=50",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "companies",
+            "{{company_code}}",
+            "bills"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "pending"
+            },
+            {
+              "key": "sort",
+              "value": "oldest"
+            },
+            {
+              "key": "skip",
+              "value": "0"
+            },
+            {
+              "key": "limit",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const j = pm.response.json();",
+              "if (j && j.items && j.items.length) { pm.collectionVariables.set('bill_id_1', j.items[0].id); }",
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Company - Update Credit Date",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"credit_date\": \"2025-12-31\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/companies/{{company_code}}/credit-date",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "companies",
+            "{{company_code}}",
+            "credit-date"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Company - Update Promise Date",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{exec_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"promise_date\": \"2025-12-31\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/companies/{{company_code}}/promise-date",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "companies",
+            "{{company_code}}",
+            "promise-date"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Bill - Get {bill_id}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/bills/{{bill_id_1}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "bills",
+            "{{bill_id_1}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Bill - Payment History {bill_id}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/bills/{{bill_id_1}}/payments",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "bills",
+            "{{bill_id_1}}",
+            "payments"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Payments - Submit (executive)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{exec_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"company_code\": \"{{company_code}}\",\n  \"collected_at\": \"2025-08-17T10:00:00Z\",\n  \"amount_collected\": 500,\n  \"method\": \"cash\",\n  \"comments\": \"Partial payment\",\n  \"exec_location_verified\": true,\n  \"next_promise_date\": \"2025-09-01\",\n  \"bill_allocations\": [\n    {\n      \"bill_id\": {{bill_id_1}},\n      \"amount\": 500\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/payments",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "payments"
+          ]
+        },
+        "event": [
+          {
+            "listen": "prerequest",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if (!pm.collectionVariables.get('idempotency_key')) { pm.collectionVariables.set('idempotency_key', pm.variables.replaceIn('{{$guid}}')); }"
+              ]
+            }
+          },
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const j = pm.response.json(); if (j && j.id) { pm.collectionVariables.set('payment_id', j.id); }",
+                "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Payments - Submit Again (same key)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{exec_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"company_code\": \"{{company_code}}\",\n  \"collected_at\": \"2025-08-17T10:00:00Z\",\n  \"amount_collected\": 500,\n  \"method\": \"cash\",\n  \"comments\": \"Partial payment\",\n  \"exec_location_verified\": true,\n  \"next_promise_date\": \"2025-09-01\",\n  \"bill_allocations\": [\n    {\n      \"bill_id\": {{bill_id_1}},\n      \"amount\": 500\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/payments",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "payments"
+          ]
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const j = pm.response.json(); pm.test('same id returned', function(){ pm.expect(j.id).to.eql(parseInt(pm.collectionVariables.get('payment_id'))); });",
+                "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Payments - Submit Conflict (same key)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{exec_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{idempotency_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"company_code\": \"{{company_code}}\",\n  \"collected_at\": \"2025-08-17T10:00:00Z\",\n  \"amount_collected\": 501,\n  \"method\": \"cash\",\n  \"comments\": \"Different amount\",\n  \"bill_allocations\": [\n    {\n      \"bill_id\": {{bill_id_1}},\n      \"amount\": 501\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8000/payments",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "payments"
+          ]
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('409 on conflicting idempotency key', function () { pm.response.to.have.status(409); });"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Payments - Company List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/companies/{{company_code}}/payments?skip=0&limit=50",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "companies",
+            "{{company_code}}",
+            "payments"
+          ],
+          "query": [
+            {
+              "key": "skip",
+              "value": "0"
+            },
+            {
+              "key": "limit",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const j = pm.response.json();",
+              "if (j && j.items && j.items.length) { pm.collectionVariables.set('payment_id', j.items[0].id); }",
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments - Details {id}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/payments/{{payment_id}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "payments",
+            "{{payment_id}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const j = pm.response.json(); if (j && j.id) { pm.collectionVariables.set('payment_id', j.id); }",
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Accountant - Pending Payments",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accountant_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/accountant/payments/pending?skip=0&limit=20",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "accountant",
+            "payments",
+            "pending"
+          ],
+          "query": [
+            {
+              "key": "skip",
+              "value": "0"
+            },
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const j = pm.response.json(); if (j && j.items && j.items.length && !pm.collectionVariables.get('payment_id')) { pm.collectionVariables.set('payment_id', j.items[0].id); }"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Accountant - Approve Payment {id}",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accountant_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "http://localhost:8000/accountant/payments/{{payment_id}}/approve",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "accountant",
+            "payments",
+            "{{payment_id}}",
+            "approve"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Accountant - Decline Payment {id}",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accountant_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/accountant/payments/{{payment_id}}/decline?comment=Incorrect%20amount",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "accountant",
+            "payments",
+            "{{payment_id}}",
+            "decline"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Pending Payments",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/payments/pending?skip=0&limit=20",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "payments",
+            "pending"
+          ],
+          "query": [
+            {
+              "key": "skip",
+              "value": "0"
+            },
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Approve Payment {id}",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "http://localhost:8000/admin/payments/{{payment_id}}/approve",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "payments",
+            "{{payment_id}}",
+            "approve"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Decline Payment {id}",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/payments/{{payment_id}}/decline?comment=Allocation%20mismatch",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "payments",
+            "{{payment_id}}",
+            "decline"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Upload Master DBF",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accountant_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [
+                "backend/data/master.dbf"
+              ]
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:8000/uploads/master",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "uploads",
+            "master"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Upload Transactions DBF",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accountant_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": [
+                "backend/data/transactions.dbf"
+              ]
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:8000/uploads/transactions",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "uploads",
+            "transactions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Import Master (no upload)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/imports/master",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "imports",
+            "master"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Import Transactions (no upload)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/imports/transactions",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "imports",
+            "transactions"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Reset DB (DANGER)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/reset",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "reset"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Hard Delete User",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users/{{exec_id}}/hard-delete",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users",
+            "{{exec_id}}",
+            "hard-delete"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Executives - List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/executives",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "executives"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const arr = pm.response.json();",
+              "if (Array.isArray(arr)) {",
+              "  let ex = arr.find(u => u.username === 'exec1') || arr[0];",
+              "  if (ex && ex.id) pm.collectionVariables.set('exec_id', ex.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Executive - Assign Company",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/executives/{{exec_id}}/assign/{{company_code}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "executives",
+            "{{exec_id}}",
+            "assign",
+            "{{company_code}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Executive - Unassign Company",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/executives/{{exec_id}}/assign/{{company_code}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "executives",
+            "{{exec_id}}",
+            "assign",
+            "{{company_code}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Executive - Companies {exec_id}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/executives/{{exec_id}}/companies",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "executives",
+            "{{exec_id}}",
+            "companies"
+          ]
+        }
+      }
+    },
+    {
+      "name": "My Companies (exec)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{exec_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/me/companies",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "me",
+            "companies"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Users (role filter)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users?role=executive",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users"
+          ],
+          "query": [
+            {
+              "key": "role",
+              "value": "executive"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const j = pm.response.json();",
+              "if (j && Array.isArray(j.items) && j.items.length) {",
+              "  let ex = j.items.find(u => u.username === 'exec1') || j.items[0];",
+              "  if (ex && ex.id) pm.collectionVariables.set('exec_id', ex.id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Update Username",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users/{{exec_id}}/username?username=newname",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users",
+            "{{exec_id}}",
+            "username"
+          ],
+          "query": [
+            {
+              "key": "username",
+              "value": "newname"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Update Mobile",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users/{{exec_id}}/mobile?mobile=9876543210",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users",
+            "{{exec_id}}",
+            "mobile"
+          ],
+          "query": [
+            {
+              "key": "mobile",
+              "value": "9876543210"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Update Password",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users/{{exec_id}}/password?new_password=NewP@ssw0rd",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users",
+            "{{exec_id}}",
+            "password"
+          ],
+          "query": [
+            {
+              "key": "new_password",
+              "value": "NewP@ssw0rd"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Deactivate User",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users/{{exec_id}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users",
+            "{{exec_id}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Notifications - Pending",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/notifications/pending",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "notifications",
+            "pending"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Admin - Notifications Pending",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/notifications/pending",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "notifications",
+            "pending"
+          ]
+        }
+      }
+    }
+  ]
+}
