@@ -50,7 +50,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#007AFF',
-        headerShown: true,
+        headerShown: false,
         headerStyle: {
           backgroundColor: '#f8f9fa',
         },
@@ -82,9 +82,9 @@ export default function TabLayout() {
       {userRole === 'executive' && (
         <>
           <Tabs.Screen
-            name="Home"
+            name="executiveDashboard"
             options={{
-              title: '../../src/screens/executive/DashboardScreen',
+              title: 'ExecutiveDashboard',
               tabBarIcon: ({ color, focused }) => (
                 <TabBarIcon name={focused ? 'business' : 'business-outline'} color={color} />
               ),
