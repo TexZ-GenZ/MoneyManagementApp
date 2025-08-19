@@ -95,6 +95,8 @@ const ProfileScreen: React.FC = () => {
         </View>
 
         {/* Settings */}
+        {user?.role === "admin" && (
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
 
@@ -125,6 +127,7 @@ const ProfileScreen: React.FC = () => {
             />
           </View>
         </View>
+        )}
 
         {/* App Information
         <View style={styles.section}>
