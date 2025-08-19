@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   View,
   Text,
@@ -6,12 +6,13 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
-} from 'react-native';
-import { useAppSelector, useAppDispatch } from '../../store/hooks';
-import { logoutUser } from '../../store/authSlice';
-import Button from '../../components/common/Button';
-import { COLORS } from '../../utils/constants';
-import { useRouter } from 'expo-router';
+  TouchableOpacity,
+} from "react-native";
+import { useAppSelector, useAppDispatch } from "../../store/hooks";
+import { logoutUser } from "../../store/authSlice";
+import Button from "../../components/common/Button";
+import { COLORS } from "../../utils/constants";
+import { useRouter } from "expo-router";
 
 const ProfileScreen: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -19,24 +20,20 @@ const ProfileScreen: React.FC = () => {
   const { user } = useAppSelector((state) => state.auth);
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: () => {
+          dispatch(logoutUser());
+          router.replace("/login");
         },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => {
-            dispatch(logoutUser());
-            router.replace('/login');
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -46,20 +43,19 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {user?.firstName?.charAt(0) || user?.username?.charAt(0) || 'U'}
+              {user?.firstName?.charAt(0) || user?.username?.charAt(0) || "U"}
             </Text>
           </View>
           <Text style={styles.userName}>
             {user?.firstName && user?.lastName
               ? `${user.firstName} ${user.lastName}`
-              : user?.username || 'User'
-            }
+              : user?.username || "User"}
           </Text>
           <Text style={styles.userRole}>
-            {user?.role?.toUpperCase() || 'EXECUTIVE'}
+            {user?.role?.toUpperCase() || "EXECUTIVE"}
           </Text>
           <Text style={styles.userEmail}>
-            {user?.email || 'No email provided'}
+            {user?.email || "No email provided"}
           </Text>
         </View>
 
@@ -70,22 +66,29 @@ const ProfileScreen: React.FC = () => {
           <View style={styles.infoCard}>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Username</Text>
-              <Text style={styles.infoValue}>{user?.username || 'N/A'}</Text>
+              <Text style={styles.infoValue}>{user?.username || "N/A"}</Text>
             </View>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Role</Text>
-              <Text style={styles.infoValue}>{user?.role || 'N/A'}</Text>
+              <Text style={styles.infoValue}>{user?.role || "N/A"}</Text>
             </View>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Status</Text>
-              <Text style={[styles.infoValue, { color: user?.isActive ? COLORS.SUCCESS : COLORS.ERROR }]}>
-                {user?.isActive ? 'Active' : 'Inactive'}
+              <Text
+                style={[
+                  styles.infoValue,
+                  { color: user?.isActive ? COLORS.SUCCESS : COLORS.ERROR },
+                ]}
+              >
+                {user?.isActive ? "Active" : "Inactive"}
               </Text>
             </View>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Member Since</Text>
               <Text style={styles.infoValue}>
-                {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+                {user?.createdAt
+                  ? new Date(user.createdAt).toLocaleDateString()
+                  : "N/A"}
               </Text>
             </View>
           </View>
@@ -98,26 +101,32 @@ const ProfileScreen: React.FC = () => {
           <View style={styles.settingsCard}>
             <Button
               title="Change Password"
-              onPress={() => {/* Navigate to change password */ }}
+              onPress={() => {
+                /* Navigate to change password */
+              }}
               style={styles.settingButton}
               variant="outline"
             />
             <Button
               title="Update Profile"
-              onPress={() => {/* Navigate to update profile */ }}
+              onPress={() => {
+                /* Navigate to update profile */
+              }}
               style={styles.settingButton}
               variant="outline"
             />
             <Button
               title="Notification Preferences"
-              onPress={() => {/* Navigate to notifications */ }}
+              onPress={() => {
+                /* Navigate to notifications */
+              }}
               style={styles.settingButton}
               variant="outline"
             />
           </View>
         </View>
 
-        {/* App Information */}
+        {/* App Information
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App Information</Text>
 
@@ -131,16 +140,13 @@ const ProfileScreen: React.FC = () => {
               <Text style={styles.infoValue}>August 2025</Text>
             </View>
           </View>
-        </View>
+        </View> */}
 
         {/* Logout Button */}
         <View style={styles.section}>
-          <Button
-            title="Logout"
-            onPress={handleLogout}
-            style={styles.logoutButton}
-            variant="outline"
-          />
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+            <Text style={{ color: "white" }}>Logout</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -156,7 +162,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   profileHeader: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 30,
     paddingVertical: 20,
   },
@@ -165,18 +171,18 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 15,
   },
   avatarText: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: COLORS.WHITE,
   },
   userName: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: COLORS.text,
     marginBottom: 5,
   },
@@ -195,7 +201,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: COLORS.text,
     marginBottom: 15,
   },
@@ -210,9 +216,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   infoItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -223,7 +229,7 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
   },
   settingsCard: {
@@ -240,7 +246,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   logoutButton: {
-    borderColor: COLORS.ERROR,
+    backgroundColor: "#FF5252", // red for logout
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+    alignItems: "center",
+    marginVertical: 16,
+    elevation: 2, // subtle shadow on Android
+    shadowColor: "#000", // shadow for iOS
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
   },
 });
 

@@ -82,7 +82,7 @@ export default function TabLayout() {
       {userRole === 'executive' && (
         <>
           <Tabs.Screen
-            name="executiveDashboard"
+            name="AccountantDashboard"
             options={{
               title: 'ExecutiveDashboard',
               tabBarIcon: ({ color, focused }) => (
