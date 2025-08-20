@@ -1,15 +1,11 @@
-import { config } from '../utils/config';
-import { getErrorMessage } from '../utils/helpers';
-import StorageService from './storage';
-import type { 
-  LoginCredentials, 
-  LoginResponse, 
-  User 
-} from '../types/auth';
-import type { Company } from '../types/company';
-import type { Bill } from '../types/bill';
-import type { Payment, PaymentForm } from '../types/payment';
-import type { Notification } from '../types/notification';
+import { config } from "../utils/config";
+import { getErrorMessage } from "../utils/helpers";
+import StorageService from "./storage";
+import type { LoginCredentials, LoginResponse, User } from "../types/auth";
+import type { Company } from "../types/company";
+import type { Bill } from "../types/bill";
+import type { Payment, PaymentForm } from "../types/payment";
+import type { Notification } from "../types/notification";
 
 class ApiService {
   private baseURL: string;
@@ -21,29 +17,31 @@ class ApiService {
   private async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await StorageService.getAuthToken();
     return {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` })
+      "Content-Type": "application/json",
+      ...(token && { Authorization: `Bearer ${token}` }),
     };
   }
 
   private async request<T>(
-    endpoint: string, 
+    endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     try {
       const headers = await this.getAuthHeaders();
-      
+
       const response = await fetch(`${this.baseURL}${endpoint}`, {
         ...options,
         headers: {
           ...headers,
-          ...options.headers
-        }
+          ...options.headers,
+        },
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(
+          errorData.message || `HTTP ${response.status}: ${response.statusText}`
+        );
       }
 
       return await response.json();
@@ -53,66 +51,50 @@ class ApiService {
   }
 
   // Auth API
-  async login(credentials: LoginCredentials): Promise<LoginResponse> {
-    // Convert frontend format to backend format
-    const loginData = {
-      email: credentials.username, // Backend expects email
-      password: credentials.password
-    };
-    
-    const response = await this.request<{
-      access_token: string;
-      refresh_token: string;
-      token_type: string;
-      user: {
-        id: number;
-        name: string;
-        email: string;
-        phone?: string;
-        role: string;
-        is_active: boolean;
-        created_at: string;
-        updated_at?: string;
-      }
-    }>(`${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      body: JSON.stringify(loginData)
-    });
+  async login(credentials: LoginCredentials): Promise<{ access_token: string; token_type: string }> {
+  // Convert frontend format to backend format (form-urlencoded)
+  const formData = new URLSearchParams({
+    username: credentials.username, // backend expects "username", not "email"
+    password: credentials.password,
+  });
 
-    // Convert backend response to frontend format
-    return {
-      token: response.access_token,
-      user: {
-        id: response.user.id.toString(),
-        username: response.user.email,
-        firstName: response.user.name.split(' ')[0],
-        lastName: response.user.name.split(' ').slice(1).join(' '),
-        email: response.user.email,
-        role: response.user.role as 'admin' | 'accountant' | 'executive',
-        isActive: response.user.is_active,
-        createdAt: response.user.created_at,
-        updatedAt: response.user.updated_at || response.user.created_at
-      }
-    };
-  }
+  const response = await this.request<{
+    access_token: string;
+    token_type: string;
+  }>("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: formData.toString(),
+  });
+
+  console.log("Login response:", response);
+
+  return {
+    access_token: response.access_token,
+    token_type: response.token_type,
+  };
+}
 
   async logout(): Promise<void> {
-    return this.request<void>('/auth/logout', {
-      method: 'POST'
+    return this.request<void>("/auth/logout", {
+      method: "POST",
     });
   }
 
   async refreshToken(): Promise<{ token: string }> {
-    const refresh_token = await StorageService.getItem('refresh_token', null);
+    const refresh_token = await StorageService.getItem("refresh_token", null);
     if (!refresh_token) {
-      throw new Error('No refresh token available');
+      throw new Error("No refresh token available");
     }
-    
-    const response = await this.request<{ access_token: string; refresh_token: string }>('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token })
+
+    const response = await this.request<{
+      access_token: string;
+      refresh_token: string;
+    }>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token }),
     });
-    
+
     return { token: response.access_token };
   }
 
@@ -127,58 +109,63 @@ class ApiService {
       is_active: boolean;
       created_at: string;
       updated_at?: string;
-    }>('/auth/me');
+    }>("/auth/me");
 
     return {
       id: response.id.toString(),
       username: response.email,
-      firstName: response.name.split(' ')[0],
-      lastName: response.name.split(' ').slice(1).join(' '),
+      firstName: response.name.split(" ")[0],
+      lastName: response.name.split(" ").slice(1).join(" "),
       email: response.email,
-      role: response.role as 'admin' | 'accountant' | 'executive',
+      role: response.role as "admin" | "accountant" | "executive",
       isActive: response.is_active,
       createdAt: response.created_at,
-      updatedAt: response.updated_at || response.created_at
+      updatedAt: response.updated_at || response.created_at,
     };
   }
 
   async getUsers(): Promise<User[]> {
-    return this.request<User[]>('/users');
+    return this.request<User[]>("/users");
   }
 
-  async createUser(userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User> {
-    return this.request<User>('/users', {
-      method: 'POST',
-      body: JSON.stringify(userData)
+  async createUser(
+    userData: Omit<User, "id" | "createdAt" | "updatedAt">
+  ): Promise<User> {
+    return this.request<User>("/users", {
+      method: "POST",
+      body: JSON.stringify(userData),
     });
   }
 
   async updateUser(id: string, userData: Partial<User>): Promise<User> {
     return this.request<User>(`/users/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(userData)
+      method: "PUT",
+      body: JSON.stringify(userData),
     });
   }
 
   async deleteUser(id: string): Promise<void> {
     return this.request<void>(`/users/${id}`, {
-      method: 'DELETE'
+      method: "DELETE",
     });
   }
 
   // Company API
   async getCompanies(): Promise<Company[]> {
-    return this.request<Company[]>('/companies');
+    return this.request<Company[]>("/companies");
   }
 
   async getCompanyByCode(code: string): Promise<Company> {
     return this.request<Company>(`/companies/${code}`);
   }
 
-  async updateCompany(code: string, companyData: Partial<Company>): Promise<Company> {
+  async updateCompany(
+    code: string,
+    companyData: Partial<Company>
+  ): Promise<Company> {
     return this.request<Company>(`/companies/${code}`, {
-      method: 'PUT',
-      body: JSON.stringify(companyData)
+      method: "PUT",
+      body: JSON.stringify(companyData),
     });
   }
 
@@ -188,7 +175,7 @@ class ApiService {
 
   // Bill API
   async getBills(): Promise<Bill[]> {
-    return this.request<Bill[]>('/bills');
+    return this.request<Bill[]>("/bills");
   }
 
   async getCompanyBills(companyCode: string): Promise<Bill[]> {
@@ -196,74 +183,82 @@ class ApiService {
   }
 
   async getPendingBills(): Promise<Bill[]> {
-    return this.request<Bill[]>('/bills/pending');
+    return this.request<Bill[]>("/bills/pending");
   }
 
   async getPaidBills(): Promise<Bill[]> {
-    return this.request<Bill[]>('/bills/paid');
+    return this.request<Bill[]>("/bills/paid");
   }
 
   async updateBill(id: string, billData: Partial<Bill>): Promise<Bill> {
     return this.request<Bill>(`/bills/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(billData)
+      method: "PUT",
+      body: JSON.stringify(billData),
     });
   }
 
   // Payment API
   async getPayments(): Promise<Payment[]> {
-    return this.request<Payment[]>('/payments');
+    return this.request<Payment[]>("/payments");
   }
 
-  async submitPayment(paymentData: PaymentForm & { companyCode: string }): Promise<Payment> {
-    return this.request<Payment>('/payments', {
-      method: 'POST',
-      body: JSON.stringify(paymentData)
+  async submitPayment(
+    paymentData: PaymentForm & { companyCode: string }
+  ): Promise<Payment> {
+    return this.request<Payment>("/payments", {
+      method: "POST",
+      body: JSON.stringify(paymentData),
     });
   }
 
   async getPendingPayments(): Promise<Payment[]> {
-    return this.request<Payment[]>('/payments/pending');
+    return this.request<Payment[]>("/payments/pending");
   }
 
   async getExecutivePayments(executiveId: string): Promise<Payment[]> {
     return this.request<Payment[]>(`/payments/executive/${executiveId}`);
   }
 
-  async approvePayment(paymentId: string, approval: { approved: boolean; comments?: string }): Promise<Payment> {
+  async approvePayment(
+    paymentId: string,
+    approval: { approved: boolean; comments?: string }
+  ): Promise<Payment> {
     return this.request<Payment>(`/payments/${paymentId}/approve`, {
-      method: 'PUT',
-      body: JSON.stringify(approval)
+      method: "PUT",
+      body: JSON.stringify(approval),
     });
   }
 
-  async adminApprovePayment(paymentId: string, approval: { approved: boolean; comments?: string }): Promise<Payment> {
+  async adminApprovePayment(
+    paymentId: string,
+    approval: { approved: boolean; comments?: string }
+  ): Promise<Payment> {
     return this.request<Payment>(`/payments/${paymentId}/admin-approve`, {
-      method: 'PUT',
-      body: JSON.stringify(approval)
+      method: "PUT",
+      body: JSON.stringify(approval),
     });
   }
 
   // Notification API
   async getNotifications(): Promise<Notification[]> {
-    return this.request<Notification[]>('/notifications');
+    return this.request<Notification[]>("/notifications");
   }
 
   async markNotificationAsRead(notificationId: string): Promise<void> {
     return this.request<void>(`/notifications/${notificationId}/read`, {
-      method: 'PUT'
+      method: "PUT",
     });
   }
 
   async markAllNotificationsAsRead(): Promise<void> {
-    return this.request<void>('/notifications/read-all', {
-      method: 'PUT'
+    return this.request<void>("/notifications/read-all", {
+      method: "PUT",
     });
   }
 
   // Dashboard API
   async getDashboardStats(): Promise<any> {
-    return this.request<any>('/dashboard/stats');
+    return this.request<any>("/dashboard/stats");
   }
 
   async getExecutiveDashboardStats(executiveId: string): Promise<any> {
@@ -271,57 +266,65 @@ class ApiService {
   }
 
   async getAccountantDashboardStats(): Promise<any> {
-    return this.request<any>('/dashboard/accountant');
+    return this.request<any>("/dashboard/accountant");
   }
 
   async getAdminDashboardStats(): Promise<any> {
-    return this.request<any>('/dashboard/admin');
+    return this.request<any>("/dashboard/admin");
   }
 
   // Settings API
   async getSettings(): Promise<any> {
-    return this.request<any>('/settings');
+    return this.request<any>("/settings");
   }
 
   async updateSettings(settings: any): Promise<any> {
-    return this.request<any>('/settings', {
-      method: 'PUT',
-      body: JSON.stringify(settings)
+    return this.request<any>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
     });
   }
 
   // Import API
-  async importMasterData(file: FormData): Promise<{ message: string; imported: number }> {
+  async importMasterData(
+    file: FormData
+  ): Promise<{ message: string; imported: number }> {
     const headers = await this.getAuthHeaders();
-    delete headers['Content-Type']; // Let browser set multipart boundary
+    delete headers["Content-Type"]; // Let browser set multipart boundary
 
     const response = await fetch(`${this.baseURL}/import/master`, {
-      method: 'POST',
+      method: "POST",
       headers,
-      body: file
+      body: file,
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(
+        errorData.message || `HTTP ${response.status}: ${response.statusText}`
+      );
     }
 
     return await response.json();
   }
 
-  async importTransactionData(file: FormData): Promise<{ message: string; imported: number }> {
+  async importTransactionData(
+    file: FormData
+  ): Promise<{ message: string; imported: number }> {
     const headers = await this.getAuthHeaders();
-    delete headers['Content-Type']; // Let browser set multipart boundary
+    delete headers["Content-Type"]; // Let browser set multipart boundary
 
     const response = await fetch(`${this.baseURL}/import/transactions`, {
-      method: 'POST',
+      method: "POST",
       headers,
-      body: file
+      body: file,
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(
+        errorData.message || `HTTP ${response.status}: ${response.statusText}`
+      );
     }
 
     return await response.json();

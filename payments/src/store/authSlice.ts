@@ -19,7 +19,7 @@ export const loginUser = createAsyncThunk(
       const response = await ApiService.login(credentials);
 
       // Store tokens
-      await StorageService.storeAuthToken(response.token);
+      await StorageService.storeAuthToken(response.access_token);
       // Note: If your backend returns refresh_token, store it too
       // await StorageService.setItem('refresh_token', response.refresh_token);
 
@@ -119,8 +119,8 @@ const authSlice = createSlice({
       })
       .addCase(loginUser.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload.user;
-        state.token = action.payload.token;
+        //state.token_type = action.payload.token_type;
+        state.token = action.payload.access_token;
         state.isAuthenticated = true;
         state.error = null;
       })

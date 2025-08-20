@@ -62,7 +62,7 @@ export const VALIDATION_RULES = {
   },
   password: {
     required: true,
-    minLength: 6,
+    minLength: 3,
     maxLength: 50
   },
   email: {
