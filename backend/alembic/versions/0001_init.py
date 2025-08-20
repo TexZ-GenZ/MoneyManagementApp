@@ -10,7 +10,7 @@ depends_on = None
 
 def upgrade():
     role_enum = sa.Enum("admin", "accountant", "executive", name="role")
-    bill_status = sa.Enum("pending", "paid", name="billstatus")
+    bill_status = sa.Enum("pending", "paid", "partial", name="billstatus")
     pay_status = sa.Enum(
         "submitted",
         "accountant_approved",
@@ -36,29 +36,28 @@ def upgrade():
     op.create_table(
         "companies",
         sa.Column("code", sa.String(50), primary_key=True),
-        sa.Column("name", sa.String(200), nullable=False),
+        sa.Column("name", sa.String(200)),
         sa.Column("area", sa.String(100)),
         sa.Column("location", sa.String(200)),
         sa.Column("credit_date", sa.Date),
         sa.Column("promise_date", sa.Date),
-        sa.Column("outbal", sa.Numeric(12, 2), server_default="0"),
-        sa.Column("amount", sa.Numeric(12, 2), server_default="0"),
-        sa.Column("created_at", sa.DateTime),
-        sa.Column("updated_at", sa.DateTime),
+        sa.Column("outbal", sa.Numeric(14, 2), server_default="0"),
+        sa.Column("amount", sa.Numeric(14, 2), server_default="0"),
     )
 
     op.create_table(
         "bills",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("bill_number", sa.String(100), nullable=False, unique=True),
+        sa.Column("bill_number", sa.String(50), nullable=False),
         sa.Column("company_code", sa.String(50), sa.ForeignKey("companies.code")),
         sa.Column("bill_date", sa.Date, nullable=False),
         sa.Column("due_date", sa.Date, nullable=False),
-        sa.Column("amount", sa.Numeric(12, 2), nullable=False),
-        sa.Column("amount_paid", sa.Numeric(12, 2), server_default="0"),
+        sa.Column("amount", sa.Numeric(14, 2), nullable=False),
+        sa.Column("amount_paid", sa.Numeric(14, 2), server_default="0"),
         sa.Column("status", bill_status, server_default="pending"),
+        sa.UniqueConstraint("company_code", "bill_number", name="uq_bill_company_number"),
     )
-    op.create_index("ix_bills_company", "bills", ["company_code"])
+    op.create_index("ix_bills_company", "bills", ["company_code"]) 
 
     op.create_table(
         "exec_assignments",

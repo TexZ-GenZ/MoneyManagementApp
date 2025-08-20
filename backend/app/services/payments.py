@@ -39,6 +39,15 @@ def create_payment_with_allocations(
         )
         if existing:
             return existing
+    # Validate promise date rules
+    company = db.get(Company, company_code)
+    if not company:
+        raise ValueError("Company not found")
+    if next_promise_date:
+        if company.credit_date and next_promise_date < company.credit_date:
+            raise ValueError("next_promise_date cannot be earlier than credit_date")
+        if company.promise_date and next_promise_date < company.promise_date:
+            raise ValueError("next_promise_date cannot move backward")
     # Validate allocations before creating the payment
     if amount_collected is None or amount_collected <= 0:
         raise ValueError("amount_collected must be > 0")
@@ -89,8 +98,18 @@ def create_payment_with_allocations(
         if amt > effective_remaining:
             raise ValueError("Allocation exceeds bill remaining amount")
         total_alloc += amt
-    if total_alloc > Decimal(str(amount_collected)):
+    amount_collected_dec = Decimal(str(amount_collected))
+    if total_alloc > amount_collected_dec:
         raise ValueError("Total allocations exceed amount_collected")
+    if total_alloc != amount_collected_dec:
+        raise ValueError("Allocation total must equal amount_collected")
+    # Geo coordinate validation
+    if exec_lat is not None:
+        if exec_lat < -90 or exec_lat > 90:
+            raise ValueError("exec_lat out of range (-90..90)")
+    if exec_lng is not None:
+        if exec_lng < -180 or exec_lng > 180:
+            raise ValueError("exec_lng out of range (-180..180)")
 
     p = Payment(
         company_code=company_code,
@@ -111,25 +130,34 @@ def create_payment_with_allocations(
             PaymentAllocation(payment_id=p.id, bill_id=a["bill_id"], amount=a["amount"])
         )
     # Create a notification for accountant review
-    db.add(
-        Notification(
-            company_code=company_code,
-            type=NotificationType.payment_review,
-            status=NotificationStatus.pending,
-            last_sent_at=None,
-            next_send_at=None,
-            stop_reason=None,
+    existing_review = db.query(Notification).filter(
+        Notification.company_code == company_code,
+        Notification.type == NotificationType.payment_review,
+        Notification.status == NotificationStatus.pending,
+    ).first()
+    if not existing_review:
+        db.add(
+            Notification(
+                company_code=company_code,
+                type=NotificationType.payment_review,
+                status=NotificationStatus.pending,
+                message=f"Payment pending review for company {company_code}",
+                last_sent_at=None,
+                next_send_at=None,
+            )
         )
-    )
     db.commit()
     db.refresh(p)
     return p
 
 
 def admin_approve_payment(db: Session, payment_id: int) -> Payment:
-    p = db.get(Payment, payment_id)
+    # Lock payment row and ensure status transition is valid (optimistic concurrency)
+    p = db.query(Payment).with_for_update().filter(Payment.id == payment_id).one_or_none()
     if not p:
         raise ValueError("Payment not found")
+    if p.status != PaymentStatus.accountant_approved:
+        raise ValueError("Invalid state for admin approval")
     # allocate amounts
     allocs = (
         db.query(PaymentAllocation).filter(PaymentAllocation.payment_id == p.id).all()

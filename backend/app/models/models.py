@@ -1,3 +1,4 @@
+import enum
 from sqlalchemy import (
     Integer,
     String,
@@ -12,7 +13,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, date
-import enum
 from app.db.session import Base
 
 
@@ -28,7 +28,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     mobile: Mapped[str | None] = mapped_column(String(20), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[Role] = mapped_column(Enum(Role), nullable=False)
+    role: Mapped[Role] = mapped_column(Enum(Role, name="role"), nullable=False)
     area: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -36,48 +36,42 @@ class User(Base):
 class Company(Base):
     __tablename__ = "companies"
     code: Mapped[str] = mapped_column(String(50), primary_key=True)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(150))
     area: Mapped[str | None] = mapped_column(String(100))
     location: Mapped[str | None] = mapped_column(String(200))
-    credit_date: Mapped[date | None] = mapped_column(Date)
-    promise_date: Mapped[date | None] = mapped_column(Date)
-    outbal: Mapped[Numeric] = mapped_column(Numeric(12, 2), default=0)
-    amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    amount: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
+    outbal: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
+    credit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    promise_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class BillStatus(str, enum.Enum):
     pending = "pending"
     paid = "paid"
+    partial = "partial"
 
 
 class Bill(Base):
     __tablename__ = "bills"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bill_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    bill_number: Mapped[str] = mapped_column(String(50))
     company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"), index=True)
-    bill_date: Mapped[date] = mapped_column(Date, nullable=False)
-    due_date: Mapped[date] = mapped_column(Date, nullable=False)
-    amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
-    amount_paid: Mapped[Numeric] = mapped_column(Numeric(12, 2), default=0)
-    status: Mapped[BillStatus] = mapped_column(
-        Enum(BillStatus), default=BillStatus.pending
-    )
+    bill_date: Mapped[date] = mapped_column(Date)
+    due_date: Mapped[date] = mapped_column(Date)
+    amount: Mapped[Numeric] = mapped_column(Numeric(14, 2))
+    amount_paid: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
+    status: Mapped[BillStatus] = mapped_column(Enum(BillStatus, name="billstatus"), default=BillStatus.pending)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    __table_args__ = (UniqueConstraint("company_code", "bill_number", name="uq_bill_company_number"),)
 
 
 class ExecAssignment(Base):
     __tablename__ = "exec_assignments"
-    __table_args__ = (
-        UniqueConstraint("executive_id", "company_code", name="uq_exec_company"),
-    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    executive_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"))
+    executive_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"), index=True)
+    __table_args__ = (UniqueConstraint("executive_id", "company_code", name="uq_exec_company"),)
 
 
 class PaymentStatus(str, enum.Enum):
@@ -91,36 +85,28 @@ class PaymentStatus(str, enum.Enum):
 class Payment(Base):
     __tablename__ = "payments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"))
-    executive_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    amount_collected: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
-    method: Mapped[str] = mapped_column(String(50))
-    exec_lat: Mapped[float | None] = mapped_column()
-    exec_lng: Mapped[float | None] = mapped_column()
+    company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"), index=True)
+    executive_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    collected_at: Mapped[datetime] = mapped_column(DateTime)
+    amount_collected: Mapped[Numeric] = mapped_column(Numeric(14, 2))
+    method: Mapped[str] = mapped_column(String(30))
+    exec_lat: Mapped[Numeric | None] = mapped_column(Numeric(10, 6))
+    exec_lng: Mapped[Numeric | None] = mapped_column(Numeric(10, 6))
     comments: Mapped[str | None] = mapped_column(Text)
     next_promise_date: Mapped[date | None] = mapped_column(Date)
-    # Idempotency: unique key provided by client to de-duplicate POST /payments
-    idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True)
-    status: Mapped[PaymentStatus] = mapped_column(
-        Enum(PaymentStatus), default=PaymentStatus.submitted
-    )
-    accountant_review_at: Mapped[datetime | None] = mapped_column(DateTime)
-    admin_review_at: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus, name="paymentstatus"), default=PaymentStatus.submitted)
     exec_location_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     accountant_comment: Mapped[str | None] = mapped_column(Text)
     admin_comment: Mapped[str | None] = mapped_column(Text)
+    idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True)
 
 
 class PaymentAllocation(Base):
     __tablename__ = "payment_allocations"
-    __table_args__ = (
-        UniqueConstraint("payment_id", "bill_id", name="uq_payment_bill"),
-    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id"))
-    bill_id: Mapped[int] = mapped_column(ForeignKey("bills.id"))
-    amount: Mapped[Numeric] = mapped_column(Numeric(12, 2), nullable=False)
+    payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id", ondelete="CASCADE"), index=True)
+    bill_id: Mapped[int] = mapped_column(ForeignKey("bills.id", ondelete="CASCADE"), index=True)
+    amount: Mapped[Numeric] = mapped_column(Numeric(14, 2))
 
 
 class NotificationType(str, enum.Enum):
@@ -137,20 +123,21 @@ class NotificationStatus(str, enum.Enum):
 class Notification(Base):
     __tablename__ = "notifications"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"))
-    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType))
-    status: Mapped[NotificationStatus] = mapped_column(
-        Enum(NotificationStatus), default=NotificationStatus.pending
-    )
+    company_code: Mapped[str | None] = mapped_column(String(50))
+    payment_id: Mapped[int | None] = mapped_column(Integer)
+    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType, name="notificationtype"))
+    status: Mapped[NotificationStatus] = mapped_column(Enum(NotificationStatus, name="notificationstatus"), default=NotificationStatus.pending)
+    message: Mapped[str] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
     last_sent_at: Mapped[datetime | None] = mapped_column(DateTime)
     next_send_at: Mapped[datetime | None] = mapped_column(DateTime)
-    stop_reason: Mapped[str | None] = mapped_column(String(200))
 
 
 class Setting(Base):
     __tablename__ = "settings"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    credit_extension_days: Mapped[int] = mapped_column(Integer, default=10)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    credit_extension_days: Mapped[int] = mapped_column(Integer, default=0)
     notif_every_hours: Mapped[int] = mapped_column(Integer, default=2)
     payment_notif_daily_hour: Mapped[int] = mapped_column(Integer, default=9)
 
@@ -161,11 +148,9 @@ class ImportType(str, enum.Enum):
 
 
 class ImportJob(Base):
-    __tablename__ = "imports"
+    __tablename__ = "import_jobs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    type: Mapped[ImportType] = mapped_column(Enum(ImportType))
-    source_name: Mapped[str] = mapped_column(String(200))
+    type: Mapped[ImportType] = mapped_column(Enum(ImportType, name="importtype"))
+    filename: Mapped[str] = mapped_column(String(200))
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
-    status: Mapped[str] = mapped_column(String(50), default="pending")
-    stats: Mapped[str | None] = mapped_column(Text)
