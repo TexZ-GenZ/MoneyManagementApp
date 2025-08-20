@@ -11,7 +11,7 @@ export default function AccountantDashboard() {
     { label: 'Approve', icon: 'alert-circle-outline' },
     { label: 'Companies', icon: 'business-outline', action:()=>{router.push('../CompanyList/ExecutiveCompanies')}},
     { label: 'Executives', icon: 'person-outline', action:()=>{router.push('../CompanyList/ExecutiveCompanies')}},
-    { label: 'Delete', icon: 'trash-outline', action:()=>{router.push('../Others/Upload')}},
+    { label: 'Delete', icon: 'trash-outline', action:()=>{router.push('../(others)/DeleteUser')}},
     { label: 'Add', icon: 'person-add-outline', action:()=>{router.push('../(others)/AddMember')}},
 
   ];
