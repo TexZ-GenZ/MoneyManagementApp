@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import {StorageService} from "../../src/services/storageService";
 
 export default function AdminExecutiveList({ navigation }) {
   const [executives, setExecutives] = useState([]);
@@ -13,10 +14,14 @@ export default function AdminExecutiveList({ navigation }) {
 
   const fetchExecutives = async () => {
     try {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`);
-      console.log(`${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`)
+      let header = await StorageService.getAuthHeader();
+
+      const res = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`,{
+        headers: header
+      });
+
       const data = await res.json();
-      console.log(data)
+
       setExecutives(data);
       setFiltered(data);
     } catch (err) {
