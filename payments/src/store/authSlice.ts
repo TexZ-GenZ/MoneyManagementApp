@@ -1,11 +1,11 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import type { AuthState, User, LoginCredentials } from '../types/auth';
-import ApiService from '../services/api';
-import StorageService from '../services/storage';
+import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import type { AuthState, User, LoginCredentials } from "../types/auth";
+import ApiService from "../services/api";
+import { StorageService, AuthToken } from "../services/storageService";
 
 const initialState: AuthState = {
   user: null,
-  token: null,
+  token: null,         // will hold "Bearer <access_token>"
   isAuthenticated: false,
   isLoading: false,
   error: null,
@@ -13,17 +13,25 @@ const initialState: AuthState = {
 
 // Async thunks
 export const loginUser = createAsyncThunk(
-  'auth/login',
+  "auth/login",
   async (credentials: LoginCredentials, { rejectWithValue }) => {
     try {
       const response = await ApiService.login(credentials);
 
-      // Store tokens
-      await StorageService.storeAuthToken(response.access_token);
-      // Note: If your backend returns refresh_token, store it too
-      // await StorageService.setItem('refresh_token', response.refresh_token);
+      // Build token object
+      const tokenInterface: AuthToken = {
+        access_token: response.access_token,
+        token_type: response.token_type,
+      };
 
-      return response;
+      await StorageService.saveToken(tokenInterface);
+
+      // No user info in response; set user to null
+      return {
+        access_token: response.access_token,
+        token_type: response.token_type,
+        user: null,
+      };
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -31,48 +39,29 @@ export const loginUser = createAsyncThunk(
 );
 
 export const initializeAuth = createAsyncThunk(
-  'auth/initialize',
+  "auth/initialize",
   async (_, { rejectWithValue }) => {
     try {
-      const token = await StorageService.getAuthToken();
-      if (!token) {
-        // No token found - this is normal for first-time users
-        return null;
-      }
-
-      // Verify token with backend
-      const response = await ApiService.getCurrentUser();
-      return {
-        user: response,
-        token
-      };
+      const token = await StorageService.getToken();
+      if (!token) return null;
+      return `${token.token_type} ${token.access_token}`;
     } catch (error: any) {
-      // Token is invalid, clear it
-      await StorageService.removeAuthToken();
-      // Don't throw an error, just return null to indicate no authentication
+      await StorageService.deleteToken();
       return null;
     }
   }
 );
 
-export const logoutUser = createAsyncThunk(
-  'auth/logout',
-  async (_, { rejectWithValue }) => {
-    try {
-      await StorageService.removeAuthToken();
-      return null;
-    } catch (error: any) {
-      return rejectWithValue(error.message);
-    }
-  }
-);
+export const logoutUser = createAsyncThunk("auth/logout", async () => {
+  await StorageService.deleteToken();
+  return null;
+});
 
 export const getCurrentUser = createAsyncThunk(
-  'auth/getCurrentUser',
+  "auth/getCurrentUser",
   async (_, { rejectWithValue }) => {
     try {
-      const user = await ApiService.getCurrentUser();
-      return user;
+      return await ApiService.getCurrentUser();
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -80,12 +69,12 @@ export const getCurrentUser = createAsyncThunk(
 );
 
 export const refreshToken = createAsyncThunk(
-  'auth/refreshToken',
+  "auth/refreshToken",
   async (_, { rejectWithValue }) => {
     try {
-      // Note: Implement refresh token logic if your backend supports it
-      const token = await StorageService.getAuthToken();
-      return { token };
+      const token = await StorageService.getToken();
+      if (!token) return null;
+      return `${token.token_type} ${token.access_token}`;
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -93,7 +82,7 @@ export const refreshToken = createAsyncThunk(
 );
 
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState,
   reducers: {
     clearError: (state) => {
@@ -119,10 +108,9 @@ const authSlice = createSlice({
       })
       .addCase(loginUser.fulfilled, (state, action) => {
         state.isLoading = false;
-        //state.token_type = action.payload.token_type;
-        state.token = action.payload.access_token;
+        state.token = `${action.payload.token_type} ${action.payload.access_token}`;
+        state.user = action.payload.user;
         state.isAuthenticated = true;
-        state.error = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.isLoading = false;
@@ -136,22 +124,20 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.error = null;
       })
-      // Initialize auth
+      // Initialize
       .addCase(initializeAuth.pending, (state) => {
         state.isLoading = true;
       })
       .addCase(initializeAuth.fulfilled, (state, action) => {
         state.isLoading = false;
         if (action.payload) {
-          state.user = action.payload.user;
-          state.token = action.payload.token;
+          state.token = action.payload;
           state.isAuthenticated = true;
         } else {
           state.user = null;
           state.token = null;
           state.isAuthenticated = false;
         }
-        state.error = null;
       })
       .addCase(initializeAuth.rejected, (state) => {
         state.isLoading = false;
@@ -164,15 +150,12 @@ const authSlice = createSlice({
         if (action.payload) {
           state.user = action.payload;
           state.isAuthenticated = true;
-        } else {
-          state.user = null;
-          state.isAuthenticated = false;
         }
       })
-      // Refresh token
+      // Refresh
       .addCase(refreshToken.fulfilled, (state, action) => {
-        if (action.payload.token) {
-          state.token = action.payload.token;
+        if (action.payload) {
+          state.token = action.payload;
         } else {
           state.user = null;
           state.token = null;
@@ -183,6 +166,4 @@ const authSlice = createSlice({
 });
 
 export const { clearError, setUser, clearAuth } = authSlice.actions;
-
-export { authSlice };
 export default authSlice.reducer;

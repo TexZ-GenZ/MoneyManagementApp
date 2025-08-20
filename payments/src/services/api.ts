@@ -18,7 +18,7 @@ class ApiService {
     const token = await StorageService.getAuthToken();
     return {
       "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(token ? { Authorization: token } : {}),
     };
   }
 
@@ -51,29 +51,29 @@ class ApiService {
   }
 
   // Auth API
-  async login(credentials: LoginCredentials): Promise<{ access_token: string; token_type: string }> {
-  // Convert frontend format to backend format (form-urlencoded)
-  const formData = new URLSearchParams({
-    username: credentials.username, // backend expects "username", not "email"
-    password: credentials.password,
-  });
+  async login(
+    credentials: LoginCredentials
+  ): Promise<{ access_token: string; token_type: string }> {
 
-  const response = await this.request<{
-    access_token: string;
-    token_type: string;
-  }>("/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: formData.toString(),
-  });
+    const response = await this.request<{
+      access_token: string;
+      token_type: string;
+    }>("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: credentials.username,
+        password: credentials.password,
+      }),
+    });
 
-  console.log("Login response:", response);
+    console.log("Login response:", response);
 
-  return {
-    access_token: response.access_token,
-    token_type: response.token_type,
-  };
-}
+    return {
+      access_token: response.access_token,
+      token_type: response.token_type,
+    };
+  }
 
   async logout(): Promise<void> {
     return this.request<void>("/auth/logout", {

@@ -2,21 +2,28 @@ import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { useAppSelector, useAppDispatch } from '../../src/store/hooks';
-import { logoutUser } from '../../src/store/authSlice';
+import { initializeAuth, logoutUser } from '../../src/store/authSlice';
 import { Platform, Alert } from 'react-native';
 
 export default function TabLayout() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { user, isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
 
-  // useEffect(() => {
-  //   // Authentication is handled in the root layout
-  //   // Just redirect to login if not authenticated
-  //   if (!isAuthenticated && !isLoading) {
-  //     router.replace('/login');
-  //   }
-  // }, [isAuthenticated, isLoading, router]);
+  const { user, isAuthenticated, isLoading } = useAppSelector(
+    (state) => state.auth
+  );
+
+  // Initialize auth on mount
+  useEffect(() => {
+    dispatch(initializeAuth());
+  }, [dispatch]);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -39,9 +46,9 @@ export default function TabLayout() {
     );
   };
 
-  // if (!isAuthenticated) {
-  //   return null; // Will redirect to login
-  // }
+  if (!isAuthenticated) {
+    return null; // Will redirect to login
+  }
 
   // Get user role for conditional tab rendering
   const userRole = user?.role || 'executive';
