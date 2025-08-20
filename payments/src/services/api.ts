@@ -74,7 +74,7 @@ class ApiService {
         created_at: string;
         updated_at?: string;
       }
-    }>('/auth/login', {
+    }>(`${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/login`, {
       method: 'POST',
       body: JSON.stringify(loginData)
     });
