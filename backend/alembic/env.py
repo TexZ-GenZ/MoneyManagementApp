@@ -19,8 +19,16 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _normalize_url(url: str | None) -> str | None:
+    if not url:
+        return url
+    if url.startswith("postgresql://") and "+psycopg" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
 def run_migrations_offline():
-    url = os.environ.get("DATABASE_URL")
+    url = _normalize_url(os.environ.get("DATABASE_URL"))
     context.configure(
         url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
     )
@@ -29,7 +37,7 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
-    url = os.environ.get("DATABASE_URL")
+    url = _normalize_url(os.environ.get("DATABASE_URL"))
     connectable = engine_from_config(
         {"sqlalchemy.url": url}, prefix="sqlalchemy.", poolclass=pool.NullPool
     )
