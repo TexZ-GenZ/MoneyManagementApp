@@ -2,11 +2,75 @@ import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import {StorageService} from "../../src/services/storageService";
 
-export default function AdminExecutiveList({ navigation }) {
+import {useRouter} from "expo-router"
+
+const sampledata= [
+  {
+    "id": 1,
+    "username": "alice",
+    "role": "admin",
+    "area": "north",
+    "mobile": "9876543210"
+  },
+  {
+    "id": 2,
+    "username": "bob",
+    "role": "editor",
+    "area": "south",
+    "mobile": "9123456780"
+  },
+  {
+    "id": 3,
+    "username": "charlie",
+    "role": "viewer",
+    "area": "east",
+    "mobile": "9988776655"
+  },
+  {
+    "id": 4,
+    "username": "diana",
+    "role": "admin",
+    "area": "west",
+    "mobile": "8877665544"
+  },
+  {
+    "id": 5,
+    "username": "eric",
+    "role": "editor",
+    "area": "central",
+    "mobile": "9090909090"
+  },
+  {
+    "id": 6,
+    "username": "fiona",
+    "role": "viewer",
+    "area": "north",
+    "mobile": "8123456789"
+  },
+  {
+    "id": 7,
+    "username": "george",
+    "role": "admin",
+    "area": "south",
+    "mobile": "7008009001"
+  },
+  {
+    "id": 8,
+    "username": "hannah",
+    "role": "editor",
+    "area": "east",
+    "mobile": "6007008009"
+  }
+]
+
+
+export default function AdminExecutiveList() {
   const [executives, setExecutives] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const router = useRouter()
 
   useEffect(() => {
     fetchExecutives();
@@ -24,6 +88,11 @@ export default function AdminExecutiveList({ navigation }) {
 
       setExecutives(data);
       setFiltered(data);
+
+      // fit with sample data
+      setExecutives(sampledata)
+      setFiltered(sampledata);
+
     } catch (err) {
       console.error("Error fetching executives:", err);
     } finally {
@@ -40,8 +109,8 @@ export default function AdminExecutiveList({ navigation }) {
     const lower = text.toLowerCase();
     const results = executives.filter(
       (ex) =>
-        ex.name.toLowerCase().includes(lower) ||
-        (ex.phone && ex.phone.toLowerCase().includes(lower))
+        ex.username.toLowerCase().includes(lower) ||
+        (ex.mobile && ex.mobile.toLowerCase().includes(lower))
     );
     setFiltered(results);
   };
@@ -49,10 +118,13 @@ export default function AdminExecutiveList({ navigation }) {
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => navigation.navigate("ExecutiveDetails", { executive: item })}
+      onPress={()=>router.push({
+        pathname: '../(others)/AssignCompany',
+        params : {execId : item.id, execUsername:item.username, execMobile : item.mobile}
+      })}
     >
-      <Text style={styles.name}>{item.name}</Text>
-      <Text style={styles.info}>{item.phone || "No phone"}</Text>
+      <Text style={styles.name}>{item.username}</Text>
+      <Text style={styles.info}>{item.mobile || "No phone"}</Text>
     </TouchableOpacity>
   );
 
