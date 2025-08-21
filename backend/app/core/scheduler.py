@@ -39,7 +39,9 @@ def _configure_jobs():
     try:
         s = db.get(Setting, 1)
         interval_hours = s.notif_every_hours if s and s.notif_every_hours else 2
-        daily_hour = s.payment_notif_daily_hour if s and s.payment_notif_daily_hour else 9
+        daily_hour = (
+            s.payment_notif_daily_hour if s and s.payment_notif_daily_hour else 9
+        )
     finally:
         db.close()
     scheduler.add_job(

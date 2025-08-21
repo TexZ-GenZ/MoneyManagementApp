@@ -36,7 +36,12 @@ from app.services.auth import (
     normalize_indian_mobile,
 )
 from app.services.security import get_current_user, require_roles
-from app.services.company import recalc_company_totals, ensure_settings_row, recompute_company_amounts, resolve_promise_crossed_notifications
+from app.services.company import (
+    recalc_company_totals,
+    ensure_settings_row,
+    recompute_company_amounts,
+    resolve_promise_crossed_notifications,
+)
 from app.services.payments import create_payment_with_allocations, admin_approve_payment
 from app.services.notifications import run_notification_scan
 from app.core.scheduler import reschedule_jobs
@@ -68,7 +73,12 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = get_user_by_username(db, body.username) or get_user_by_mobile(
         db, body.username
     )
-    if not user or not verify_password(body.password, user.password_hash):
+    # Uniform error to avoid user enumeration; reject inactive accounts
+    if (
+        not user
+        or not user.is_active
+        or not verify_password(body.password, user.password_hash)
+    ):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token(str(user.id))
     return Token(access_token=token)
@@ -207,7 +217,9 @@ def set_promise_date(
         raise HTTPException(status_code=400, detail="Cannot move promise_date backward")
     # Must not be earlier than credit_date
     if c.credit_date and body.promise_date < c.credit_date:
-        raise HTTPException(status_code=400, detail="promise_date cannot be earlier than credit_date")
+        raise HTTPException(
+            status_code=400, detail="promise_date cannot be earlier than credit_date"
+        )
     c.promise_date = body.promise_date
     db.commit()
     db.refresh(c)
@@ -229,7 +241,10 @@ def set_credit_date(
         raise HTTPException(status_code=404, detail="Company not found")
     # promise_date must remain >= credit_date if promise_date exists
     if c.promise_date and body.credit_date and c.promise_date < body.credit_date:
-        raise HTTPException(status_code=400, detail="Existing promise_date earlier than new credit_date; update promise_date first")
+        raise HTTPException(
+            status_code=400,
+            detail="Existing promise_date earlier than new credit_date; update promise_date first",
+        )
     c.credit_date = body.credit_date
     db.commit()
     db.refresh(c)
@@ -311,6 +326,9 @@ def submit_payment(
     db: Session = Depends(get_db),
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
+    # Treat blank header values as absent so they don't collide on unique index as "".
+    if idempotency_key is not None and not idempotency_key.strip():
+        idempotency_key = None
     # Optional policy: executive can submit only for assigned companies
     if user.role == Role.executive:
         assigned = (
@@ -455,12 +473,12 @@ def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
         status=p.status,
         next_promise_date=p.next_promise_date,
         exec_location_verified=p.exec_location_verified,
-        exec_lat=p.exec_lat,
-        exec_lng=p.exec_lng,
-        accountant_review_at=p.accountant_review_at,
-        admin_review_at=p.admin_review_at,
-        accountant_comment=p.accountant_comment,
-        admin_comment=p.admin_comment,
+        exec_lat=getattr(p, "exec_lat", None),
+        exec_lng=getattr(p, "exec_lng", None),
+        accountant_review_at=getattr(p, "accountant_review_at", None),
+        admin_review_at=getattr(p, "admin_review_at", None),
+        accountant_comment=getattr(p, "accountant_comment", None),
+        admin_comment=getattr(p, "admin_comment", None),
         allocations=allocations,
     )
 
@@ -793,7 +811,9 @@ def list_notifications(
         # Filter to companies assigned to executive
         codes = [
             r.company_code
-            for r in db.query(ExecAssignment).filter(ExecAssignment.executive_id == user.id)
+            for r in db.query(ExecAssignment).filter(
+                ExecAssignment.executive_id == user.id
+            )
         ]
         if not codes:
             return {"items": [], "total": 0}
@@ -812,9 +832,7 @@ def list_notifications(
             raise HTTPException(status_code=400, detail="Invalid type")
     if company_code:
         q = q.filter(Notification.company_code == company_code)
-    items = (
-        q.order_by(Notification.created_at.desc()).limit(min(limit, 500)).all()
-    )
+    items = q.order_by(Notification.created_at.desc()).limit(min(limit, 500)).all()
     return {"items": items, "total": len(items)}
 
 
@@ -967,9 +985,10 @@ def admin_decline(
 # Admin: hard reset database (dangerous). Truncates all tables and reseeds admin & settings.
 @router.post("/admin/reset", dependencies=[Depends(require_roles("admin"))])
 def admin_reset(db: Session = Depends(get_db)):
+    # Some ephemeral test environments may not include legacy 'imports' table; exclude it from truncate
     db.execute(
         text(
-            "TRUNCATE TABLE notifications, payment_allocations, payments, bills, exec_assignments, companies, users, settings, imports RESTART IDENTITY CASCADE;"
+            "TRUNCATE TABLE notifications, payment_allocations, payments, bills, exec_assignments, companies, users, settings RESTART IDENTITY CASCADE;"
         )
     )
     db.commit()

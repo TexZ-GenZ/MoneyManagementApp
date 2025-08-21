@@ -2,11 +2,22 @@ from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, case
-from app.models.models import Company, Bill, Setting, BillStatus, Notification, NotificationType, NotificationStatus
+from app.models.models import (
+    Company,
+    Bill,
+    Setting,
+    BillStatus,
+    Notification,
+    NotificationType,
+    NotificationStatus,
+)
 from app.core.config import settings as cfg
 
 
 def ensure_settings_row(db: Session) -> Setting:
+    """
+    Ensure a settings row exists in the DB, creating with defaults if missing.
+    """
     s = db.get(Setting, 1)
     if not s:
         s = Setting(
@@ -22,6 +33,9 @@ def ensure_settings_row(db: Session) -> Setting:
 
 
 def recalc_company_totals(db: Session, code: str) -> None:
+    """
+    Recalculate company amount, outbal, and credit_date based on pending bills.
+    """
     today = date.today()
     amounts = (
         db.query(
@@ -70,7 +84,9 @@ def recalc_company_totals(db: Session, code: str) -> None:
 
 
 def recompute_company_amounts(db: Session, code: str) -> None:
-    """Recompute amount & outbal only (no credit/promise recalculation)."""
+    """
+    Recompute amount & outbal only (no credit/promise recalculation).
+    """
     today = date.today()
     amounts = (
         db.query(
@@ -98,18 +114,25 @@ def recompute_company_amounts(db: Session, code: str) -> None:
 
 
 def resolve_promise_crossed_notifications(db: Session, company: Company) -> None:
-    """Ensure promise_crossed notification state reflects current company dates."""
+    """
+    Ensure promise_crossed notification state reflects current company dates.
+    Mark notification as stopped if dates are resolved.
+    """
     today = date.today()
     overdue = False
     if company.credit_date and company.credit_date < today:
         overdue = True
     if company.promise_date and company.promise_date < today:
         overdue = True
-    existing = db.query(Notification).filter(
-        Notification.company_code == company.code,
-        Notification.type == NotificationType.promise_crossed,
-        Notification.status == NotificationStatus.pending,
-    ).first()
+    existing = (
+        db.query(Notification)
+        .filter(
+            Notification.company_code == company.code,
+            Notification.type == NotificationType.promise_crossed,
+            Notification.status == NotificationStatus.pending,
+        )
+        .first()
+    )
     if overdue:
         if not existing:
             db.add(

@@ -28,22 +28,54 @@ Import `Jaskirat.postman_collection.json` and run:
 Use the Bearer token to call secured endpoints.
 
 ## Features
-- Companies & Bills imported from legacy DBF files (`master.dbf`, `transactions.dbf`).
-- Automatic recalculation of company `amount`, `outbal`, and `credit_date` after imports & approved payments.
-- Promise date initialization (first time) and guarded forward-only updates via payment `next_promise_date` (cannot move backward or before credit date).
-- Payment workflow: submit -> accountant approve/decline -> admin approve/decline with idempotency key support.
-- Bill allocation validation with reservation logic to avoid double allocation across pending payments.
-- Dashboard endpoint: `/companies/{code}/dashboard` aggregates pending & paid bills with company summary.
-- Notification system:
 	* Automatic background scan thread (interval configurable via settings) for promise/credit date breaches.
 	* Payment review notifications for payments awaiting approval.
 	* Manual trigger: `POST /admin/notifications/scan`.
 	* Acknowledge endpoint: `POST /notifications/{id}/ack`.
 	* Filtering on `/notifications` (status, type, company_code).
-- Settings management for credit extension days & notification cadence.
 
 ## Roadmap
-- Replace simple background thread with APScheduler or external job runner for multi-instance deployments.
-- Add tests (imports idempotency, payment allocation edge cases, notification scans).
-- Add CSV export & WebSocket push for notifications.
-- Harden auth (refresh tokens, rate limiting).
+
+## API Endpoints & Error Codes
+
+### Auth
+- `POST /auth/login` — Login, returns JWT token. Errors: 401 for invalid credentials or inactive user.
+
+### Companies
+- `GET /companies` — List companies. Supports filtering, pagination.
+- `GET /companies/{code}/dashboard` — Company dashboard with pending/paid bills, summary.
+- `PATCH /companies/{code}/promise` — Update promise date (forward-only, >= credit date). Errors: 400 for invalid date.
+- `PATCH /companies/{code}/credit` — Update credit date. Errors: 400 for invalid date.
+
+### Bills
+- `GET /bills` — List bills. Supports filtering, sorting, pagination.
+
+### Payments
+- `POST /payments` — Submit payment with bill allocations. Errors: 400 for invalid allocation, negative/zero amount, duplicate bills, out-of-range geo, etc. 409 for idempotency key conflict.
+- `POST /accountant/payments/{id}/approve|decline` — Accountant approval/decline. Errors: 400 for invalid state.
+- `POST /admin/payments/{id}/approve|decline` — Admin approval/decline. Errors: 400 for invalid state.
+
+### Notifications
+- `GET /notifications` — List notifications. Supports filtering by status, type, company_code.
+- `POST /admin/notifications/scan` — Manual notification scan trigger.
+- `POST /notifications/{id}/ack` — Acknowledge notification.
+
+### Settings
+- `GET /settings` — Get current settings.
+- `PATCH /settings` — Update settings. Errors: 400 for invalid values.
+
+## Error Codes
+- 400 Bad Request: Invalid input, business rule violation.
+- 401 Unauthorized: Missing/invalid token, inactive user.
+- 403 Forbidden: Insufficient role/privileges.
+- 404 Not Found: Resource does not exist.
+- 409 Conflict: Idempotency key or allocation conflict.
+
+## Business Logic Highlights
+- Promise date can only move forward and must be >= credit date.
+- Payment allocations must match amount collected and not exceed bill remaining.
+- Notifications are auto-generated for promise/credit date breaches and pending payment reviews, and are suppressed/resolved when business rules are satisfied.
+- Role-based access for payment approval and settings management.
+
+## Roadmap
+...existing code...

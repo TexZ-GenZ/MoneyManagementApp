@@ -61,9 +61,13 @@ class Bill(Base):
     due_date: Mapped[date] = mapped_column(Date)
     amount: Mapped[Numeric] = mapped_column(Numeric(14, 2))
     amount_paid: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
-    status: Mapped[BillStatus] = mapped_column(Enum(BillStatus, name="billstatus"), default=BillStatus.pending)
+    status: Mapped[BillStatus] = mapped_column(
+        Enum(BillStatus, name="billstatus"), default=BillStatus.pending
+    )
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
-    __table_args__ = (UniqueConstraint("company_code", "bill_number", name="uq_bill_company_number"),)
+    __table_args__ = (
+        UniqueConstraint("company_code", "bill_number", name="uq_bill_company_number"),
+    )
 
 
 class ExecAssignment(Base):
@@ -71,7 +75,9 @@ class ExecAssignment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     executive_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"), index=True)
-    __table_args__ = (UniqueConstraint("executive_id", "company_code", name="uq_exec_company"),)
+    __table_args__ = (
+        UniqueConstraint("executive_id", "company_code", name="uq_exec_company"),
+    )
 
 
 class PaymentStatus(str, enum.Enum):
@@ -94,7 +100,9 @@ class Payment(Base):
     exec_lng: Mapped[Numeric | None] = mapped_column(Numeric(10, 6))
     comments: Mapped[str | None] = mapped_column(Text)
     next_promise_date: Mapped[date | None] = mapped_column(Date)
-    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus, name="paymentstatus"), default=PaymentStatus.submitted)
+    status: Mapped[PaymentStatus] = mapped_column(
+        Enum(PaymentStatus, name="paymentstatus"), default=PaymentStatus.submitted
+    )
     exec_location_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     accountant_comment: Mapped[str | None] = mapped_column(Text)
     admin_comment: Mapped[str | None] = mapped_column(Text)
@@ -104,8 +112,12 @@ class Payment(Base):
 class PaymentAllocation(Base):
     __tablename__ = "payment_allocations"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id", ondelete="CASCADE"), index=True)
-    bill_id: Mapped[int] = mapped_column(ForeignKey("bills.id", ondelete="CASCADE"), index=True)
+    payment_id: Mapped[int] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), index=True
+    )
+    bill_id: Mapped[int] = mapped_column(
+        ForeignKey("bills.id", ondelete="CASCADE"), index=True
+    )
     amount: Mapped[Numeric] = mapped_column(Numeric(14, 2))
 
 
@@ -125,8 +137,13 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company_code: Mapped[str | None] = mapped_column(String(50))
     payment_id: Mapped[int | None] = mapped_column(Integer)
-    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType, name="notificationtype"))
-    status: Mapped[NotificationStatus] = mapped_column(Enum(NotificationStatus, name="notificationstatus"), default=NotificationStatus.pending)
+    type: Mapped[NotificationType] = mapped_column(
+        Enum(NotificationType, name="notificationtype")
+    )
+    status: Mapped[NotificationStatus] = mapped_column(
+        Enum(NotificationStatus, name="notificationstatus"),
+        default=NotificationStatus.pending,
+    )
     message: Mapped[str] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)

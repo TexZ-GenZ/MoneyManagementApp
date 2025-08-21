@@ -567,7 +567,13 @@
             "script": {
               "type": "text/javascript",
               "exec": [
-                "if (!pm.collectionVariables.get('idempotency_key')) { pm.collectionVariables.set('idempotency_key', pm.variables.replaceIn('{{$guid}}')); }"
+                "// Always generate a fresh idempotency key for a NEW payment submission",
+                "// Keep the previous one in last_idempotency_key for replay/conflict tests",
+                "const previous = pm.collectionVariables.get('idempotency_key');",
+                "if (previous) { pm.collectionVariables.set('last_idempotency_key', previous); }",
+                "const newKey = (crypto && crypto.randomUUID) ? crypto.randomUUID() : pm.variables.replaceIn('{{$guid}}');",
+                "pm.collectionVariables.set('idempotency_key', newKey);",
+                "pm.collectionVariables.set('current_payment_mode', 'fresh');"
               ]
             }
           },
@@ -618,6 +624,16 @@
           ]
         },
         "event": [
+          {
+            "listen": "prerequest",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "// Replay last idempotency key if available (do NOT regenerate)",
+                "if (pm.collectionVariables.get('current_payment_mode') === 'fresh') { pm.collectionVariables.set('current_payment_mode', 'replay'); }"
+              ]
+            }
+          },
           {
             "listen": "test",
             "script": {
@@ -1466,7 +1482,7 @@
       }
     },
     {
-      "name": "Notifications - Pending",
+      "name": "Notifications - Pending (All Types)",
       "request": {
         "method": "GET",
         "header": [
@@ -1476,21 +1492,26 @@
           }
         ],
         "url": {
-          "raw": "http://localhost:8000/notifications/pending",
+          "raw": "http://localhost:8000/notifications?status=pending",
           "protocol": "http",
           "host": [
             "localhost"
           ],
           "port": "8000",
           "path": [
-            "notifications",
-            "pending"
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "pending"
+            }
           ]
         }
       }
     },
     {
-      "name": "Admin - Notifications Pending",
+      "name": "Notifications - Pending Payment Review",
       "request": {
         "method": "GET",
         "header": [
@@ -1500,16 +1521,119 @@
           }
         ],
         "url": {
-          "raw": "http://localhost:8000/admin/notifications/pending",
+          "raw": "http://localhost:8000/notifications?status=pending&type=payment_review",
           "protocol": "http",
           "host": [
             "localhost"
           ],
           "port": "8000",
           "path": [
-            "admin",
-            "notifications",
-            "pending"
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "pending"
+            },
+            {
+              "key": "type",
+              "value": "payment_review"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Notifications - Stopped Payment Review (After Admin Action)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/notifications?status=stopped&type=payment_review",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "stopped"
+            },
+            {
+              "key": "type",
+              "value": "payment_review"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Notifications - Pending Promise Crossed",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/notifications?status=pending&type=promise_crossed",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "pending"
+            },
+            {
+              "key": "type",
+              "value": "promise_crossed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Notifications - All Promise Crossed (Any Status)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/notifications?type=promise_crossed",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "type",
+              "value": "promise_crossed"
+            }
           ]
         }
       }
