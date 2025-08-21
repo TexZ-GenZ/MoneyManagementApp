@@ -80,14 +80,14 @@ export default function AdminExecutiveList() {
     try {
       let header = await StorageService.getAuthHeader();
 
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`,{
-        headers: header
-      });
+      //const res = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`,{
+      //  headers: header
+      //});
 
-      const data = await res.json();
+      //const data = await res.json();
 
-      setExecutives(data);
-      setFiltered(data);
+      //setExecutives(data);
+      //setFiltered(data);
 
       // fit with sample data
       setExecutives(sampledata)

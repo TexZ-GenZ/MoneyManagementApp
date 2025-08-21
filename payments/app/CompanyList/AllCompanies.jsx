@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
+import { useRouter } from "expo-router";
 
 // Demo fetch -- replace with real API call
 const fetchCompanies = async () => [
@@ -41,6 +42,8 @@ export default function CompanyListScreen() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
+  const router  = useRouter()
+
   useEffect(() => {
     loadCompanies();
   }, []);
@@ -75,7 +78,10 @@ export default function CompanyListScreen() {
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.5}>
+    <TouchableOpacity style={styles.card} activeOpacity={0.5} onPress={()=>router.push({
+      pathname:"../(others)/BiilsScreen",
+      params:{name:item.name, code:item.code, amount:item.amount, outbal:item.outbal}
+    })}>
       <View style={styles.cardHeader}>
         <Text style={styles.name}>{item.name}</Text>
         <Text style={styles.code}>{item.code}</Text>
