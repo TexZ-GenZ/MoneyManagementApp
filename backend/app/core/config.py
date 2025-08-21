@@ -1,19 +1,24 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from app.core.config import settings
 
 
-class Settings(BaseSettings):
-    DATABASE_URL: str
-    JWT_SECRET: str
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    CREDIT_EXTENSION_DAYS: int = 10
-    NOTIF_EVERY_HOURS: int = 2
-    PAYMENT_NOTIF_DAILY_HOUR: int = 9
-    CORS_ALLOWED_ORIGINS: List[str] = ["*"]
-
-    # Pydantic v2 config
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+class Base(DeclarativeBase):
+    pass
 
 
-settings = Settings()
+_url = settings.DATABASE_URL
+# Safety: if still plain postgresql:// (driver default psycopg2) but we only installed psycopg v3,
+# force dialect to psycopg to avoid ModuleNotFoundError: psycopg2
+if _url.startswith("postgresql://") and "+psycopg" not in _url:
+    _url = _url.replace("postgresql://", "postgresql+psycopg://", 1)
+engine = create_engine(_url, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
