@@ -9,8 +9,11 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy application code (compose bind-mount will override for live reload)
+# Copy application code and startup script
 COPY app /app/app
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use start script so migrations run automatically (suitable for Railway & other PaaS)
+CMD ["/app/start.sh"]
