@@ -11,6 +11,9 @@ depends_on = None
 def upgrade():
     # 'last_sent_at' column already exists, skip adding
     # 'next_send_at' column already exists, skip adding
+    # Ensure payment_id column exists BEFORE creating index that references it
+    # (fresh database builds reached this migration before 0010 which also adds it)
+    op.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS payment_id INTEGER")
     # Prevent duplicate active notifications of same type for same company/payment
     op.create_index(
         "ix_notifications_unique_active",
