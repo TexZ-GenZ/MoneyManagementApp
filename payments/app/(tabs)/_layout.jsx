@@ -13,17 +13,17 @@ export default function TabLayout() {
     (state) => state.auth
   );
 
-  // Initialize auth on mount
-  useEffect(() => {
-    dispatch(initializeAuth());
-  }, [dispatch]);
+  // // Initialize auth on mount
+  // useEffect(() => {
+  //   dispatch(initializeAuth());
+  // }, [dispatch]);
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace("/login");
-    }
-  }, [isAuthenticated, isLoading, router]);
+  // // Redirect if not authenticated
+  // useEffect(() => {
+  //   if (!isAuthenticated) {
+  //     router.replace("/login");
+  //   }
+  // }, [isAuthenticated, isLoading, router]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -46,9 +46,9 @@ export default function TabLayout() {
     );
   };
 
-  if (!isAuthenticated) {
-    return null; // Will redirect to login
-  }
+  // if (!isAuthenticated) {
+  //   return null; // Will redirect to login
+  // }
 
   // Get user role for conditional tab rendering
   const userRole = user?.role || 'executive';
