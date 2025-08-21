@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI):  # type: ignore[override]
             )
         ensure_settings_row(db)
         db.commit()
+    except Exception:
+        # Likely a race between multiple workers creating admin/settings concurrently.
+        db.rollback()
     finally:
         db.close()
     # Start background scheduler
