@@ -13,6 +13,7 @@ from app.schemas.company import (
     CompanyList,
     CompanyUpdateCredit,
     CompanyUpdatePromise,
+    CompanyDashboard,
 )
 from app.schemas.bill import BillList, BillOut
 from app.schemas.payment import (
@@ -35,8 +36,10 @@ from app.services.auth import (
     normalize_indian_mobile,
 )
 from app.services.security import get_current_user, require_roles
-from app.services.company import recalc_company_totals, ensure_settings_row
+from app.services.company import recalc_company_totals, ensure_settings_row, recompute_company_amounts, resolve_promise_crossed_notifications
 from app.services.payments import create_payment_with_allocations, admin_approve_payment
+from app.services.notifications import run_notification_scan
+from app.core.scheduler import reschedule_jobs
 from app.services.imports import (
     import_master as do_import_master,
     import_transactions as do_import_transactions,
@@ -107,6 +110,12 @@ def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     db.add(s)
     db.commit()
     db.refresh(s)
+    # Reschedule APScheduler jobs with new settings
+    try:
+        reschedule_jobs()
+    except Exception:
+        # Swallow scheduling errors to not break API response
+        pass
     return SettingsOut(
         credit_extension_days=s.credit_extension_days,
         notif_every_hours=s.notif_every_hours,
@@ -142,6 +151,46 @@ def get_company(code: str, db: Session = Depends(get_db)):
     return c
 
 
+@router.get("/companies/{code}/dashboard", response_model=CompanyDashboard)
+def company_dashboard(code: str, db: Session = Depends(get_db)):
+    c = db.get(Company, code)
+    if not c:
+        raise HTTPException(status_code=404, detail="Company not found")
+    pending = (
+        db.query(Bill)
+        .filter(
+            Bill.company_code == code,
+            Bill.status == "pending",
+            Bill.is_archived == False,
+        )
+        .order_by(Bill.due_date.asc())
+        .limit(100)
+        .all()
+    )
+    paid = (
+        db.query(Bill)
+        .filter(
+            Bill.company_code == code,
+            Bill.status == "paid",
+            Bill.is_archived == False,
+        )
+        .order_by(Bill.bill_date.desc())
+        .limit(100)
+        .all()
+    )
+    return CompanyDashboard(
+        code=c.code,
+        name=c.name or c.code,
+        area=c.area,
+        credit_date=c.credit_date,
+        promise_date=c.promise_date,
+        outbal=c.outbal,
+        amount=c.amount,
+        pending_bills=pending,
+        paid_bills=paid,
+    )
+
+
 @router.patch(
     "/companies/{code}/promise-date",
     response_model=CompanyBase,
@@ -153,9 +202,17 @@ def set_promise_date(
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
+    # Forward-only rule
+    if c.promise_date and body.promise_date < c.promise_date:
+        raise HTTPException(status_code=400, detail="Cannot move promise_date backward")
+    # Must not be earlier than credit_date
+    if c.credit_date and body.promise_date < c.credit_date:
+        raise HTTPException(status_code=400, detail="promise_date cannot be earlier than credit_date")
     c.promise_date = body.promise_date
     db.commit()
     db.refresh(c)
+    recompute_company_amounts(db, c.code)
+    resolve_promise_crossed_notifications(db, c)
     return c
 
 
@@ -170,9 +227,14 @@ def set_credit_date(
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
+    # promise_date must remain >= credit_date if promise_date exists
+    if c.promise_date and body.credit_date and c.promise_date < body.credit_date:
+        raise HTTPException(status_code=400, detail="Existing promise_date earlier than new credit_date; update promise_date first")
     c.credit_date = body.credit_date
     db.commit()
     db.refresh(c)
+    recompute_company_amounts(db, c.code)
+    resolve_promise_crossed_notifications(db, c)
     return c
 
 
@@ -675,46 +737,20 @@ def admin_hard_delete_user(user_id: int, db: Session = Depends(get_db)):
     return {"ok": True, "deleted": user_id}
 
 
-# Notifications: pending lists
-@router.get(
-    "/notifications/pending",
-    dependencies=[Depends(require_roles("accountant", "admin"))],
-)
-def notifications_pending(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
-):
-    # For non-admin, show company-related items only (could scope by assigned companies later)
-    items = (
-        db.query(Notification)
-        .filter(Notification.status == NotificationStatus.pending)
-        .all()
-    )
-    return {"items": items, "total": len(items)}
-
-
-@router.get(
-    "/admin/notifications/pending", dependencies=[Depends(require_roles("admin"))]
-)
-def admin_notifications_pending(db: Session = Depends(get_db)):
-    items = (
-        db.query(Notification)
-        .filter(Notification.status == NotificationStatus.pending)
-        .all()
-    )
-    return {"items": items, "total": len(items)}
+## (Removed legacy /notifications/pending endpoints; use /notifications with filters.)
 
 
 # Imports (stubs)
 @router.post("/imports/master", dependencies=[Depends(require_roles("admin"))])
 def import_master(db: Session = Depends(get_db)):
-    count = do_import_master(db)
-    return {"ok": True, "imported": count}
+    metrics = do_import_master(db)
+    return {"ok": True, **metrics}
 
 
 @router.post("/imports/transactions", dependencies=[Depends(require_roles("admin"))])
 def import_transactions(db: Session = Depends(get_db)):
-    count = do_import_transactions(db)
-    return {"ok": True, "imported": count}
+    metrics = do_import_transactions(db)
+    return {"ok": True, **metrics}
 
 
 # File upload variants (multipart) that save files then call import
@@ -727,8 +763,8 @@ def upload_master(file: UploadFile = File(...), db: Session = Depends(get_db)):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     content = file.file.read()
     dest.write_bytes(content)
-    count = do_import_master(db)
-    return {"ok": True, "saved": str(dest), "imported": count}
+    metrics = do_import_master(db)
+    return {"ok": True, "saved": str(dest), **metrics}
 
 
 @router.post(
@@ -739,14 +775,87 @@ def upload_transactions(file: UploadFile = File(...), db: Session = Depends(get_
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     content = file.file.read()
     dest.write_bytes(content)
-    count = do_import_transactions(db)
-    return {"ok": True, "saved": str(dest), "imported": count}
+    metrics = do_import_transactions(db)
+    return {"ok": True, "saved": str(dest), **metrics}
 
 
-# Notifications (stub list)
 @router.get("/notifications")
-def list_notifications():
-    return {"items": []}
+def list_notifications(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    status: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    company_code: Optional[str] = Query(None),
+    limit: int = 200,
+):
+    q = db.query(Notification)
+    if user.role == Role.executive:
+        # Filter to companies assigned to executive
+        codes = [
+            r.company_code
+            for r in db.query(ExecAssignment).filter(ExecAssignment.executive_id == user.id)
+        ]
+        if not codes:
+            return {"items": [], "total": 0}
+        q = q.filter(Notification.company_code.in_(codes))
+    if status:
+        try:
+            st = NotificationStatus(status)
+            q = q.filter(Notification.status == st)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid status")
+    if type:
+        try:
+            tp = NotificationType(type)
+            q = q.filter(Notification.type == tp)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid type")
+    if company_code:
+        q = q.filter(Notification.company_code == company_code)
+    items = (
+        q.order_by(Notification.created_at.desc()).limit(min(limit, 500)).all()
+    )
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/notifications/{notification_id}/ack")
+def acknowledge_notification(notification_id: int, db: Session = Depends(get_db)):
+    n = db.get(Notification, notification_id)
+    if not n:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if n.status != NotificationStatus.pending:
+        raise HTTPException(status_code=400, detail="Notification not pending")
+    n.status = NotificationStatus.sent
+    db.commit()
+    db.refresh(n)
+    return n
+
+
+@router.post(
+    "/admin/notifications/scan", dependencies=[Depends(require_roles("admin"))]
+)
+def manual_notification_scan(db: Session = Depends(get_db)):
+    run_notification_scan(db)
+    return {"ok": True}
+
+
+@router.get("/notifications/counts")
+def notification_counts(
+    db: Session = Depends(get_db), company_code: Optional[str] = Query(None)
+):
+    from sqlalchemy import func
+
+    q = db.query(
+        Notification.type, Notification.status, func.count(Notification.id)
+    ).group_by(Notification.type, Notification.status)
+    if company_code:
+        q = q.filter(Notification.company_code == company_code)
+    rows = q.all()
+    result = {}
+    for t, s, cnt in rows:
+        key = f"{t.value if hasattr(t,'value') else t}:{s.value if hasattr(s,'value') else s}"
+        result[key] = cnt
+    return result
 
 
 @router.post(
