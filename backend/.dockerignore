@@ -1,0 +1,26 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtualenvs
+venv/
+.env.local
+
+# Test & coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local env files (keep main .env if you want, but better to inject via Railway UI)
+.env
+
+# Git
+.git
+.gitignore
+
+# Data samples (exclude if large or sensitive)
+data/*.dbf
+
+# Misc
+.vscode/
