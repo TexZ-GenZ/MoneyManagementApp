@@ -15,6 +15,7 @@ from app.models.models import (
     NotificationStatus,
 )
 from app.services.company import recalc_company_totals
+from sqlalchemy.exc import IntegrityError
 
 
 def create_payment_with_allocations(
@@ -123,19 +124,38 @@ def create_payment_with_allocations(
         next_promise_date=next_promise_date,
         idempotency_key=idempotency_key,
     )
-    db.add(p)
-    db.flush()
+    try:
+        db.add(p)
+        db.flush()
+    except IntegrityError:
+        # Duplicate idempotency key detected before allocations (race).
+        db.rollback()
+        if idempotency_key:
+            existing_after = (
+                db.query(Payment)
+                .filter(Payment.idempotency_key == idempotency_key)
+                .first()
+            )
+            if existing_after:
+                return existing_after
+        raise
     for a in allocations:
         db.add(
             PaymentAllocation(payment_id=p.id, bill_id=a["bill_id"], amount=a["amount"])
         )
     # Create a notification for accountant review
-    existing_review = db.query(Notification).filter(
-        Notification.company_code == company_code,
-        Notification.type == NotificationType.payment_review,
-        Notification.status == NotificationStatus.pending,
-    ).first()
-    if not existing_review:
+    # Guarantee at most one pending review notification: lock existing pending rows and reuse or stop extras
+    pending_reviews = (
+        db.query(Notification)
+        .with_for_update()
+        .filter(
+            Notification.company_code == company_code,
+            Notification.type == NotificationType.payment_review,
+            Notification.status == NotificationStatus.pending,
+        )
+        .all()
+    )
+    if not pending_reviews:
         db.add(
             Notification(
                 company_code=company_code,
@@ -146,14 +166,41 @@ def create_payment_with_allocations(
                 next_send_at=None,
             )
         )
-    db.commit()
+    elif len(pending_reviews) > 1:
+        # Collapse duplicates deterministically: keep the earliest created, mark others stopped
+        pending_reviews.sort(key=lambda n: n.created_at)
+        for dup in pending_reviews[1:]:
+            dup.status = NotificationStatus.stopped
+            db.add(dup)
+    try:
+        db.commit()
+    except IntegrityError as e:
+        # Possible concurrent insert with same idempotency key race:
+        # another transaction inserted the payment after our initial existence check.
+        # Rollback and return the existing payment to honor idempotency contract.
+        db.rollback()
+        if idempotency_key:
+            existing_after = (
+                db.query(Payment)
+                .filter(Payment.idempotency_key == idempotency_key)
+                .first()
+            )
+            if existing_after:
+                return existing_after
+        # Re-raise if not an idempotency collision scenario
+        raise
     db.refresh(p)
     return p
 
 
 def admin_approve_payment(db: Session, payment_id: int) -> Payment:
     # Lock payment row and ensure status transition is valid (optimistic concurrency)
-    p = db.query(Payment).with_for_update().filter(Payment.id == payment_id).one_or_none()
+    p = (
+        db.query(Payment)
+        .with_for_update()
+        .filter(Payment.id == payment_id)
+        .one_or_none()
+    )
     if not p:
         raise ValueError("Payment not found")
     if p.status != PaymentStatus.accountant_approved:
@@ -176,7 +223,12 @@ def admin_approve_payment(db: Session, payment_id: int) -> Payment:
     # update company promise date if provided
     if p.next_promise_date:
         comp = db.get(Company, p.company_code)
-        comp.promise_date = p.next_promise_date
+        # Enforce DB check constraint promise_date >= credit_date when both present
+        if comp.credit_date and p.next_promise_date < comp.credit_date:
+            # Clamp to credit_date to avoid IntegrityError while preserving intent
+            comp.promise_date = comp.credit_date
+        else:
+            comp.promise_date = p.next_promise_date
         db.add(comp)
     p.status = PaymentStatus.admin_approved
     p.admin_review_at = datetime.utcnow()

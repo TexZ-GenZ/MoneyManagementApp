@@ -55,9 +55,11 @@ def upgrade():
         sa.Column("amount", sa.Numeric(14, 2), nullable=False),
         sa.Column("amount_paid", sa.Numeric(14, 2), server_default="0"),
         sa.Column("status", bill_status, server_default="pending"),
-        sa.UniqueConstraint("company_code", "bill_number", name="uq_bill_company_number"),
+        sa.UniqueConstraint(
+            "company_code", "bill_number", name="uq_bill_company_number"
+        ),
     )
-    op.create_index("ix_bills_company", "bills", ["company_code"]) 
+    op.create_index("ix_bills_company", "bills", ["company_code"])
 
     op.create_table(
         "exec_assignments",

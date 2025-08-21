@@ -23,7 +23,8 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
     inserted = updated = skipped = 0
     seen_codes: set[str] = set()
     # Preload existing to allow change detection without hitting ORM attribute history per row.
-    existing = {c.code: (c.name, c.area, c.is_archived) for c in db.query(Company).all()}
+    # Snapshot size for archived calculation only
+    existing_count = db.query(Company).count()
     for idx, row in enumerate(DBF(str(path), load=True, char_decode_errors="ignore")):
         r = {str(k).lower(): v for k, v in row.items()}
         code = str(r.get("code") or "").strip()
@@ -34,20 +35,23 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
         area = str(r.get("area") or "").strip()
         comp = db.get(Company, code)
         if not comp:
-            comp = Company(code=code, name=name, area=area)
-            db.add(comp)
+            db.add(Company(code=code, name=name, area=area, is_archived=False))
             inserted += 1
         else:
-            prev = existing.get(code)
-            if prev and prev[0] == name and prev[1] == area and prev[2] is False:
-                skipped += 1
-            else:
+            changed = False
+            if comp.name != name:
                 comp.name = name
+                changed = True
+            if comp.area != area:
                 comp.area = area
+                changed = True
+            if comp.is_archived:
+                comp.is_archived = False
+                changed = True
+            if changed:
                 updated += 1
-        # Always un-archive if present in file.
-        if comp.is_archived:
-            comp.is_archived = False
+            else:
+                skipped += 1
         if (inserted + updated) % CHUNK_SIZE == 0:
             db.flush()
     # Archive (soft) companies missing in snapshot.
@@ -57,7 +61,7 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
         )
     db.commit()
     duration = time.time() - started
-    archived = max(0, len(existing) - len(seen_codes))
+    archived = max(0, existing_count - len(seen_codes))
     return {
         "inserted": inserted,
         "updated": updated,
@@ -78,15 +82,7 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
     seen_numbers: set[str] = set()
     touched_codes: set[str] = set()
     # Preload existing bills for quick change detection (avoid per-row attribute comparisons).
-    existing = {
-        b.bill_number: (
-            b.company_code,
-            str(b.amount),
-            str(b.due_date),
-            b.is_archived,
-        )
-        for b in db.query(Bill).all()
-    }
+    existing_count = db.query(Bill).count()
     for idx, row in enumerate(DBF(str(path), load=True, char_decode_errors="ignore")):
         r = {str(k).lower(): v for k, v in row.items()}
         bill_no = str(r.get("bill") or r.get("bill_number") or "").strip()
@@ -98,7 +94,8 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
         bill_date = r.get("date")
         due_date = r.get("due_date") or r.get("duedate")
         debit = r.get("debit") or r.get("amount")
-        new_amount = Decimal(debit or 0)
+        # Normalize amount to two decimals to ensure idempotent comparison on subsequent imports
+        new_amount = Decimal(debit or 0).quantize(Decimal("0.00"))
         if not db.get(Company, code):
             db.add(Company(code=code, name=code, area=None))
         bill = db.query(Bill).filter(Bill.bill_number == bill_no).one_or_none()
@@ -116,17 +113,26 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
             db.add(bill)
             inserted += 1
         else:
-            prev = existing.get(bill_no)
-            snapshot = (code, str(new_amount), str(due_date), False)
-            if prev and prev == snapshot:
-                skipped += 1
-            else:
+            changed = False
+            if bill.company_code != code:
                 bill.company_code = code
+                changed = True
+            if bill.bill_date != bill_date:
                 bill.bill_date = bill_date
+                changed = True
+            if bill.due_date != due_date:
                 bill.due_date = due_date
+                changed = True
+            if bill.amount != new_amount:
                 bill.amount = new_amount
+                changed = True
+            if bill.is_archived:
                 bill.is_archived = False
+                changed = True
+            if changed:
                 updated += 1
+            else:
+                skipped += 1
         if (inserted + updated) % CHUNK_SIZE == 0:
             db.flush()
     # Archive bills missing in snapshot.
@@ -138,7 +144,7 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
     for code in touched_codes:
         recalc_company_totals(db, code)
     duration = time.time() - started
-    archived = max(0, len(existing) - len(seen_numbers))
+    archived = max(0, existing_count - len(seen_numbers))
     return {
         "inserted": inserted,
         "updated": updated,

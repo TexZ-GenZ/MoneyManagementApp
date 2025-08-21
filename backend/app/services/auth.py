@@ -27,11 +27,17 @@ def get_user_by_username(db: Session, username: str) -> User | None:
 
 def normalize_indian_mobile(mobile: str) -> str:
     # Strip non-digits, handle +91 prefix
-    digits = re.sub(r"\D", "", mobile)
-    if digits.startswith("91") and len(digits) == 12:
+    digits = re.sub(r"\D", "", mobile or "")
+    # Remove leading country code +91 if provided (common 12-digit form)
+    if len(digits) >= 12 and digits.startswith("91"):
+        # If exact 12 (91 + 10 digits) trim; if longer we still try to trim once
         digits = digits[2:]
-    if len(digits) != 10:
-        return digits  # let validation layer decide
+    # Remove a single leading 0 sometimes used before 10-digit numbers (now 11 length)
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    # After canonicalization, only accept 10-digit mobiles; otherwise return original digits for further validation/ rejection upstream
+    if len(digits) == 10:
+        return digits
     return digits
 
 
