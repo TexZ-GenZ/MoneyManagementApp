@@ -19,7 +19,9 @@ export default function ExecutiveDetailsScreen() {
   // Companies assigned to this executive (replace with real API/state)
   const [currentCompanies, setCurrentCompanies] = useState([
     { name: 'ABC', code: 'XYZ-012' },
-    { name: 'Hello Comp', code: 'XY-112' }
+    { name: 'Hello Comp', code: 'XY-112' },
+    { name: 'ABC', code: 'XYZ-02' },
+    { name: 'Hello Comp', code: 'XY-12' }
   ]);
   const [companyCode, setCompanyCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -100,87 +102,125 @@ export default function ExecutiveDetailsScreen() {
   );
 }
 
-// --- STYLES ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#fff"
+    backgroundColor: "#f8fafd", // Soft mint background
   },
   infoBox: {
-    borderWidth: 1,
-    borderColor: "#bbb",
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 20,
-    backgroundColor: "#f8faff"
+    borderWidth: 0,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 24,
+    backgroundColor: "#e6fbfa", // Lighter mint
+    shadowColor: "#c2e6f0",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.13,
+    shadowRadius: 8,
+    elevation: 3,
   },
   label: {
-    fontSize: 18,
-    color: "#333",
+    fontSize: 15,
+    color: "#24507a",
     fontWeight: "600",
-    marginBottom: 4
+    marginBottom: 2,
+    letterSpacing: 0.2,
   },
   value: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#1f4287",
-    marginBottom: 10
+    color: "#152642",
+    marginBottom: 8,
+    letterSpacing: 0.3,
   },
   section: {
-    marginBottom: 10
+    marginBottom: 16,
+    backgroundColor: "#e6fbfa",
+    padding: 14,
+    borderRadius: 14,
+    shadowColor: "#c2e6f0",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 2,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#143764",
+    letterSpacing: 0.2,
     marginBottom: 8,
-    color: "#1f4287"
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#1f75fe",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    fontSize: 16
+    borderWidth: 0,
+    backgroundColor: "#ffffffff",
+    borderRadius: 15,
+    padding: 16,
+    marginBottom: 12,
+    fontSize: 16,
+    color: "#183b56",
+    fontWeight: "500",
+    elevation: 1,
+    shadowColor: "#d6f3ee",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 3,
   },
   button: {
-    backgroundColor: "#1f75fe",
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: "center"
+    backgroundColor: "#2266f1",
+    borderRadius: 15,
+    paddingVertical: 14,
+    paddingHorizontal: 0,
+    alignItems: "center",
+    marginTop: 5,
+    shadowColor: "#9EC0FC",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 9,
+    elevation: 3,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "700"
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   unassignButton: {
-    backgroundColor: "#2970f0",
+    backgroundColor: "#e12d39",
+    minWidth: 90,
     marginLeft: 10,
-    minWidth: 90
+    paddingVertical: 10,
   },
   companyCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: "#f1f7ff",
-    borderWidth: 1,
-    borderColor: "#bbdefb",
-    marginBottom: 14
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: "#edf7fe",
+    borderWidth: 0,
+    marginBottom: 15,
+    shadowColor: "#93c7e7",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09,
+    shadowRadius: 5,
+    elevation: 2,
   },
   companyName: {
     fontSize: 17,
-    fontWeight: "600",
-    color: "#1f4287"
+    fontWeight: "700",
+    color: "#205380",
   },
   companyCode: {
     fontSize: 15,
-    color: "#607d8b"
+    color: "#5686aa",
+    marginTop: 2,
   },
   emptyText: {
     textAlign: "center",
-    color: "#999"
+    color: "#8e9ab6",
+    marginTop: 16,
+    fontSize: 15,
+    fontWeight: "500",
   }
 });
