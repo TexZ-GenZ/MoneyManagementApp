@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Copy application code and startup script
 COPY app /app/app
+# Include Alembic migration assets
+COPY alembic.ini /app/alembic.ini
+COPY alembic /app/alembic
 COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
