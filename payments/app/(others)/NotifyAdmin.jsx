@@ -1,98 +1,85 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, ScrollView } from "react-native";
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-// Mock executiveId to name (you could fetch this from your real data)
+// Mock executiveId to name mapping
 const executiveNames = {
+  0: "Test Exec",
   1: "Alice",
   2: "Bob",
-  3: "Charlie",
-  0: "Test Exec"
+  3: "Charlie"
 };
 
-// Mock data
-const mockApprovalItems = [
+// Mocked admin approval data
+const mockAdminApprovalItems = [
   {
     id: 1,
     company_code: "ABC-001",
-    bill_number: "BILL-1234",
-    collected_at: "2025-08-22T02:57:38.014Z",
-    amount_collected: "3000",
-    method: "Cash",
+    collected_at: "2025-08-22T03:25:48.172Z",
+    amount_collected: "8550",
+    method: "Bank Transfer",
     status: "pending",
     executive_id: 1,
-    comments: "Paid in cash at site. All good.",
-    next_promise_date: "2025-08-27",
+    next_promise_date: "2025-08-28",
     exec_location_verified: true
   },
   {
     id: 2,
-    company_code: "HEL-002",
-    bill_number: "BILL-5762",
-    collected_at: "2025-08-21T17:41:12.222Z",
-    amount_collected: "2500",
+    company_code: "XYZ-002",
+    collected_at: "2025-08-20T15:00:12.755Z",
+    amount_collected: "2400",
     method: "UPI",
     status: "pending",
     executive_id: 2,
-    comments: "Part payment, exec promised next installment.",
-    next_promise_date: "2025-08-30",
+    next_promise_date: "2025-08-29",
     exec_location_verified: false
   }
 ];
 
-export default function AccountantApprovalScreen() {
+export default function AdminApprovalScreen() {
   const [search, setSearch] = useState("");
-  const [approvalItems, setApprovalItems] = useState(mockApprovalItems);
-  const [expandedIdx, setExpandedIdx] = useState(null);
+  const [approvalItems, setApprovalItems] = useState(mockAdminApprovalItems);
 
-  // Search filter
+  // Filter items by company or exec name
   const filteredItems = approvalItems.filter(item =>
     item.company_code.toLowerCase().includes(search.toLowerCase()) ||
     (executiveNames[item.executive_id] || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Refresh handler (replace with your API call)
+  // Refresh handler (replace with your API)
   const handleRefresh = () => {
-    // You could re-fetch here
-    setApprovalItems([...mockApprovalItems]);
+    setApprovalItems([...mockAdminApprovalItems]);
   };
 
   const handleApprove = (id) => {
-    alert(`Payment ID ${id} approved!`);
-    // API call goes here
+    alert(`Payment ID ${id} approved by Admin!`);
+    // API call here
   };
 
   const handleReject = (id) => {
-    alert(`Payment ID ${id} rejected!`);
-    // API call goes here
+    alert(`Payment ID ${id} rejected by Admin!`);
+    // API call here
   };
 
-  const renderItem = ({ item, index }) => (
+  const renderItem = ({ item }) => (
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <Text style={styles.company}>{item.company_code}</Text>
-        <Text style={styles.billno}>Bill: {item.bill_number ? item.bill_number : "#" + item.id}</Text>
         <Text style={styles.date}>{(new Date(item.collected_at)).toLocaleDateString()}</Text>
       </View>
-      <Text style={styles.executive}>Executive: <Text style={{fontWeight:'bold'}}>{executiveNames[item.executive_id] || item.executive_id}</Text></Text>
+      <View style={styles.infoRow}>
+        <Text style={styles.exec}>Executive: <Text style={{ fontWeight: 'bold' }}>{executiveNames[item.executive_id] || item.executive_id}</Text></Text>
+        <Text style={styles.status}>{item.status.toUpperCase()}</Text>
+      </View>
       <Text style={styles.info}>Method: <Text style={styles.infoValue}>{item.method}</Text></Text>
-      <Text style={styles.info}>Next Promise Date: <Text style={styles.infoValue}>{item.next_promise_date}</Text></Text>
-      <TouchableOpacity
-        style={styles.commentsDropdown}
-        onPress={() => setExpandedIdx(expandedIdx === index ? null : index)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.commentLabel}>
-          Comments <Ionicons name={expandedIdx === index ? "chevron-up" : "chevron-down"} size={16} color="#1f75fe" />
-        </Text>
-        {expandedIdx === index && (
-          <View style={styles.commentBox}>
-            <Text style={styles.commentText}>{item.comments || "No comments"}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      <Text style={styles.info}>
+        Next Promise Date: <Text style={styles.infoValue}>{item.next_promise_date}</Text>
+      </Text>
+      <Text style={styles.info}>
+        Location Verified: <Text style={styles.infoValue}>{item.exec_location_verified ? "Yes" : "No"}</Text>
+      </Text>
       <View style={styles.amountRow}>
-        <Text style={styles.amount}>{item.amount_collected}</Text>
+        <Text style={styles.amount}>₹{item.amount_collected}</Text>
         <TouchableOpacity style={styles.actionBtn} onPress={() => handleApprove(item.id)}>
           <Ionicons name="checkmark-circle" size={32} color="#189A7D" />
         </TouchableOpacity>
@@ -174,59 +161,40 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 5
+    marginBottom: 4
   },
   company: {
     fontSize: 15,
     fontWeight: "700",
     color: "#215087"
   },
-  billno: {
-    fontSize: 13,
-    color: "#3d7ca6"
-  },
   date: {
     fontSize: 13,
     color: "#888"
   },
-  executive: {
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  exec: {
     fontSize: 14,
-    marginBottom: 4,
     color: "#184977"
+  },
+  status: {
+    fontSize: 13,
+    color: "#aa8603",
+    fontWeight: "bold"
   },
   info: {
     fontSize: 13,
     color: "#444",
-    marginBottom: 2
+    marginBottom: 2,
+    marginTop: 2
   },
   infoValue: {
     color: "#2279d2",
     fontWeight: "600"
-  },
-  commentsDropdown: {
-    borderWidth: 1,
-    borderColor: "#deebf7",
-    borderRadius: 10,
-    backgroundColor: "#f1f9ff",
-    marginTop: 7,
-    marginBottom: 3,
-    paddingHorizontal: 10,
-    paddingVertical: 7
-  },
-  commentLabel: {
-    color: "#215087",
-    fontWeight: "600",
-    fontSize: 14
-  },
-  commentBox: {
-    marginTop: 7,
-    padding: 6,
-    backgroundColor: "#e7f4fd",
-    borderRadius: 6
-  },
-  commentText: {
-    fontSize: 13,
-    color: "#1c4064"
   },
   amountRow: {
     marginTop: 8,
