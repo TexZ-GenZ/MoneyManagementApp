@@ -13,17 +13,17 @@ export default function TabLayout() {
     (state) => state.auth
   );
 
-  // // Initialize auth on mount
-  // useEffect(() => {
-  //   dispatch(initializeAuth());
-  // }, [dispatch]);
+  // Initialize auth on mount
+  useEffect(() => {
+    dispatch(initializeAuth());
+  }, [dispatch]);
 
-  // // Redirect if not authenticated
-  // useEffect(() => {
-  //   if (!isAuthenticated) {
-  //     router.replace("/login");
-  //   }
-  // }, [isAuthenticated, isLoading, router]);
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -46,12 +46,12 @@ export default function TabLayout() {
     );
   };
 
-  // if (!isAuthenticated) {
-  //   return null; // Will redirect to login
-  // }
+  if (!isAuthenticated) {
+    return null; // Will redirect to login
+  }
 
   // Get user role for conditional tab rendering
-  const userRole = user?.role || 'executive';
+  const userRole = user?.role || 'admin';
 
   return (
     <Tabs
@@ -73,98 +73,39 @@ export default function TabLayout() {
         }),
       }}>
 
-      {/* Dashboard - Available to all roles
+      <Tabs.Screen name="index" options={{ href: null }} />
+
+      {/* Conditionally display dashboard tabs based on user role */}
       <Tabs.Screen
-        name="index"
+        name="AdminDashboard"
+        options={{
+          title: 'Admin Dashboard',
+          href: userRole === 'admin' ? '/AdminDashboard' : null,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="executiveDashboard"
         options={{
           title: 'Dashboard',
+          href: userRole === 'executive' ? '/executiveDashboard' : null,
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon name={focused ? 'home' : 'home-outline'} color={color} />
+            <TabBarIcon name={focused ? 'business' : 'business-outline'} color={color} />
           ),
-          headerTitle: `${userRole.charAt(0).toUpperCase() + userRole.slice(1)} Dashboard`,
         }}
-      /> */}
-
-      {/* Executive Navigation */}
-      {userRole === 'executive' && (
-        <>
-          <Tabs.Screen
-            name="AccountantDashboard"
-            options={{
-              title: 'ExecutiveDashboard',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'business' : 'business-outline'} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="payments"
-            options={{
-              title: 'Payments',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'card' : 'card-outline'} color={color} />
-              ),
-            }}
-          />
-        </>
-      )}
-
-      {/* Accountant Navigation */}
-      {userRole === 'accountant' && (
-        <>
-          <Tabs.Screen
-            name="explore"
-            options={{
-              title: 'Executives',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'people' : 'people-outline'} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="payments"
-            options={{
-              title: 'Approvals',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} color={color} />
-              ),
-            }}
-          />
-        </>
-      )}
-
-      {/* Admin Navigation */}
-      {userRole === 'admin' && (
-        <>
-          <Tabs.Screen
-            name="admin"
-            options={{
-              title: 'Users',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'people' : 'people-outline'} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="payments"
-            options={{
-              title: 'Approvals',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="reports"
-            options={{
-              title: 'Reports',
-              tabBarIcon: ({ color, focused }) => (
-                <TabBarIcon name={focused ? 'bar-chart' : 'bar-chart-outline'} color={color} />
-              ),
-            }}
-          />
-        </>
-      )}
+      />
+      <Tabs.Screen
+        name="AccountantDashboard"
+        options={{
+          title: 'Accountant Dashboard',
+          href: userRole === 'accountant' ? '/AccountantDashboard' : null,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'calculator' : 'calculator-outline'} color={color} />
+          ),
+        }}
+      />
 
       {/* Profile/Settings - Available to all roles */}
       <Tabs.Screen
