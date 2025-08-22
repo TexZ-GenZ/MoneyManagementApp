@@ -74,25 +74,39 @@ export default function AdminApprovalScreen() {
         <View style={styles.card}>
             <View style={styles.headerRow}>
                 <Text style={styles.company}>{item.company_code}</Text>
-                <Text style={styles.date}>{(new Date(item.collected_at)).toLocaleDateString()}</Text>
+
+                <Text style={styles.amount}>₹{item.amount_collected}</Text>
+
             </View>
             <View style={styles.infoRow}>
-                <Text style={styles.exec}>Executive: <Text style={{ fontWeight: 'bold' }}>{executiveNames[item.executive_id] || item.executive_id}</Text></Text>
+                <Text style={{ fontWeight: 'bold' }}>{executiveNames[item.executive_id] || item.executive_id}</Text>
                 <Text style={styles.status}>{item.status.toUpperCase()}</Text>
             </View>
-            <Text style={styles.info}>Method: <Text style={styles.infoValue}>{item.method}</Text></Text>
+
+            <Text style={styles.infoValue}>{item.method}</Text>
+
+            <Text style={styles.info}>Collected At:
+                <Text style={styles.date}>{(new Date(item.collected_at)).toLocaleDateString()}</Text>
+            </Text>
 
             <Text style={styles.info}>Next Promise Date: <Text style={styles.infoValue}>{item.next_promise_date}</Text></Text>
-            <Text style={styles.info}>Location Verified: <Text style={styles.infoValue}>{item.exec_location_verified ? "Yes" : "No"}</Text></Text>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text style={styles.info}>Location Verified: </Text>
+                {item.exec_location_verified ?
+                    <Ionicons name="checkmark-circle" size={16} color="#1aa37a" /> :
+                    <Ionicons name="close-circle" size={16} color="#e25656" />}
+            </View>
+
 
             <View style={styles.amountRow}>
-                <Text style={styles.amount}>₹{item.amount_collected}</Text>
+
+
+                <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item)}>
+                    <Ionicons name="close" size={18} color="#fff" />
+                </TouchableOpacity>
 
                 <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(item)}>
                     <Ionicons name="checkmark" size={18} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item)}>
-                    <Ionicons name="close" size={18} color="#fff" />
                 </TouchableOpacity>
 
             </View>
@@ -209,7 +223,8 @@ const styles = StyleSheet.create({
     },
     date: {
         fontSize: 13,
-        color: "#888"
+        color: "#888",
+        marginLeft: 2,
     },
     infoRow: {
         flexDirection: "row",
@@ -245,7 +260,7 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: "700",
         color: "#189A7D",
-        marginRight: 10,
+        marginRight: 1,
         marginLeft: "auto"
     },
     circleBtn: {
