@@ -92,9 +92,9 @@ export default function CompanyListScreen() {
         <Text style={styles.label}>Credit Date: <Text style={styles.value}>{item.credit_date}</Text></Text>
         <Text style={[styles.label, {marginLeft:0}]}>Promise Date: <Text style={styles.value}>{item.promise_date}</Text></Text>
       {/* </View> */}
-      <View style={styles.row}>
+      <View >
         <Text style={styles.label}>Outbal: <Text style={[styles.value, { color: "#e26660" }]}>{item.outbal}</Text></Text>
-        <Text style={[styles.label, {marginLeft:16}]}>Amount: <Text style={[styles.value, { color: "#3aa672" }]}>{item.amount}</Text></Text>
+        <Text style={[styles.label]}>Amount: <Text style={[styles.value, { color: "#3aa672" }]}>{item.amount}</Text></Text>
       </View>
     </TouchableOpacity>
   );
@@ -143,7 +143,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontSize: 16,
     color: "#1c4064",
-    borderWidth: 0,
+    borderWidth: 1,
+    borderColor: "#d0e0e0",
     fontWeight: "500",
     shadowColor: "#bae4ec",
     shadowOffset: { width: 0, height: 2 },
@@ -152,7 +153,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   card: {
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#fff",
     borderRadius: 18,
     padding: 18,
     marginBottom: 18,
@@ -169,15 +170,15 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#184977",
     flex: 1,
     flexWrap: "wrap",
   },
   code: {
-    fontSize: 15,
-    color: "#2072a1",
-    fontWeight: "600",
+    fontSize: 14,
+    color: "#000",
+    fontWeight: "400",
     marginLeft: 8,
     alignSelf: "center",
   },
@@ -190,7 +191,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     color: "#249",
-    fontWeight: "600",
+    fontWeight: "400",
     marginTop: 4,
   },
   value: {

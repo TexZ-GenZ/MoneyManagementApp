@@ -65,7 +65,7 @@ export default function CompanyBillsList() {
 
 
             <Text style={styles.label}>Amount: <Text style={[styles.value, { color: "black" }]}>{item.amount}</Text></Text>
-            <Text style={[styles.label]}>Paid: <Text style={[styles.value, { color: "#189A7D" }]}>{item.amount_paid}</Text></Text>
+            <Text style={[styles.label]}>Paid: <Text style={[styles.value, { color: "#189A7D", fontWeight:'500' }]}>{item.amount_paid}</Text></Text>
 
         </TouchableOpacity>
     );
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     },
     amount: {
         color: "#37ad8f",
-        fontWeight: "700"
+        fontWeight: "500"
     },
     outbal: {
         color: "#db5151",
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     },
     value: {
         fontSize: 15,
-        fontWeight: "500"
+        fontWeight: "400"
     },
     title: {
         fontSize: 16,
@@ -181,13 +181,13 @@ const styles = StyleSheet.create({
         elevation: 2
     },
     billNumber: {
-        fontSize: 16,
+        fontSize: 15,
         color: "#123651",
         fontWeight: "700",
     },
     status: {
-        fontSize: 13,
-        fontWeight: "700",
+        fontSize: 11,
+        fontWeight: "600",
         borderRadius: 8,
         overflow: "hidden",
         paddingHorizontal: 10,

@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView } fr
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import GridBackground from '../(others)/GridBGComponent';
 
 const { width } = Dimensions.get('window');
 
@@ -18,12 +19,14 @@ export default function AccountantDashboard() {
   ];
   const router = useRouter()
   return (
+    <>
     <LinearGradient
       colors={['#f7cce7', '#ffffff']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.gradient}
     >
+      <GridBackground />
       <SafeAreaView style={styles.container}>
         {/* Top Section */}
         <View style={styles.topBar}>
@@ -37,7 +40,7 @@ export default function AccountantDashboard() {
             {buttons.map((btn, index) => (
               <TouchableOpacity key={index} style={styles.iconWrapper} onPress={btn.action}>
                 <Ionicons name={btn.icon} size={32} color="#333" />
-                <Text style={[styles.label, index === 0 && styles.bold]}>
+                <Text style={[styles.label]}>
                   {btn.label}
                 </Text>
               </TouchableOpacity>
@@ -46,6 +49,7 @@ export default function AccountantDashboard() {
         </View>
       </SafeAreaView>
     </LinearGradient>
+  </>
   );
 }
 
@@ -57,9 +61,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 30,
+    alignItems:"center"
   },
   topBar: {
     marginBottom: 20,
+    marginTop:20
   },
   heading: {
     fontSize: 22,
@@ -92,7 +98,7 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+   //marginBottom: 24,
   },
   label: {
     fontSize: 13,

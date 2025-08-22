@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView } fr
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import GridBackground from '../(others)/GridBGComponent';
 
 const { width } = Dimensions.get('window');
 
@@ -20,6 +21,7 @@ export default function ExecutiveDashboard() {
       end={{ x: 0, y: 1 }}
       style={styles.gradient}
     >
+      <GridBackground />
       <SafeAreaView style={styles.container}>
         {/* Top Section */}
         <View style={styles.topBar}>
@@ -33,7 +35,7 @@ export default function ExecutiveDashboard() {
             {buttons.map((btn, index) => (
               <TouchableOpacity key={index} style={styles.iconWrapper} onPress={btn.action}>
                 <Ionicons name={btn.icon} size={32} color="#333" />
-                <Text style={[styles.label, index === 0 && styles.bold]}>
+                <Text style={[styles.label]}>
                   {btn.label}
                 </Text>
               </TouchableOpacity>
@@ -53,6 +55,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 30,
+    alignItems:"center",
+    marginTop:20
   },
   topBar: {
     marginBottom: 20,
@@ -77,6 +81,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 3 },
     shadowRadius: 8,
+    width:"100%",
+    
   },
   grid: {
     flexDirection: 'row',
@@ -88,7 +94,9 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    //marginBottom: 24,
+    justifyContent:"center",
+    alignItems:"center"
   },
   label: {
     fontSize: 13,
