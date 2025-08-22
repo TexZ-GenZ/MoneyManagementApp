@@ -3,46 +3,18 @@ import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, Touchab
 import { useRouter } from "expo-router";
 
 // Demo fetch -- replace with real API call
-const fetchCompanies = async () => [
-  {
-    code: "XYZ-012",
-    name: "ABC Industries",
-    area: "Alice",
-    location: "Bangalore",
-    credit_date: "2025-08-21",
-    promise_date: "2025-09-10",
-    outbal: "13,000",
-    amount: "20,000"
-  },
-  {
-    code: "XY-112",
-    name: "Hello Comp",
-    area: "Bob",
-    location: "Mumbai",
-    credit_date: "2025-08-11",
-    promise_date: "2025-09-01",
-    outbal: "0",
-    amount: "99,000"
-  },
-  {
-    code: "MNO-001",
-    name: "MNO Company",
-    area: "Charlie",
-    location: "Gurgaon",
-    credit_date: "2025-08-16",
-    promise_date: "2025-08-30",
-    outbal: "12,950",
-    amount: "18,700"
-  }
-];
-
+// const fetchCompanies = async()=>{
+//   const res = await 
+//   console.log(res.json())
+//   return res.json()
+// } 
 export default function CompanyListScreen() {
   const [companies, setCompanies] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const router  = useRouter()
+  const router = useRouter()
 
   useEffect(() => {
     loadCompanies();
@@ -51,9 +23,22 @@ export default function CompanyListScreen() {
   const loadCompanies = async () => {
     setLoading(true);
     try {
-      const data = await fetchCompanies();
-      setCompanies(data);
-      setFiltered(data);
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/companies`, {
+        method: "GET",
+        headers: { "content-type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const data = await response.json();
+      const dataArr = data.items
+
+      console.log(dataArr);
+
+      setCompanies(dataArr);
+      setFiltered(dataArr);
     } catch (e) {
       setCompanies([]);
       setFiltered([]);
@@ -78,9 +63,9 @@ export default function CompanyListScreen() {
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.5} onPress={()=>router.push({
-      pathname:"../(others)/BiilsScreen",
-      params:{name:item.name, code:item.code, amount:item.amount, outbal:item.outbal}
+    <TouchableOpacity style={styles.card} activeOpacity={0.5} onPress={() => router.push({
+      pathname: "../(others)/BiilsScreen",
+      params: { name: item.name, code: item.code, amount: item.amount, outbal: item.outbal }
     })}>
       <View style={styles.cardHeader}>
         <Text style={styles.name}>{item.name}</Text>
@@ -89,8 +74,8 @@ export default function CompanyListScreen() {
       <Text style={styles.label}>Executive: <Text style={styles.value}>{item.area}</Text></Text>
       {/* <Text style={styles.label}>Location: <Text style={styles.value}>{item.location}</Text></Text> */}
       {/* <View style={styles.row}> */}
-        <Text style={styles.label}>Credit Date: <Text style={styles.value}>{item.credit_date}</Text></Text>
-        <Text style={[styles.label, {marginLeft:0}]}>Promise Date: <Text style={styles.value}>{item.promise_date}</Text></Text>
+      <Text style={styles.label}>Credit Date: <Text style={styles.value}>{item.credit_date}</Text></Text>
+      <Text style={[styles.label, { marginLeft: 0 }]}>Promise Date: <Text style={styles.value}>{item.promise_date}</Text></Text>
       {/* </View> */}
       <View >
         <Text style={styles.label}>Outbal: <Text style={[styles.value, { color: "#e26660" }]}>{item.outbal}</Text></Text>
@@ -110,7 +95,7 @@ export default function CompanyListScreen() {
         placeholderTextColor="#abc"
       />
       {loading ? (
-        <ActivityIndicator size="large" color="#1f75fe" style={{marginTop:30}} />
+        <ActivityIndicator size="large" color="#1f75fe" style={{ marginTop: 30 }} />
       ) : (
         <FlatList
           data={filtered}
