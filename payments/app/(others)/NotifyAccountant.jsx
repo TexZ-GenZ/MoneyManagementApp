@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, ScrollView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, ScrollView, Modal } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 
 // Mock executiveId to name (you could fetch this from your real data)
@@ -45,6 +45,11 @@ export default function AccountantApprovalScreen() {
   const [approvalItems, setApprovalItems] = useState(mockApprovalItems);
   const [expandedIdx, setExpandedIdx] = useState(null);
 
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalAction, setModalAction] = useState(null); // "approve" or "reject"
+  const [modalItem, setModalItem] = useState(null);
+  const [modalComment, setModalComment] = useState("");
+
   // Search filter
   const filteredItems = approvalItems.filter(item =>
     item.company_code.toLowerCase().includes(search.toLowerCase()) ||
@@ -57,14 +62,24 @@ export default function AccountantApprovalScreen() {
     setApprovalItems([...mockApprovalItems]);
   };
 
-  const handleApprove = (id) => {
-    alert(`Payment ID ${id} approved!`);
-    // API call goes here
+  const handleApprove = (item) => {
+    setModalAction("approve");
+    setModalItem(item);
+    setModalComment("");
+    setModalVisible(true);
   };
 
-  const handleReject = (id) => {
-    alert(`Payment ID ${id} rejected!`);
-    // API call goes here
+  const handleReject = (item) => {
+    setModalAction("reject");
+    setModalItem(item);
+    setModalComment("");
+    setModalVisible(true);
+  };
+
+  const handleModalSubmit = () => {
+    setModalVisible(false);
+    alert(`${modalAction === "approve" ? "Approved" : "Rejected"} payment ID ${modalItem.id} with comment: ${modalComment}`);
+    // Integrate your API logic here
   };
 
   const renderItem = ({ item, index }) => (
@@ -74,7 +89,7 @@ export default function AccountantApprovalScreen() {
         <Text style={styles.billno}>Bill: {item.bill_number ? item.bill_number : "#" + item.id}</Text>
         <Text style={styles.date}>{(new Date(item.collected_at)).toLocaleDateString()}</Text>
       </View>
-      <Text style={styles.executive}>Executive: <Text style={{fontWeight:'bold'}}>{executiveNames[item.executive_id] || item.executive_id}</Text></Text>
+      <Text style={styles.executive}>Executive: <Text style={{ fontWeight: 'bold' }}>{executiveNames[item.executive_id] || item.executive_id}</Text></Text>
       <Text style={styles.info}>Method: <Text style={styles.infoValue}>{item.method}</Text></Text>
       <Text style={styles.info}>Next Promise Date: <Text style={styles.infoValue}>{item.next_promise_date}</Text></Text>
       <TouchableOpacity
@@ -92,15 +107,18 @@ export default function AccountantApprovalScreen() {
         )}
       </TouchableOpacity>
       <View style={styles.amountRow}>
-        <Text style={styles.amount}>{item.amount_collected}</Text>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => handleApprove(item.id)}>
-          <Ionicons name="checkmark-circle" size={32} color="#189A7D" />
+        <Text style={styles.amount}>₹{item.amount_collected}</Text>
+
+        <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(item)}>
+          <Ionicons name="checkmark" size={18} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => handleReject(item.id)}>
-          <Ionicons name="close-circle" size={32} color="#e25656" />
+        <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item)}>
+          <Ionicons name="close" size={18} color="#fff" />
         </TouchableOpacity>
+
       </View>
     </View>
+
   );
 
   return (
@@ -125,6 +143,34 @@ export default function AccountantApprovalScreen() {
         ListEmptyComponent={<Text style={styles.empty}>No approvals found.</Text>}
         contentContainerStyle={{ paddingBottom: 30 }}
       />
+
+      {/* Modal for approve/reject with comment box */}
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>
+              {modalAction === "approve" ? "Approve Payment" : "Reject Payment"}
+            </Text>
+            <Text style={styles.modalSub}>
+              {modalItem ? `Company: ${modalItem.company_code}, Amount: ₹${modalItem.amount_collected}` : ""}
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={modalComment}
+              onChangeText={setModalComment}
+              placeholder="Add a comment..."
+              multiline
+            />
+            <TouchableOpacity style={styles.submitBtn} onPress={handleModalSubmit}>
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>Submit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setModalVisible(false)}>
+              <Ionicons name="close-circle" size={28} color="#e25757" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -249,5 +295,74 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     marginTop: 35
-  }
+  },
+  approveBtn: {
+    width: 64,
+    height: 32,
+    backgroundColor: "#1aa37a",
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 2,
+  },
+  rejectBtn: {
+    width: 64,
+    height: 32,
+    backgroundColor: "#e25656",
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 2,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(10,20,40,0.18)",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  modalBox: {
+    width: "90%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 22,
+    alignItems: "center",
+    position: "relative"
+  },
+  modalTitle: {
+    fontWeight: "800",
+    fontSize: 17,
+    color: "#184977",
+    marginBottom: 4
+  },
+  modalSub: {
+    fontSize: 15,
+    color: "#215087",
+    marginBottom: 12
+  },
+  modalInput: {
+    borderColor: "#b2d9e8",
+    borderWidth: 1,
+    borderRadius: 12,
+    backgroundColor: "#f8fafd",
+    padding: 14,
+    fontSize: 16,
+    color: "#184977",
+    width: "100%",
+    height: 90,
+    marginBottom: 18
+  },
+  submitBtn: {
+    backgroundColor: "#1f75fe",
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 35,
+    alignItems: "center",
+    marginBottom: 6
+  },
+  closeBtn: {
+    position: "absolute",
+    top: 12,
+    right: 12
+  },
 });
