@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
-import { useAppSelector, useAppDispatch } from '../../src/store/hooks';
+
 import { initializeAuth, logoutUser } from '../../src/store/authSlice';
+import { useAppDispatch, useAppSelector } from '../../src/store/hooks';
 import { Platform, Alert } from 'react-native';
 
 export default function TabLayout() {
