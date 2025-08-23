@@ -34,9 +34,39 @@ export default function AccountantDashboard() {
           },
         });
         const data = await response.json();
-        
+
         if (response.ok) {
-          setRecentPayments(data.items || []);
+          const items = data.items || [];
+
+          // Collect unique company codes and fetch their names in parallel
+          const uniqueCodes = Array.from(new Set(items.map(i => i.company_code).filter(Boolean)));
+          const companyMap = {};
+
+          await Promise.all(uniqueCodes.map(async (code) => {
+            try {
+              const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies/${code}`, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token.access_token}`,
+                },
+              });
+              if (!res.ok) return;
+              const cd = await res.json();
+              // Defensive: backend may return different field names
+              companyMap[code] = cd?.account_n || cd?.companyName || cd?.name || code;
+            } catch (err) {
+              // ignore per-company errors
+            }
+          }));
+
+          // Attach companyName to each payment
+          const withNames = items.map(it => ({
+            ...it,
+            companyName: companyMap[it.company_code] || it.company_code || 'Unknown Company'
+          }));
+
+          setRecentPayments(withNames);
         } else {
           console.error("Error fetching payments:", data);
         }
@@ -46,6 +76,26 @@ export default function AccountantDashboard() {
     };
     fetchPayments();
   }, []);
+
+  const fetchCompanyName = async (companyCode) => {
+    try {
+      const token = await StorageService.getToken();
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies/${companyCode}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.access_token}`,
+        },
+      });
+
+      if (!res.ok) throw new Error("Failed to fetch company");
+      const data = await res.json();
+      return data?.companyName || "Unknown Company";  // adjust based on API response
+    } catch (err) {
+      console.error("Error fetching company:", err);
+      return "Unknown Company";
+    }
+  };
 
   return (
     <LinearGradient
@@ -82,21 +132,21 @@ export default function AccountantDashboard() {
         <View style={{ marginTop: 24 }}>
           <Text style={styles.recentHeading}>Recent</Text>
           <View style={styles.cardContainer}>
-          <FlatList
-            data={recentPayments}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item }) => (
-              <View style={styles.recentItem}>
-                <Ionicons name="cash-outline" size={22} color="#c8f14c" />
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.recentTitle}>{item.company_code || "Unknown Company"}</Text>
-                  <Text style={styles.recentSubtitle}>
-                    {item.amount_collected ? `₹${item.amount_collected}` : "No Amount"} • {new Date(item.collected_at).toLocaleDateString('en-IN') || "Pending"}
-                  </Text>
+            <FlatList
+              data={recentPayments}
+              keyExtractor={(item, index) => index.toString()}
+              renderItem={({ item }) => (
+                <View style={styles.recentItem}>
+                  <Ionicons name="cash-outline" size={22} color="#c8f14c" />
+                  <View style={{ marginLeft: 12 }}>
+                    <Text style={styles.recentTitle}>{item.companyName || item.company_code || "Unknown Company"}</Text>
+                    <Text style={styles.recentSubtitle}>
+                      {item.amount_collected ? `₹${item.amount_collected}` : "No Amount"} • {new Date(item.collected_at).toLocaleDateString('en-IN') || "Pending"}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            )}
-          />
+              )}
+            />
           </View>
         </View>
       </SafeAreaView>
