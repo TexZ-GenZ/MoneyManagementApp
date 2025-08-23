@@ -26,7 +26,7 @@ const DeleteUserScreen = () => {
         };
 
         const res = await fetch(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`,
+          `${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`,
           {
             method: "GET",
             headers: header,
@@ -95,7 +95,7 @@ const DeleteUserScreen = () => {
       };
 
       const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/users/${userDetails.id}`,
+        `${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${userDetails.id}`,
         {
           method: "DELETE",
           headers: header,
@@ -132,7 +132,7 @@ const DeleteUserScreen = () => {
       };
 
       const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/users/${userDetails.id}/hard-delete`,
+        `${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${userDetails.id}/hard-delete`,
         {
           method: "DELETE",
           headers: header,

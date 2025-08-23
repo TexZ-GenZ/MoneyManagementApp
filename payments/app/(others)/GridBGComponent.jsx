@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
   },
   gridLine: {
     position: 'absolute',
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.17)', // light color for grid lines
   },
   verticalLine: {
     width: LINE_WIDTH,
