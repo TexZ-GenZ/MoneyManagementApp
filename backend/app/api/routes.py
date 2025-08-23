@@ -84,6 +84,18 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     return Token(access_token=token)
 
 
+@router.get("/auth/me", response_model=UserOut)
+def auth_me(user: User = Depends(get_current_user)):
+    """Return the currently authenticated user's basic profile derived from JWT."""
+    return UserOut(
+        id=user.id,
+        username=user.username,
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        area=user.area,
+        mobile=user.mobile,
+    )
+
+
 @router.get("/health")
 def health():
     return {"status": "ok"}
@@ -581,7 +593,8 @@ def admin_update_password(
 @router.get(
     "/admin/executives",
     response_model=List[UserOut],
-    dependencies=[Depends(require_roles("admin"))],
+    # Allow accountants to view executive list for payment review context (was admin-only)
+    dependencies=[Depends(require_roles("admin", "accountant"))],
 )
 def list_executives(db: Session = Depends(get_db)):
     execs = db.query(User).filter(User.role == Role.executive).all()

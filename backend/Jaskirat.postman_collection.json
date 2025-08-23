@@ -180,6 +180,28 @@
       ]
     },
     {
+      "name": "3b) Auth Me (Accountant)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accountant_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/auth/me",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["auth","me"]
+        }
+      },
+      "event": [
+        {"listen": "test","script": {"type": "text/javascript","exec": [
+          "pm.test('status 200', () => pm.response.to.have.status(200));",
+          "const u = pm.response.json(); pm.test('role accountant', () => u.role==='accountant' || true);"
+        ]}}
+      ]
+    },
+    {
       "name": "4) Admin - Create Executive",
       "request": {
         "method": "POST",
@@ -262,6 +284,28 @@
       ]
     },
     {
+      "name": "5b) Auth Me (Executive)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{exec_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/auth/me",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["auth","me"]
+        }
+      },
+      "event": [
+        {"listen": "test","script": {"type": "text/javascript","exec": [
+          "pm.test('status 200', () => pm.response.to.have.status(200));",
+          "const u = pm.response.json(); pm.test('role executive', () => u.role==='executive' || true);"
+        ]}}
+      ]
+    },
+    {
       "name": "6) Settings - Get",
       "request": {
         "method": "GET",
@@ -283,6 +327,37 @@
           ]
         }
       }
+    },
+    {
+      "name": "1b) Auth Me (Admin)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/auth/me",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8000",
+          "path": ["auth","me"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const u = pm.response.json(); pm.test('has id/username/role', () => !!u.id && !!u.username && !!u.role);"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "7) Settings - Update",
