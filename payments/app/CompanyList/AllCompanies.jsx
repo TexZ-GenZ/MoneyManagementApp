@@ -23,7 +23,7 @@ export default function CompanyListScreen() {
   const loadCompanies = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/companies`, {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies`, {
         method: "GET",
         headers: { "content-type": "application/json" },
       });
@@ -71,15 +71,15 @@ export default function CompanyListScreen() {
         <Text style={styles.name}>{item.name}</Text>
         <Text style={styles.code}>{item.code}</Text>
       </View>
-      <Text style={styles.label}>Executive: <Text style={styles.value}>{item.area}</Text></Text>
-      {/* <Text style={styles.label}>Location: <Text style={styles.value}>{item.location}</Text></Text> */}
-      {/* <View style={styles.row}> */}
-      <Text style={styles.label}>Credit Date: <Text style={styles.value}>{item.credit_date}</Text></Text>
-      <Text style={[styles.label, { marginLeft: 0 }]}>Promise Date: <Text style={styles.value}>{item.promise_date}</Text></Text>
+       <Text style={styles.value}>{item.area}</Text>
+
+      <Text style={styles.label}>Credit: <Text style={styles.value}>{item.credit_date}</Text></Text>
+
+      <Text style={[styles.label, { marginLeft: 0 }]}>Promise : <Text style={styles.value}>{item.promise_date}</Text></Text>
       {/* </View> */}
       <View >
         <Text style={styles.label}>Outbal: <Text style={[styles.value, { color: "#e26660" }]}>{item.outbal}</Text></Text>
-        <Text style={[styles.label]}>Amount: <Text style={[styles.value, { color: "#3aa672" }]}>{item.amount}</Text></Text>
+        <Text style={[styles.label]}>Amount: <Text style={[styles.value]}>{item.amount}</Text></Text>
       </View>
     </TouchableOpacity>
   );
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 18,
     fontWeight: "500",
-    color: "#184977",
+    color: "#000",
     flex: 1,
     flexWrap: "wrap",
   },
@@ -175,13 +175,13 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: "#249",
+    color: "rgba(0,0,0,0.6)",
     fontWeight: "400",
     marginTop: 4,
   },
   value: {
-    fontWeight: "600",
-    color: "#325672",
+    fontWeight: "400",
+    color: "#000",
     fontSize: 14,
   },
   empty: {
