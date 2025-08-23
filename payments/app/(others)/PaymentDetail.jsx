@@ -232,7 +232,7 @@ export default function PaymentDetails() {
                 <TouchableOpacity 
                     style={styles.button} 
                     activeOpacity={0.7} 
-                    onPress={() => router.push({
+                    onPress={() => {router.push({
                         pathname: "./PaymentScreen",
                         params: { 
                             company_code: code,
@@ -240,7 +240,10 @@ export default function PaymentDetails() {
                             bill_number: bill_number,
                             bill_amount: amount
                         }
-                    })}
+                    })
+                    console.log(code, bill_id, bill_number)}
+
+                }
                 >
                     <Text style={styles.buttonText}>Add Payment</Text>
                 </TouchableOpacity>

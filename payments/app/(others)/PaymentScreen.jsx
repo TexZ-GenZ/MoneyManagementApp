@@ -18,6 +18,15 @@ import { StorageService } from "../../src/services/storageService";
 const API_BASE_URL = 'https://moneymanagementapp-production.up.railway.app';
 const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer"];
 
+// Simple UUID v4 generator
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 export default function CollectPaymentScreen() {
   const { company_code, bill_id, bill_number, bill_amount } = useLocalSearchParams();
   const router = useRouter();
@@ -31,9 +40,9 @@ export default function CollectPaymentScreen() {
   const [comments, setComments] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Bill allocations with auto-incrementing bill_id
+  // Bill allocations - start with one empty allocation
   const [billAllocations, setBillAllocations] = useState([
-    { "1" : bill_amount}
+    { bill_id: 1, amount: "" }
   ]);
   const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]);
 
@@ -82,23 +91,24 @@ export default function CollectPaymentScreen() {
 
   useEffect(() => {
     fetchLocation();
-    
-    // If bill_amount is provided, pre-fill the first allocation amount
-    if (bill_amount && billAllocations.length === 1) {
-      setBillAllocations([{ bill_id: bill_id ? bill_id.toString() : "1", amount: bill_amount.toString() }]);
-      setAmountCollected(bill_amount.toString());
-    }
   }, []);
 
   const addAnotherPayment = () => {
-    const nextBillId = Math.max(...billAllocations.map(b => parseInt(b.bill_id) || 0)) + 1;
-    setBillAllocations([...billAllocations, { bill_id: nextBillId.toString(), amount: "" }]);
+    const nextBillId = Math.max(...billAllocations.map(b => b.bill_id)) + 1;
+    setBillAllocations([...billAllocations, { bill_id: nextBillId, amount: "" }]);
   };
 
   const removeBillAllocation = (index) => {
     if (billAllocations.length > 1) {
       const updated = billAllocations.filter((_, idx) => idx !== index);
       setBillAllocations(updated);
+      
+      // Recalculate total amount
+      const totalAmount = updated.reduce((sum, alloc) => {
+        const amount = parseFloat(alloc.amount) || 0;
+        return sum + amount;
+      }, 0);
+      setAmountCollected(totalAmount > 0 ? totalAmount.toString() : "");
     }
   };
 
@@ -109,13 +119,13 @@ export default function CollectPaymentScreen() {
     });
     setBillAllocations(updated);
 
-    // Auto-calculate total amount collected
+    // Auto-calculate total amount collected when amount changes
     if (field === 'amount') {
       const totalAmount = updated.reduce((sum, alloc) => {
         const amount = parseFloat(alloc.amount) || 0;
         return sum + amount;
       }, 0);
-      setAmountCollected(totalAmount.toString());
+      setAmountCollected(totalAmount > 0 ? totalAmount.toString() : "");
     }
   };
 
@@ -126,18 +136,14 @@ export default function CollectPaymentScreen() {
     }
 
     for (const [index, alloc] of billAllocations.entries()) {
-      if (!alloc.bill_id.trim()) {
-        Alert.alert("Invalid Bill Allocation", `Please enter a bill ID for allocation ${index + 1}.`);
-        return false;
-      }
-      if (!alloc.amount.trim() || isNaN(Number(alloc.amount)) || Number(alloc.amount) <= 0) {
-        Alert.alert("Invalid Bill Allocation", `Please enter a valid amount for allocation ${index + 1}.`);
+      if (!alloc.amount.toString().trim() || isNaN(Number(alloc.amount)) || Number(alloc.amount) <= 0) {
+        Alert.alert("Invalid Bill Allocation", `Please enter a valid amount for payment ${index + 1}.`);
         return false;
       }
     }
 
     // Check if total allocation amounts match collected amount
-    const totalAllocated = billAllocations.reduce((sum, alloc) => sum + Number(alloc.amount), 0);
+    const totalAllocated = billAllocations.reduce((sum, alloc) => sum + Number(alloc.amount || 0), 0);
     const collectedAmount = Number(amountCollected);
     
     if (Math.abs(totalAllocated - collectedAmount) > 0.01) { // Allow small floating point differences
@@ -169,7 +175,9 @@ export default function CollectPaymentScreen() {
     setSubmitting(true);
 
     try {
-      const token = StorageService.getToken();
+      const token =  await StorageService.getToken();
+      console.log(token.access_token)
+      const idempotencyKey = generateUUID();
       
       const payload = {
         company_code,
@@ -180,16 +188,16 @@ export default function CollectPaymentScreen() {
         exec_location_verified: true,
         next_promise_date: nextPromiseDate ? nextPromiseDate.toISOString().split("T")[0] : undefined,
         bill_allocations: billAllocations.map(b => ({
-          bill_id: Number(b.bill_id),
+          bill_id: b.bill_id,
           amount: Number(b.amount)
         }))
       };
 
       // Add location if available
-      if (location) {
-        payload.exec_lat = location.latitude;
-        payload.exec_lng = location.longitude;
-      }
+      // if (location) {
+      //   payload.exec_lat = location.latitude;
+      //   payload.exec_lng = location.longitude;
+      // }
 
       console.log("Submitting payment:", payload);
 
@@ -197,13 +205,15 @@ export default function CollectPaymentScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token.access_token}`,
+          'Idempotency-Key': idempotencyKey,
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.log(errorData)
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
@@ -217,7 +227,6 @@ export default function CollectPaymentScreen() {
           { 
             text: "OK", 
             onPress: () => {
-              // Navigate back with success flag
               router.back();
             }
           }
@@ -322,23 +331,18 @@ export default function CollectPaymentScreen() {
       />
 
       {/* Bill Allocations */}
-      <Text style={[styles.label, { marginTop: 16 }]}>Bill Allocations</Text>
+      <Text style={[styles.label, { marginTop: 16 }]}>Payment Allocations</Text>
       {billAllocations.map((alloc, idx) => (
         <View key={idx} style={styles.billAllocContainer}>
           <View style={styles.billAllocRow}>
-            <TextInput
-              style={[styles.input, styles.billAllocInput]}
-              placeholder="Bill ID"
-              keyboardType="numeric"
-              value={alloc.bill_id}
-              onChangeText={(val) => updateBillAllocation(idx, "bill_id", val)}
-              editable={!submitting}
-            />
+            <View style={styles.billIdContainer}>
+              <Text style={styles.billIdText}>Payment #{alloc.bill_id}</Text>
+            </View>
             <TextInput
               style={[styles.input, styles.billAllocInput]}
               placeholder="Amount (₹)"
               keyboardType="numeric"
-              value={alloc.amount}
+              value={alloc.amount.toString()}
               onChangeText={(val) => updateBillAllocation(idx, "amount", val)}
               editable={!submitting}
             />
@@ -360,7 +364,7 @@ export default function CollectPaymentScreen() {
         onPress={addAnotherPayment}
         disabled={submitting}
       >
-        <Text style={styles.addButtonText}>+ Add Another Bill</Text>
+        <Text style={styles.addButtonText}>+ Add Another Payment</Text>
       </TouchableOpacity>
 
       {/* Comments */}
@@ -469,6 +473,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
+  },
+  billIdContainer: {
+    backgroundColor: "#184977",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginRight: 8,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  billIdText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 12,
   },
   billAllocInput: {
     flex: 1,
