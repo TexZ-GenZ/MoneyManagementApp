@@ -51,7 +51,7 @@ export default function TabLayout() {
   }
 
   // Get user role for conditional tab rendering
-  const userRole = user?.role || 'executive';
+  const userRole = user?.role || 'accountant';
 
   return (
     <Tabs

@@ -10,8 +10,8 @@ const { width } = Dimensions.get('window');
 export default function AccountantDashboard() {
   const buttons = [
     { label: 'Approve', icon: 'alert-circle-outline', action: () => { router.push('../(others)/NotifyAccountant') } },
-    { label: 'Companies', icon: 'business-outline', action: () => { router.push('../CompanyList/ExecutiveCompanies') } },
-    { label: 'Executives', icon: 'person-outline', action: () => { router.push('../CompanyList/ExecutiveCompanies') } },
+    { label: 'Companies', icon: 'business-outline', action: () => { router.push('../CompanyList/AllCompanies') } },
+    { label: 'Executives', icon: 'person-outline', action: () => { router.push('../(others)/ExecutiveList') } },
     { label: 'Upload', icon: 'add-circle-outline', action: () => { router.push('../(others)/Upload') } }
 
 
