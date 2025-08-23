@@ -8,9 +8,12 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   FlatList,
+  SafeAreaView,
 } from "react-native";
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from "@expo/vector-icons";
 import { StorageService } from "@/src/services/storageService";
+import GridBackground from '../(others)/GridBGComponent';
 
 export default function EditUserFindScreen() {
   const router = useRouter();
@@ -28,7 +31,7 @@ export default function EditUserFindScreen() {
         };
 
         const res = await fetch(
-          `${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`,
+          `${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`,
           {
             method: "GET",
             headers: header,
@@ -87,115 +90,226 @@ export default function EditUserFindScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={100}
+    <LinearGradient
+      colors={['#000', '#000']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.gradient}
     >
-      <Text style={styles.title}>Find User</Text>
+      <GridBackground />
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          style={styles.keyboardView}
+          behavior="padding"
+          keyboardVerticalOffset={100}
+        >
+          {/* Header */}
+          <View style={styles.topBar}>
+            <Text style={styles.title}>Find User 🔍</Text>
+            <Text style={styles.subtitle}>Search by username or phone number</Text>
+          </View>
 
-      <View style={styles.inputWrapper}>
-        <Ionicons
-          name="search-outline"
-          size={20}
-          color="#666"
-          style={{ marginRight: 10 }}
-        />
-        <TextInput
-          placeholder="Enter username or phone"
-          value={input}
-          onChangeText={setInput}
-          style={styles.input}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-        />
-      </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity style={styles.button} onPress={handleSearch}>
-        <Text style={styles.buttonText}>Search</Text>
-      </TouchableOpacity>
-
-      <FlatList
-        data={filteredUsers}
-        keyExtractor={(item) => item.id.toString()}
-        style={{ marginTop: 20 }}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            onPress={() => handleUserPress(item)}
-            style={styles.userItem}
-          >
-            <View style={styles.userRow}>
-              <Text style={styles.userText}>
-                {item.username} - {item.mobile}
-              </Text>
-              <Ionicons name="pencil-outline" size={22} color="#4F46E5" />
+          {/* Search Card */}
+          <View style={styles.cardContainer}>
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="search-outline"
+                size={20}
+                color="#c8f14c"
+                style={styles.searchIcon}
+              />
+              <TextInput
+                placeholder="Enter username or phone"
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                value={input}
+                onChangeText={setInput}
+                style={styles.input}
+                onSubmitEditing={handleSearch}
+                returnKeyType="search"
+              />
             </View>
-          </TouchableOpacity>
-        )}
-      />
-    </KeyboardAvoidingView>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+              <Ionicons name="search" size={16} color="#000" style={{ marginRight: 6 }} />
+              <Text style={styles.searchButtonText}>Search</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Results */}
+          {filteredUsers.length > 0 && (
+            <View style={styles.resultsSection}>
+              <Text style={styles.resultsHeading}>Users Found</Text>
+              <View style={styles.cardContainer}>
+                <FlatList
+                  data={filteredUsers}
+                  keyExtractor={(item) => item.id.toString()}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      onPress={() => handleUserPress(item)}
+                      style={styles.userItem}
+                    >
+                      <View style={styles.userInfo}>
+                        <View style={styles.userIconWrapper}>
+                          <Ionicons name="person" size={20} color="#c8f14c" />
+                        </View>
+                        <View style={styles.userDetails}>
+                          <Text style={styles.userName}>{item.username}</Text>
+                          <Text style={styles.userPhone}>{item.mobile}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.editIconWrapper}>
+                        <Text style={styles.arrow}>{'>'}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            </View>
+          )}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
+    paddingHorizontal: 20,
+    paddingTop: 30,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  topBar: {
+    marginBottom: 20,
+    marginTop: 20,
   },
   title: {
     fontSize: 22,
-    fontWeight: "600",
+    fontWeight: '700',
+    color: '#f9f9f9',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 4,
+  },
+  cardContainer: {
+    backgroundColor: '#000',
+    borderRadius: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
     marginBottom: 20,
-    textAlign: "center",
   },
   inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#fff",
-    marginBottom: 15,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    marginBottom: 16,
+  },
+  searchIcon: {
+    marginRight: 12,
   },
   input: {
     flex: 1,
     paddingVertical: 12,
     fontSize: 16,
+    color: '#fff',
   },
-  button: {
-    backgroundColor: "#007BFF",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 10,
+  searchButton: {
+    backgroundColor: '#c8f14c',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 8,
   },
-  buttonText: {
-    color: "#fff",
+  searchButtonText: {
+    color: '#000',
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   error: {
-    color: "red",
+    color: '#ff6b6b',
     marginBottom: 10,
-    textAlign: "center",
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  resultsSection: {
+    flex: 1,
+  },
+  resultsHeading: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 16,
+    marginBottom: 10,
+    fontFamily: 'Inter',
   },
   userItem: {
-    paddingVertical: 12,
-    borderBottomColor: "#ddd",
-    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  userRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
-  userText: {
+  userIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(200, 241, 76, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  userDetails: {
+    flex: 1,
+  },
+  userName: {
+    color: '#fff',
     fontSize: 16,
-    color: "#111",
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  userPhone: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+  },
+  editIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(200, 241, 76, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrow: {
+    color: '#c8f14c',
+    fontSize: 18,
+    marginLeft: 8,
   },
 });

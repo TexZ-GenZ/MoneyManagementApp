@@ -1,7 +1,10 @@
-import { Text, StyleSheet, KeyboardAvoidingView, TextInput, TouchableOpacity, Alert } from "react-native";
+import { Text, StyleSheet, KeyboardAvoidingView, TextInput, TouchableOpacity, Alert, View, SafeAreaView } from "react-native";
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StorageService } from "@/src/services/storageService";
+import GridBackground from '../(others)/GridBGComponent';
 
 export default function EditUserScreen() {
   const router = useRouter();
@@ -97,83 +100,192 @@ export default function EditUserScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior="padding">
-      <Text style={styles.title}>Edit Profile</Text>
+    <LinearGradient
+      colors={['#000', '#000']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.gradient}
+    >
+      <GridBackground />
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">
+          {/* Header */}
+          <View style={styles.topBar}>
+            <Text style={styles.title}>Edit Profile ✏️</Text>
+            <Text style={styles.subtitle}>Update user information</Text>
+          </View>
 
-      <Text style={styles.label}>Username</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        style={styles.input}
-        placeholder="Full Name"
-        editable={!loading}
-      />
+          {/* Form Card */}
+          <View style={styles.cardContainer}>
+            {/* Username Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Username</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="person-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  style={styles.input}
+                  placeholder="Enter username"
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  editable={!loading}
+                />
+              </View>
+            </View>
 
-      <Text style={styles.label}>Phone</Text>
-      <TextInput
-        value={phone}
-        onChangeText={setPhone}
-        style={styles.input}
-        placeholder="Phone"
-        keyboardType="phone-pad"
-        editable={!loading}
-      />
+            {/* Phone Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Phone Number</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="call-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+                <TextInput
+                  value={phone}
+                  onChangeText={setPhone}
+                  style={styles.input}
+                  placeholder="Enter phone number"
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  keyboardType="phone-pad"
+                  editable={!loading}
+                />
+              </View>
+            </View>
 
-      <Text style={styles.label}>Password</Text>
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        editable={!loading}
-      />
+            {/* Password Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  style={styles.input}
+                  placeholder="Enter new password"
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  secureTextEntry
+                  editable={!loading}
+                />
+              </View>
+            </View>
+          </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleUpdate} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? "Updating..." : "Update"}</Text>
-      </TouchableOpacity>
-    </KeyboardAvoidingView>
+          {/* Update Button */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={[styles.updateButton, loading && styles.updateButtonDisabled]} 
+              onPress={handleUpdate} 
+              disabled={loading}
+            >
+              {loading ? (
+                <View style={styles.loadingContent}>
+                  <Text style={styles.updateButtonText}>Updating...</Text>
+                </View>
+              ) : (
+                <View style={styles.buttonContent}>
+                  <Ionicons name="checkmark" size={20} color="#000" style={{ marginRight: 8 }} />
+                  <Text style={styles.updateButtonText}>Update Profile</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
+    paddingHorizontal: 20,
+    paddingTop: 30,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  topBar: {
+    marginBottom: 20,
+    marginTop: 20,
   },
   title: {
     fontSize: 22,
-    fontWeight: "600",
+    fontWeight: '700',
+    color: '#f9f9f9',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 4,
+  },
+  cardContainer: {
+    backgroundColor: '#000',
+    borderRadius: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
     marginBottom: 20,
-    textAlign: "center",
+  },
+  fieldContainer: {
+    marginBottom: 20,
   },
   label: {
     fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 5,
-    marginLeft: 2,
-    color: "#333",
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
+    flex: 1,
+    paddingVertical: 12,
     fontSize: 16,
+    color: '#fff',
   },
-  button: {
-    backgroundColor: "#007BFF",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: "auto",
-    marginBottom: 50,
+  buttonContainer: {
+    marginTop: 'auto',
+    marginBottom: 30,
   },
-  buttonText: {
-    color: "#fff",
+  updateButton: {
+    backgroundColor: '#c8f14c',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateButtonDisabled: {
+    backgroundColor: 'rgba(200, 241, 76, 0.5)',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loadingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  updateButtonText: {
+    color: '#000',
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
   },
 });
