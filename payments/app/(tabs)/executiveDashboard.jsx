@@ -10,13 +10,13 @@ const { width } = Dimensions.get('window');
 export default function ExecutiveDashboard() {
   const buttons = [
     { label: 'To-Do', icon: 'alert-circle-outline' },
-    { label: 'Companies', icon: 'business-outline', action:()=>{router.push('../CompanyList/ExecutiveCompanies')} },
+    { label: 'Companies', icon: 'business-outline', action: () => { router.push('../CompanyList/ExecutiveCompanies') } },
 
   ];
   const router = useRouter()
   return (
     <LinearGradient
-      colors={['#f7cce7', '#ffffff']}
+      colors={['#000', '#000']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.gradient}
@@ -33,9 +33,11 @@ export default function ExecutiveDashboard() {
         <View style={styles.cardContainer}>
           <View style={styles.grid}>
             {buttons.map((btn, index) => (
-              <TouchableOpacity key={index} style={styles.iconWrapper} onPress={btn.action}>
-                <Ionicons name={btn.icon} size={32} color="#333" />
-                <Text style={[styles.label]}>
+              <TouchableOpacity key={index} style={[styles.iconWrapper, { marginTop: 18 }]} onPress={btn.action}>
+                <View style={{ padding: 12, borderRadius: 32, backgroundColor: '#c8f14c' }}>
+                  <Ionicons name={btn.icon} size={28} color="#000" />
+                </View>
+                <Text style={styles.label}>
                   {btn.label}
                 </Text>
               </TouchableOpacity>
@@ -55,8 +57,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 30,
-    alignItems:"center",
-    marginTop:20
+    alignItems: "center",
+    marginTop: 20
   },
   topBar: {
     marginBottom: 20,
@@ -64,7 +66,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#333',
+    color: '#fff',
   },
   subheading: {
     fontSize: 14,
@@ -72,7 +74,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   cardContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     borderRadius: 20,
     paddingVertical: 24,
     paddingHorizontal: 16,
@@ -81,8 +83,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 3 },
     shadowRadius: 8,
-    width:"100%",
-    
+    width: "100%",
+
   },
   grid: {
     flexDirection: 'row',
@@ -95,12 +97,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     //marginBottom: 24,
-    justifyContent:"center",
-    alignItems:"center"
+    justifyContent: "center",
+    alignItems: "center"
   },
   label: {
     fontSize: 13,
-    color: '#333',
+    color: '#fff',
     marginTop: 8,
     fontFamily: 'monospace',
     textAlign: 'center',

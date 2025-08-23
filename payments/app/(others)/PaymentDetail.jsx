@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { StorageService } from "../../src/services/storageService"
+import { useAppSelector } from '../../src/store/hooks';
 import { useRouter } from "expo-router";
 
 const API_BASE_URL = 'https://moneymanagementapp-production.up.railway.app';
@@ -14,8 +15,8 @@ export default function PaymentDetails() {
     const [expandedIdx, setExpandedIdx] = useState(null);
 
     const router = useRouter();
-    const token = StorageService.getToken();
-    const userRole = "executive"; // You can get this from storage or context as well
+    const userRole = useAppSelector((state) => state.auth.user?.role || '');
+
 
     useEffect(() => {
         fetchPaymentHistory();
@@ -31,11 +32,14 @@ export default function PaymentDetails() {
         try {
             setLoading(true);
 
+            const tok = await StorageService.getToken();
+            const authHeader = tok ? `Bearer ${tok.access_token}` : null;
+
             const response = await fetch(`${API_BASE_URL}/bills/${bill_id}/payments`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`, // Include token if required
+                    ...(authHeader ? { 'Authorization': authHeader } : {}),
                 },
             });
 

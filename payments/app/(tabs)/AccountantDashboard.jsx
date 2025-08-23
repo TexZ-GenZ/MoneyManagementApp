@@ -32,12 +32,13 @@ export default function AccountantDashboard() {
             'Authorization': `Bearer ${token.access_token}`,
           },
         });
-        const data = await response.json();
+        const {items} = await response.json();
 
-        if (response.ok && Array.isArray(data)) {
+        if (response.ok && Array.isArray(items)) {
 
-          setRecentPayments(data);
+          setRecentPayments(items);
         }
+
       } catch (err) {
         console.error("Payments fetch error:", err);
       }
@@ -86,9 +87,9 @@ export default function AccountantDashboard() {
               <TouchableOpacity style={styles.recentItem} onPress={() => router.push('../(others)/NotifyAccountant')}>
                 <Ionicons name="cash-outline" size={22} color="#c8f14c" />
                 <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.recentTitle}>{item.companyName}</Text>
+                  <Text style={styles.recentTitle}>{item.company_code}</Text>
                   <Text style={styles.recentSubtitle}>
-                    {item.amount ? `₹${item.amount}` : "No Amount"} • {item.status || "Pending"}
+                    {item.amount_collected ? `₹${item.amount_collected}` : "No Amount"} • {item.status || "Pending"}
                   </Text>
                 </View>
               </TouchableOpacity>
