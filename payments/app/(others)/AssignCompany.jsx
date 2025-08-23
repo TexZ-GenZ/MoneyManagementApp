@@ -1,15 +1,15 @@
 import { useLocalSearchParams } from "expo-router";
 import React, { useState, useEffect } from "react";
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  FlatList, 
-  StyleSheet, 
-  Alert, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Alert,
   ActivityIndicator,
-  RefreshControl 
+  RefreshControl
 } from "react-native";
 import { StorageService } from "../../src/services/storageService";
 
@@ -25,6 +25,12 @@ export default function ExecutiveDetailsScreen() {
   const [fetchingCompany, setFetchingCompany] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [assigningCompany, setAssigningCompany] = useState(false);
+
+  const fetchAuthHeader = async () => {
+    let header = await StorageService.getAuthHeader();
+    return header ? header : null
+  }
+
 
   useEffect(() => {
     fetchAssignedCompanies();
@@ -44,17 +50,14 @@ export default function ExecutiveDetailsScreen() {
 
   const fetchAssignedCompanies = async () => {
     if (!execId) return;
-    
+
     try {
       setLoading(true);
-      const token = StorageService.getToken();
+      const header = await fetchAuthHeader();
       
       const response = await fetch(`${API_BASE_URL}/executives/${execId}/companies`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: header,
       });
 
       if (!response.ok) {
@@ -64,7 +67,7 @@ export default function ExecutiveDetailsScreen() {
       const data = await response.json();
       const companies = Array.isArray(data) ? data : (data.companies || data.items || []);
       setCurrentCompanies(companies);
-      
+
     } catch (error) {
       console.error('Error fetching assigned companies:', error);
       Alert.alert('Error', 'Failed to fetch assigned companies. Please try again.');
@@ -77,18 +80,15 @@ export default function ExecutiveDetailsScreen() {
   const fetchCompanyDetails = async () => {
     const code = companyCode.trim();
     if (!code) return;
-    
+
     try {
       setFetchingCompany(true);
-      const token = StorageService.getToken();
-      
+      const header = await fetchAuthHeader();
+
       // Try to fetch company details - you might need to adjust this endpoint
       const response = await fetch(`${API_BASE_URL}/companies/${code}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: header,
       });
 
       if (response.ok) {
@@ -99,7 +99,7 @@ export default function ExecutiveDetailsScreen() {
       } else {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
     } catch (error) {
       console.error('Error fetching company details:', error);
       setCompanyDetails(null);
@@ -110,17 +110,14 @@ export default function ExecutiveDetailsScreen() {
 
   const handleAssign = async () => {
     if (!companyDetails || !execId) return;
-    
+
     try {
+      const header = await fetchAuthHeader();
       setAssigningCompany(true);
-      const token = StorageService.getToken();
-      
+
       const response = await fetch(`${API_BASE_URL}/admin/executives/${execId}/assign/${companyCode.trim()}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: header,
       });
 
       if (!response.ok) {
@@ -134,13 +131,13 @@ export default function ExecutiveDetailsScreen() {
         code: companyCode.trim(),
         ...companyDetails
       };
-      
+
       setCurrentCompanies(prev => [...prev, newCompany]);
       setCompanyCode('');
       setCompanyDetails(null);
-      
+
       Alert.alert('Success', `Successfully assigned ${newCompany.name} to ${execUsername}`);
-      
+
     } catch (error) {
       console.error('Error assigning company:', error);
       Alert.alert('Error', error.message || 'Failed to assign company. Please try again.');
@@ -160,14 +157,12 @@ export default function ExecutiveDetailsScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              const token = StorageService.getToken();
+              const header = await fetchAuthHeader();
               
-              const response = await fetch(`${API_BASE_URL}/admin/executives/${execId}/unassign/${company.code}`, {
+
+              const response = await fetch(`${API_BASE_URL}/admin/executives/${execId}/assign/${company.code}`, {
                 method: 'DELETE',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
+                headers: header,
               });
 
               if (!response.ok) {
@@ -176,7 +171,7 @@ export default function ExecutiveDetailsScreen() {
 
               setCurrentCompanies(prev => prev.filter(c => c.code !== company.code));
               Alert.alert('Success', `Successfully unassigned ${company.name}`);
-              
+
             } catch (error) {
               console.error('Error unassigning company:', error);
               Alert.alert('Error', 'Failed to unassign company. Please try again.');
@@ -220,7 +215,7 @@ export default function ExecutiveDetailsScreen() {
       {/* Assign Company Section */}
       <View style={styles.assignSection}>
         <Text style={styles.sectionTitle}>Assign New Company</Text>
-        
+
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
@@ -230,10 +225,10 @@ export default function ExecutiveDetailsScreen() {
             autoCapitalize="characters"
           />
           {fetchingCompany && (
-            <ActivityIndicator 
-              style={styles.inputLoader} 
-              size="small" 
-              color="#666" 
+            <ActivityIndicator
+              style={styles.inputLoader}
+              size="small"
+              color="#666"
             />
           )}
         </View>
@@ -243,9 +238,9 @@ export default function ExecutiveDetailsScreen() {
             <Text style={styles.previewLabel}>Company Found:</Text>
             <Text style={styles.previewName}>{companyDetails.name || companyDetails.company_name}</Text>
             <Text style={styles.previewCode}>{companyCode}</Text>
-            
-            <TouchableOpacity 
-              style={styles.assignButton} 
+
+            <TouchableOpacity
+              style={styles.assignButton}
               onPress={handleAssign}
               disabled={assigningCompany}
             >

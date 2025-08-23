@@ -1,6 +1,6 @@
 import { config } from "../utils/config";
 import { getErrorMessage } from "../utils/helpers";
-import StorageService from "./storage";
+import { StorageService } from "./storageService";
 import type { LoginCredentials, LoginResponse, User } from "../types/auth";
 import type { Company } from "../types/company";
 import type { Bill } from "../types/bill";
@@ -15,10 +15,11 @@ class ApiService {
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
-    const token = await StorageService.getAuthToken();
+    // Use secure StorageService (expo-secure-store) to read token saved by auth flow
+    const authHeader = await StorageService.getAuthHeader();
     return {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: token } : {}),
+      ...authHeader,
     };
   }
 
@@ -54,11 +55,10 @@ class ApiService {
   async login(
     credentials: LoginCredentials
   ): Promise<{ access_token: string; token_type: string }> {
+    // Use the exact login URL to avoid accidental baseURL concatenation
+    const loginUrl = "https://moneymanagementapp-production.up.railway.app/auth/login";
 
-    const response = await this.request<{
-      access_token: string;
-      token_type: string;
-    }>(`${process.env.EXPO_PUBLIC_APP_URI}/auth/login`, {
+    const res = await fetch(loginUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -67,8 +67,12 @@ class ApiService {
       }),
     });
 
-    console.log("Login response:", response);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
+    }
 
+    const response = await res.json();
     return {
       access_token: response.access_token,
       token_type: response.token_type,
@@ -82,7 +86,8 @@ class ApiService {
   }
 
   async refreshToken(): Promise<{ token: string }> {
-    const refresh_token = await StorageService.getItem("refresh_token", null);
+    const tokenObj = await StorageService.getToken();
+  const refresh_token = (tokenObj as any)?.refresh_token;
     if (!refresh_token) {
       throw new Error("No refresh token available");
     }

@@ -29,7 +29,7 @@ export default function AddUserScreen() {
         role: role,
         area: ""
       };
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/users`, {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users`, {
         method: "POST",
         headers: header,
         body: JSON.stringify(data)

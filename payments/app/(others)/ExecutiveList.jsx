@@ -80,7 +80,7 @@ export default function AdminExecutiveList() {
     try {
       let header = await StorageService.getAuthHeader();
 
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/admin/executives`,{
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`,{
        headers: header
       });
 
