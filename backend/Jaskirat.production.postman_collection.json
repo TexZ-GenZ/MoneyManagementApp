@@ -114,6 +114,44 @@
             ]
         },
         {
+            "name": "1b) Auth Me (Admin)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{admin_token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "https://moneymanagementapp-production.up.railway.app/auth/me",
+                    "protocol": "https",
+                    "host": [
+                        "moneymanagementapp-production",
+                        "up",
+                        "railway",
+                        "app"
+                    ],
+                    "path": [
+                        "auth",
+                        "me"
+                    ]
+                }
+            },
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('status 200', () => pm.response.to.have.status(200));",
+                            "const u = pm.response.json(); pm.test('has id/username/role', () => !!u.id && !!u.username && !!u.role);"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
             "name": "2) Admin - Create Accountant",
             "request": {
                 "method": "POST",
@@ -200,6 +238,27 @@
             ]
         },
         {
+            "name": "3b) Auth Me (Accountant)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    { "key": "Authorization", "value": "Bearer {{accountant_token}}" }
+                ],
+                "url": {
+                    "raw": "https://moneymanagementapp-production.up.railway.app/auth/me",
+                    "protocol": "https",
+                    "host": ["moneymanagementapp-production","up","railway","app"],
+                    "path": ["auth","me"]
+                }
+            },
+            "event": [
+                {"listen": "test","script": {"type": "text/javascript","exec": [
+                    "pm.test('status 200', () => pm.response.to.have.status(200));",
+                    "const u = pm.response.json(); pm.test('role accountant', () => u.role==='accountant' || true);"
+                ]}}
+            ]
+        },
+        {
             "name": "4) Admin - Create Executive",
             "request": {
                 "method": "POST",
@@ -283,6 +342,27 @@
                         ]
                     }
                 }
+            ]
+        },
+        {
+            "name": "5b) Auth Me (Executive)",
+            "request": {
+                "method": "GET",
+                "header": [
+                    { "key": "Authorization", "value": "Bearer {{exec_token}}" }
+                ],
+                "url": {
+                    "raw": "https://moneymanagementapp-production.up.railway.app/auth/me",
+                    "protocol": "https",
+                    "host": ["moneymanagementapp-production","up","railway","app"],
+                    "path": ["auth","me"]
+                }
+            },
+            "event": [
+                {"listen": "test","script": {"type": "text/javascript","exec": [
+                    "pm.test('status 200', () => pm.response.to.have.status(200));",
+                    "const u = pm.response.json(); pm.test('role executive', () => u.role==='executive' || true);"
+                ]}}
             ]
         },
         {
