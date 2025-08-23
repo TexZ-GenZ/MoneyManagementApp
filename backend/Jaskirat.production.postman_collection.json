@@ -242,20 +242,37 @@
             "request": {
                 "method": "GET",
                 "header": [
-                    { "key": "Authorization", "value": "Bearer {{accountant_token}}" }
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{accountant_token}}"
+                    }
                 ],
                 "url": {
                     "raw": "https://moneymanagementapp-production.up.railway.app/auth/me",
                     "protocol": "https",
-                    "host": ["moneymanagementapp-production","up","railway","app"],
-                    "path": ["auth","me"]
+                    "host": [
+                        "moneymanagementapp-production",
+                        "up",
+                        "railway",
+                        "app"
+                    ],
+                    "path": [
+                        "auth",
+                        "me"
+                    ]
                 }
             },
             "event": [
-                {"listen": "test","script": {"type": "text/javascript","exec": [
-                    "pm.test('status 200', () => pm.response.to.have.status(200));",
-                    "const u = pm.response.json(); pm.test('role accountant', () => u.role==='accountant' || true);"
-                ]}}
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('status 200', () => pm.response.to.have.status(200));",
+                            "const u = pm.response.json(); pm.test('role accountant', () => u.role==='accountant' || true);"
+                        ]
+                    }
+                }
             ]
         },
         {
@@ -349,20 +366,37 @@
             "request": {
                 "method": "GET",
                 "header": [
-                    { "key": "Authorization", "value": "Bearer {{exec_token}}" }
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{exec_token}}"
+                    }
                 ],
                 "url": {
                     "raw": "https://moneymanagementapp-production.up.railway.app/auth/me",
                     "protocol": "https",
-                    "host": ["moneymanagementapp-production","up","railway","app"],
-                    "path": ["auth","me"]
+                    "host": [
+                        "moneymanagementapp-production",
+                        "up",
+                        "railway",
+                        "app"
+                    ],
+                    "path": [
+                        "auth",
+                        "me"
+                    ]
                 }
             },
             "event": [
-                {"listen": "test","script": {"type": "text/javascript","exec": [
-                    "pm.test('status 200', () => pm.response.to.have.status(200));",
-                    "const u = pm.response.json(); pm.test('role executive', () => u.role==='executive' || true);"
-                ]}}
+                {
+                    "listen": "test",
+                    "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                            "pm.test('status 200', () => pm.response.to.have.status(200));",
+                            "const u = pm.response.json(); pm.test('role executive', () => u.role==='executive' || true);"
+                        ]
+                    }
+                }
             ]
         },
         {
@@ -1669,6 +1703,62 @@
                 }
             }
         },
+            {
+                "name": "Admin - Activate User",
+                "request": {
+                    "method": "PATCH",
+                    "header": [
+                        {
+                            "key": "Authorization",
+                            "value": "Bearer {{admin_token}}"
+                        }
+                    ],
+                    "url": {
+                        "raw": "https://moneymanagementapp-production.up.railway.app/admin/users/{{exec_id}}/activate",
+                        "protocol": "https",
+                        "host": [
+                            "moneymanagementapp-production",
+                            "up",
+                            "railway",
+                            "app"
+                        ],
+                        "path": [
+                            "admin",
+                            "users",
+                            "{{exec_id}}",
+                            "activate"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "Admin - Deactivate User (PATCH)",
+                "request": {
+                    "method": "PATCH",
+                    "header": [
+                        {
+                            "key": "Authorization",
+                            "value": "Bearer {{admin_token}}"
+                        }
+                    ],
+                    "url": {
+                        "raw": "https://moneymanagementapp-production.up.railway.app/admin/users/{{exec_id}}/deactivate",
+                        "protocol": "https",
+                        "host": [
+                            "moneymanagementapp-production",
+                            "up",
+                            "railway",
+                            "app"
+                        ],
+                        "path": [
+                            "admin",
+                            "users",
+                            "{{exec_id}}",
+                            "deactivate"
+                        ]
+                    }
+                }
+            },
         {
             "name": "Notifications - Pending (All Types)",
             "request": {
