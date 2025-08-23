@@ -110,7 +110,7 @@ export default function AccountantDashboard() {
         <View style={styles.topBar}>
           <Text style={styles.heading}>Welcome Back 👋</Text>
           <Text style={styles.subheading}>Here's your quick access</Text>
-        </View>
+        </View> 
 
         {/* Card Container */}
         <View style={styles.cardContainer}>
