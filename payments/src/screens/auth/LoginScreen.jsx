@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     
    },
   topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent:"flex-start", paddingTop:10 },
-  logo: { width: 120, height: 40, marginRight: -30 },
+  logo: { width: 120, height: 60, marginRight: -20 },
   brandText: { fontSize: 18, fontWeight: '700', color: '#333' },
   divider: { height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginTop: 1, marginBottom:18 },
   pageTitleRow: { alignItems: 'flex-start', marginBottom: 45 },
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     borderLeftColor: '#f44336',
   },
   errorText: { color: '#f44336', fontSize: 14, textAlign: 'center' },
-  footer: { alignItems: 'center', marginTop: 32 },
+  footer: { alignItems: 'center', marginTop: 'auto' },
   footerText: { fontSize: 12, color: '#999' },
 });
 

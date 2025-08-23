@@ -3,7 +3,7 @@ export const APP_NAME = process.env.EXPO_PUBLIC_APP_NAME || 'Jaskirat Textiles';
 export const APP_VERSION = process.env.EXPO_PUBLIC_APP_VERSION || '1.0.0';
 
 // API endpoints - Now using environment variable
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI || 'http://localhost:8000/api';
 
 // Debug mode
 export const DEBUG_MODE = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true';

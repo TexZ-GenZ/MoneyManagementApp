@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, TouchableOpaci
 import { LinearGradient } from 'expo-linear-gradient';
 import GridBackground from '../(others)/GridBGComponent';
 import { StorageService } from '@/src/services/storageService';
+import { useAppDispatch } from '@/src/store/hooks';
+import { logoutUser } from '@/src/store/authSlice';
 import { useRouter } from 'expo-router';
 
 type MeResponse = {
@@ -27,24 +29,25 @@ export default function ProfileScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter()
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
     (async () => {
       try {
-        // const token = await StorageService.getToken();
-        // const BASE = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI;
-        // const res = await fetch(`${BASE}/auth/me`, {
-        //   method: 'GET',
-        //   headers: {
-        //     'Content-Type': 'application/json',
-        //     'Authorization': `Bearer ${token?.access_token}`,
-        //   },
-        // });
-        // const data = await res.json();
-        // if (!res.ok) throw new Error(data?.message || 'Failed to fetch profile');
-        // setMe(data as MeResponse);
+        const token = await StorageService.getToken();
+        const BASE = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI;
+        const res = await fetch(`${BASE}/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token?.access_token}`,
+          },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.message || 'Failed to fetch profile');
+        setMe(data as MeResponse);
 
-        setMe(mock)
+        //setMe(mock)
       } catch (e: any) {
         setError(e?.message || 'Something went wrong');
       } finally {
@@ -54,8 +57,9 @@ export default function ProfileScreen() {
   }, []);
 
     const handleLogout = async () => {
-    await StorageService.deleteToken();
-    router.replace('/'); // redirect to login/root
+    // Use the centralized logout thunk to clear storage and auth state
+    dispatch(logoutUser());
+    router.replace('/login');
   };
 
   return (
