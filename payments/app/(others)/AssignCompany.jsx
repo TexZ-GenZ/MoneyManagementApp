@@ -1,103 +1,299 @@
 import { useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, ActivityIndicator } from "react-native";
+import React, { useState, useEffect } from "react";
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  FlatList, 
+  StyleSheet, 
+  Alert, 
+  ActivityIndicator,
+  RefreshControl 
+} from "react-native";
+import { StorageService } from "../../src/services/storageService";
 
-// Fake service/sample for demonstration
-const fetchCompanyNameByCode = async (companyCode) => {
-  // Replace with real DB/API call as needed.
-  const companies = {
-    'XYZ-012': 'ABC',
-    'XY-112': 'Hello Comp',
-    'MNO-789': 'MNO Company'
-  };
-  return companies[companyCode] || 'Unknown Company';
-};
+const API_BASE_URL = 'https://moneymanagementapp-production.up.railway.app';
 
 export default function ExecutiveDetailsScreen() {
-  const { execId, execMobile, execUsername } = useLocalSearchParams(); // Contains { username, mobile, ... }
+  const { execId, execMobile, execUsername } = useLocalSearchParams();
 
-  // Companies assigned to this executive (replace with real API/state)
-  const [currentCompanies, setCurrentCompanies] = useState([
-    { name: 'ABC', code: 'XYZ-012' },
-    { name: 'Hello Comp', code: 'XY-112' },
-    { name: 'ABC', code: 'XYZ-02' },
-    { name: 'Hello Comp', code: 'XY-12' }
-  ]);
+  const [currentCompanies, setCurrentCompanies] = useState([]);
   const [companyCode, setCompanyCode] = useState('');
+  const [companyDetails, setCompanyDetails] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [fetchingCompany, setFetchingCompany] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [assigningCompany, setAssigningCompany] = useState(false);
+
+  useEffect(() => {
+    fetchAssignedCompanies();
+  }, []);
+
+  useEffect(() => {
+    const delayedFetch = setTimeout(() => {
+      if (companyCode.trim().length > 0) {
+        fetchCompanyDetails();
+      } else {
+        setCompanyDetails(null);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayedFetch);
+  }, [companyCode]);
+
+  const fetchAssignedCompanies = async () => {
+    if (!execId) return;
+    
+    try {
+      setLoading(true);
+      const token = StorageService.getToken();
+      
+      const response = await fetch(`${API_BASE_URL}/executives/${execId}/companies`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const companies = Array.isArray(data) ? data : (data.companies || data.items || []);
+      setCurrentCompanies(companies);
+      
+    } catch (error) {
+      console.error('Error fetching assigned companies:', error);
+      Alert.alert('Error', 'Failed to fetch assigned companies. Please try again.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const fetchCompanyDetails = async () => {
+    const code = companyCode.trim();
+    if (!code) return;
+    
+    try {
+      setFetchingCompany(true);
+      const token = StorageService.getToken();
+      
+      // Try to fetch company details - you might need to adjust this endpoint
+      const response = await fetch(`${API_BASE_URL}/companies/${code}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const company = await response.json();
+        setCompanyDetails(company);
+      } else if (response.status === 404) {
+        setCompanyDetails(null);
+      } else {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching company details:', error);
+      setCompanyDetails(null);
+    } finally {
+      setFetchingCompany(false);
+    }
+  };
 
   const handleAssign = async () => {
-    if (!companyCode.trim()) return;
-    setLoading(true);
-    const companyName = await fetchCompanyNameByCode(companyCode.trim());
-    setLoading(false);
+    if (!companyDetails || !execId) return;
+    
+    try {
+      setAssigningCompany(true);
+      const token = StorageService.getToken();
+      
+      const response = await fetch(`${API_BASE_URL}/admin/executives/${execId}/assign/${companyCode.trim()}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      // Add to current companies list
+      const newCompany = {
+        name: companyDetails.name || companyDetails.company_name,
+        code: companyCode.trim(),
+        ...companyDetails
+      };
+      
+      setCurrentCompanies(prev => [...prev, newCompany]);
+      setCompanyCode('');
+      setCompanyDetails(null);
+      
+      Alert.alert('Success', `Successfully assigned ${newCompany.name} to ${execUsername}`);
+      
+    } catch (error) {
+      console.error('Error assigning company:', error);
+      Alert.alert('Error', error.message || 'Failed to assign company. Please try again.');
+    } finally {
+      setAssigningCompany(false);
+    }
+  };
+
+  const handleUnassign = async (company) => {
     Alert.alert(
-      "Confirm Assignment",
-      `Do you want to assign ${companyName} to ${execUsername}?`,
+      "Confirm Unassign",
+      `Are you sure you want to unassign ${company.name} from ${execUsername}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Assign",
-          style: "default",
-          onPress: () => {
-            setCurrentCompanies([...currentCompanies, { name: companyName, code: companyCode.trim() }]);
-            setCompanyCode('');
+          text: "Unassign",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = StorageService.getToken();
+              
+              const response = await fetch(`${API_BASE_URL}/admin/executives/${execId}/unassign/${company.code}`, {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+
+              setCurrentCompanies(prev => prev.filter(c => c.code !== company.code));
+              Alert.alert('Success', `Successfully unassigned ${company.name}`);
+              
+            } catch (error) {
+              console.error('Error unassigning company:', error);
+              Alert.alert('Error', 'Failed to unassign company. Please try again.');
+            }
           }
         }
       ]
     );
   };
 
-  const handleUnassign = (code) => {
-    setCurrentCompanies(currentCompanies.filter(c => c.code !== code));
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchAssignedCompanies();
   };
+
+  const renderCompanyItem = ({ item }) => (
+    <View style={styles.companyCard}>
+      <View style={styles.companyInfo}>
+        <Text style={styles.companyName}>{item.name || item.company_name}</Text>
+        <Text style={styles.companyCode}>{item.code || item.company_code}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.unassignButton}
+        onPress={() => handleUnassign(item)}
+      >
+        <Text style={styles.unassignButtonText}>Unassign</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       {/* Executive Info */}
       <View style={styles.infoBox}>
-        <Text style={styles.label}>Username</Text>
-        <Text style={styles.value}>{execUsername}</Text>
-        <Text style={styles.label}>{execMobile}</Text>
+        <Text style={styles.infoLabel}>Executive Details</Text>
+        <Text style={styles.infoName}>{execUsername}</Text>
+        <Text style={styles.infoMobile}>{execMobile}</Text>
+        <Text style={styles.infoId}>ID: {execId}</Text>
       </View>
 
-      {/* Assign Company */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Assign Company</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter company code"
-          value={companyCode}
-          onChangeText={setCompanyCode}
-          autoCapitalize="characters"
-        />
-        <TouchableOpacity style={styles.button} onPress={handleAssign} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Assign</Text>}
-        </TouchableOpacity>
-      </View>
+      {/* Assign Company Section */}
+      <View style={styles.assignSection}>
+        <Text style={styles.sectionTitle}>Assign New Company</Text>
+        
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter company code"
+            value={companyCode}
+            onChangeText={setCompanyCode}
+            autoCapitalize="characters"
+          />
+          {fetchingCompany && (
+            <ActivityIndicator 
+              style={styles.inputLoader} 
+              size="small" 
+              color="#666" 
+            />
+          )}
+        </View>
 
-      {/* Current Companies */}
-      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Current Companies</Text>
-      <FlatList
-        data={currentCompanies}
-        keyExtractor={item => item.code}
-        renderItem={({ item }) => (
-          <View style={styles.companyCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.companyName}>{item.name}</Text>
-              <Text style={styles.companyCode}>{item.code}</Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.button, styles.unassignButton]}
-              onPress={() => handleUnassign(item.code)}
+        {companyDetails && (
+          <View style={styles.companyPreview}>
+            <Text style={styles.previewLabel}>Company Found:</Text>
+            <Text style={styles.previewName}>{companyDetails.name || companyDetails.company_name}</Text>
+            <Text style={styles.previewCode}>{companyCode}</Text>
+            
+            <TouchableOpacity 
+              style={styles.assignButton} 
+              onPress={handleAssign}
+              disabled={assigningCompany}
             >
-              <Text style={styles.buttonText}>Unassign</Text>
+              {assigningCompany ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.assignButtonText}>Assign Company</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>No companies assigned.</Text>}
-      />
+
+        {companyCode.trim().length > 0 && !fetchingCompany && !companyDetails && (
+          <View style={styles.notFoundBox}>
+            <Text style={styles.notFoundText}>Company not found</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Current Companies */}
+      <View style={styles.companiesSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Assigned Companies</Text>
+          <Text style={styles.countText}>
+            {currentCompanies.length} compan{currentCompanies.length !== 1 ? 'ies' : 'y'}
+          </Text>
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color="#666" size="large" />
+            <Text style={styles.loadingText}>Loading companies...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={currentCompanies}
+            keyExtractor={item => item.code || item.company_code}
+            renderItem={renderCompanyItem}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No companies assigned yet.</Text>
+            }
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -105,122 +301,176 @@ export default function ExecutiveDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#f8fafd", // Soft mint background
+    backgroundColor: "#ffffff",
+    padding: 16,
   },
   infoBox: {
-    borderWidth: 0,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 24,
-    backgroundColor: "#e6fbfa", // Lighter mint
-    shadowColor: "#c2e6f0",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.13,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: "#ffffff",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
-  label: {
-    fontSize: 15,
-    color: "#24507a",
-    fontWeight: "600",
-    marginBottom: 2,
-    letterSpacing: 0.2,
+  infoLabel: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+    marginBottom: 8,
   },
-  value: {
+  infoName: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#152642",
-    marginBottom: 8,
-    letterSpacing: 0.3,
+    color: "#000",
+    marginBottom: 4,
   },
-  section: {
-    marginBottom: 16,
-    backgroundColor: "#e6fbfa",
-    padding: 14,
-    borderRadius: 14,
-    shadowColor: "#c2e6f0",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 2,
+  infoMobile: {
+    fontSize: 14,
+    color: "#000",
+    marginBottom: 2,
+  },
+  infoId: {
+    fontSize: 12,
+    color: "#666",
+  },
+  assignSection: {
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#143764",
-    letterSpacing: 0.2,
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 12,
+  },
+  inputContainer: {
+    position: 'relative',
   },
   input: {
-    borderWidth: 0,
-    backgroundColor: "#ffffffff",
-    borderRadius: 15,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: "#000",
+  },
+  inputLoader: {
+    position: 'absolute',
+    right: 12,
+    top: 12,
+  },
+  companyPreview: {
+    backgroundColor: "#f8f9fa",
     padding: 16,
-    marginBottom: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  previewLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 8,
+  },
+  previewName: {
     fontSize: 16,
-    color: "#183b56",
-    fontWeight: "500",
-    elevation: 1,
-    shadowColor: "#d6f3ee",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07,
-    shadowRadius: 3,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 4,
   },
-  button: {
-    backgroundColor: "#2266f1",
-    borderRadius: 15,
-    paddingVertical: 14,
-    paddingHorizontal: 0,
-    alignItems: "center",
-    marginTop: 5,
-    shadowColor: "#9EC0FC",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 9,
-    elevation: 3,
+  previewCode: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 12,
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-  },
-  unassignButton: {
-    backgroundColor: "#e12d39",
-    minWidth: 90,
-    marginLeft: 10,
+  assignButton: {
+    backgroundColor: "#007bff",
+    borderRadius: 6,
     paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  assignButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  notFoundBox: {
+    backgroundColor: "#fff3cd",
+    padding: 12,
+    borderRadius: 6,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#ffeaa7",
+  },
+  notFoundText: {
+    color: "#856404",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  companiesSection: {
+    flex: 1,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  countText: {
+    fontSize: 12,
+    color: "#666",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#666",
   },
   companyCard: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#ffffff",
     padding: 16,
-    borderRadius: 14,
-    backgroundColor: "#edf7fe",
-    borderWidth: 0,
-    marginBottom: 15,
-    shadowColor: "#93c7e7",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.09,
-    shadowRadius: 5,
-    elevation: 2,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  companyInfo: {
+    flex: 1,
   },
   companyName: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#205380",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 4,
   },
   companyCode: {
-    fontSize: 15,
-    color: "#5686aa",
-    marginTop: 2,
+    fontSize: 14,
+    color: "#666",
+  },
+  unassignButton: {
+    backgroundColor: "#dc3545",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  unassignButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   emptyText: {
     textAlign: "center",
-    color: "#8e9ab6",
-    marginTop: 16,
-    fontSize: 15,
-    fontWeight: "500",
-  }
+    color: "#666",
+    fontSize: 14,
+    paddingVertical: 40,
+  },
 });

@@ -17,7 +17,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { COLORS, APP_NAME } from '../../utils/constants';
 import { validateForm, VALIDATION_RULES } from '../../utils/validation';
 
-const LoginScreen: React.FC = () => {
+const LoginScreen = () => {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { isLoading, error } = useAppSelector((state) => state.auth);
@@ -27,9 +27,9 @@ const LoginScreen: React.FC = () => {
     password: '',
   });
 
-  const [errors, setErrors] = useState<Record<string, string[]>>({});
+  const [errors, setErrors] = useState({});
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
 
     // Clear error when user starts typing
@@ -45,7 +45,7 @@ const LoginScreen: React.FC = () => {
       password: VALIDATION_RULES.password,
     });
 
-    const formErrors: Record<string, string[]> = {};
+    const formErrors = {};
     Object.entries(validationResults).forEach(([field, result]) => {
       if (!result.isValid) {
         formErrors[field] = result.errors;
@@ -67,9 +67,9 @@ const LoginScreen: React.FC = () => {
         // Navigate to main app after successful login
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Login Failed', result.payload as string || 'Please check your credentials and try again.');
+        Alert.alert('Login Failed', result.payload || 'Please check your credentials and try again.');
       }
-    } catch (error: any) {
+    } catch (error) {
       Alert.alert('Login Failed', error.message || 'Please check your credentials and try again.');
     }
   };

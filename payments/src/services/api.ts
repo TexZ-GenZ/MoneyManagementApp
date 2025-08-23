@@ -58,7 +58,7 @@ class ApiService {
     const response = await this.request<{
       access_token: string;
       token_type: string;
-    }>("/auth/login", {
+    }>(`${process.env.EXPO_PUBLIC_APP_URI}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

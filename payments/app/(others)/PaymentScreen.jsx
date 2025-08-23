@@ -1,49 +1,105 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  ScrollView, 
+  Alert, 
+  ActivityIndicator 
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { Picker } from '@react-native-picker/picker';
+import { StorageService } from "../../src/services/storageService";
 
+const API_BASE_URL = 'https://moneymanagementapp-production.up.railway.app';
 const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer"];
 
 export default function CollectPaymentScreen() {
-  const { company_code } = useLocalSearchParams();
+  const { company_code, bill_id, bill_number, bill_amount } = useLocalSearchParams();
   const router = useRouter();
 
   const [collectedAt, setCollectedAt] = useState(new Date());
   const [nextPromiseDate, setNextPromiseDate] = useState(null);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  const [isNextPromiseDatePickerVisible, setNextPromiseDatePickerVisibility] = useState(false);
 
   const [amountCollected, setAmountCollected] = useState("");
   const [comments, setComments] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  // Bill allocations: array of { bill_id (string input), amount (string input) }
-  const [billAllocations, setBillAllocations] = useState([{ bill_id: "", amount: "" }]);
+  // Bill allocations with auto-incrementing bill_id
+  const [billAllocations, setBillAllocations] = useState([
+    { "1" : bill_amount}
+  ]);
   const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]);
 
   const [location, setLocation] = useState(null);
+  const [locationError, setLocationError] = useState(false);
 
   const showDatePicker = () => setDatePickerVisibility(true);
   const hideDatePicker = () => setDatePickerVisibility(false);
   const handleConfirmDate = (date) => {
-    setNextPromiseDate(date);
+    setCollectedAt(date);
     hideDatePicker();
   };
 
+  const showNextPromiseDatePicker = () => setNextPromiseDatePickerVisibility(true);
+  const hideNextPromiseDatePicker = () => setNextPromiseDatePickerVisibility(false);
+  const handleConfirmNextPromiseDate = (date) => {
+    setNextPromiseDate(date);
+    hideNextPromiseDatePicker();
+  };
+
   const fetchLocation = async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return;
-    let loc = await Location.getCurrentPositionAsync({});
-    setLocation(loc.coords);
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocationError(true);
+        Alert.alert(
+          "Location Permission", 
+          "Location permission is required to verify your position during payment collection.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+      
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeout: 10000,
+      });
+      setLocation(loc.coords);
+      setLocationError(false);
+    } catch (error) {
+      console.error("Error getting location:", error);
+      setLocationError(true);
+      Alert.alert("Location Error", "Unable to get your current location. Please ensure GPS is enabled.");
+    }
   };
 
   useEffect(() => {
     fetchLocation();
+    
+    // If bill_amount is provided, pre-fill the first allocation amount
+    if (bill_amount && billAllocations.length === 1) {
+      setBillAllocations([{ bill_id: bill_id ? bill_id.toString() : "1", amount: bill_amount.toString() }]);
+      setAmountCollected(bill_amount.toString());
+    }
   }, []);
 
   const addAnotherPayment = () => {
-    setBillAllocations([...billAllocations, { bill_id: "", amount: "" }]);
+    const nextBillId = Math.max(...billAllocations.map(b => parseInt(b.bill_id) || 0)) + 1;
+    setBillAllocations([...billAllocations, { bill_id: nextBillId.toString(), amount: "" }]);
+  };
+
+  const removeBillAllocation = (index) => {
+    if (billAllocations.length > 1) {
+      const updated = billAllocations.filter((_, idx) => idx !== index);
+      setBillAllocations(updated);
+    }
   };
 
   const updateBillAllocation = (index, field, value) => {
@@ -52,59 +108,181 @@ export default function CollectPaymentScreen() {
       return item;
     });
     setBillAllocations(updated);
+
+    // Auto-calculate total amount collected
+    if (field === 'amount') {
+      const totalAmount = updated.reduce((sum, alloc) => {
+        const amount = parseFloat(alloc.amount) || 0;
+        return sum + amount;
+      }, 0);
+      setAmountCollected(totalAmount.toString());
+    }
   };
 
-  const handleSubmit = () => {
-    if (!amountCollected || isNaN(Number(amountCollected))) {
+  const validateInputs = () => {
+    if (!amountCollected || isNaN(Number(amountCollected)) || Number(amountCollected) <= 0) {
       Alert.alert("Invalid Input", "Please enter a valid amount collected.");
-      return;
+      return false;
     }
-    for (const alloc of billAllocations) {
-      if (!alloc.bill_id.trim() || !alloc.amount.trim() || isNaN(Number(alloc.amount))) {
-        Alert.alert("Invalid Bill Allocation", "Please enter valid bill IDs and amounts for all allocations.");
-        return;
+
+    for (const [index, alloc] of billAllocations.entries()) {
+      if (!alloc.bill_id.trim()) {
+        Alert.alert("Invalid Bill Allocation", `Please enter a bill ID for allocation ${index + 1}.`);
+        return false;
+      }
+      if (!alloc.amount.trim() || isNaN(Number(alloc.amount)) || Number(alloc.amount) <= 0) {
+        Alert.alert("Invalid Bill Allocation", `Please enter a valid amount for allocation ${index + 1}.`);
+        return false;
       }
     }
 
-    const payload = {
-      company_code,
-      collected_at: collectedAt.toISOString(),
-      amount_collected: Number(amountCollected),
-      method: paymentMethod,
-      exec_lat: location?.latitude || null,
-      exec_lng: location?.longitude || null,
-      comments,
-      next_promise_date: nextPromiseDate ? nextPromiseDate.toISOString().split("T")[0] : null,
-      bill_allocations: billAllocations.map(b => ({ bill_id: Number(b.bill_id), amount: Number(b.amount) })),
-      exec_location_verified: null, // removed
-    };
+    // Check if total allocation amounts match collected amount
+    const totalAllocated = billAllocations.reduce((sum, alloc) => sum + Number(alloc.amount), 0);
+    const collectedAmount = Number(amountCollected);
+    
+    if (Math.abs(totalAllocated - collectedAmount) > 0.01) { // Allow small floating point differences
+      Alert.alert(
+        "Amount Mismatch", 
+        `Total allocated amount (₹${totalAllocated.toFixed(2)}) doesn't match collected amount (₹${collectedAmount.toFixed(2)}).`
+      );
+      return false;
+    }
 
-    console.log("Submitting payment:", payload);
+    return true;
+  };
 
-    Alert.alert("Success", "Payment submitted successfully!");
-    router.back();
+  const submitPayment = async () => {
+    if (!validateInputs()) return;
+
+    if (locationError || !location) {
+      Alert.alert(
+        "Location Required",
+        "Location verification is required. Please enable GPS and try again.",
+        [
+          { text: "Retry", onPress: fetchLocation },
+          { text: "Cancel", style: "cancel" }
+        ]
+      );
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const token = StorageService.getToken();
+      
+      const payload = {
+        company_code,
+        collected_at: collectedAt.toISOString(),
+        amount_collected: Number(amountCollected),
+        method: paymentMethod.toLowerCase(),
+        comments: comments.trim() || undefined,
+        exec_location_verified: true,
+        next_promise_date: nextPromiseDate ? nextPromiseDate.toISOString().split("T")[0] : undefined,
+        bill_allocations: billAllocations.map(b => ({
+          bill_id: Number(b.bill_id),
+          amount: Number(b.amount)
+        }))
+      };
+
+      // Add location if available
+      if (location) {
+        payload.exec_lat = location.latitude;
+        payload.exec_lng = location.longitude;
+      }
+
+      console.log("Submitting payment:", payload);
+
+      const response = await fetch(`${API_BASE_URL}/payments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Payment submitted successfully:", result);
+
+      Alert.alert(
+        "Success", 
+        "Payment submitted successfully!",
+        [
+          { 
+            text: "OK", 
+            onPress: () => {
+              // Navigate back with success flag
+              router.back();
+            }
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error("Error submitting payment:", error);
+      Alert.alert(
+        "Submission Failed", 
+        error.message || "Failed to submit payment. Please check your connection and try again.",
+        [
+          { text: "Retry", onPress: submitPayment },
+          { text: "Cancel", style: "cancel" }
+        ]
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatDateTime = (date) => {
+    return date.toLocaleString('en-IN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.title}>Collect Payment</Text>
+      
+      {company_code && (
+        <View style={styles.infoBox}>
+          <Text style={styles.infoText}>Company: {company_code}</Text>
+          {bill_number && <Text style={styles.infoText}>Bill: {bill_number}</Text>}
+        </View>
+      )}
 
       {/* Collected At */}
       <Text style={styles.label}>Collected At</Text>
-      <TextInput
-        style={[styles.input, styles.noBgInput]}
-        value={collectedAt.toLocaleString()}
-        editable={false}
+      <TouchableOpacity onPress={showDatePicker} style={[styles.input, styles.datePicker]}>
+        <Text style={styles.dateText}>{formatDateTime(collectedAt)}</Text>
+      </TouchableOpacity>
+      <DateTimePickerModal
+        isVisible={isDatePickerVisible}
+        mode="datetime"
+        onConfirm={handleConfirmDate}
+        onCancel={hideDatePicker}
+        maximumDate={new Date()}
       />
 
       {/* Amount Collected */}
-      <Text style={styles.label}>Amount Collected</Text>
+      <Text style={styles.label}>Amount Collected (₹)</Text>
       <TextInput
         style={styles.input}
         keyboardType="numeric"
         value={amountCollected}
         placeholder="Enter amount collected"
         onChangeText={setAmountCollected}
+        editable={!submitting}
       />
 
       {/* Payment Method Dropdown */}
@@ -116,63 +294,105 @@ export default function CollectPaymentScreen() {
           mode="dropdown"
           dropdownIconColor="#184977"
           style={styles.picker}
+          enabled={!submitting}
         >
-          {paymentMethods.map((m) => (
-            <Picker.Item key={m} label={m} value={m} />
+          {paymentMethods.map((method) => (
+            <Picker.Item key={method} label={method} value={method} />
           ))}
         </Picker>
       </View>
 
       {/* Next Promise Date */}
-      <Text style={styles.label}>Next Promise Date</Text>
-      <TouchableOpacity onPress={showDatePicker} style={[styles.input, styles.datePicker]}>
-        <Text>{nextPromiseDate ? nextPromiseDate.toDateString() : "Select date"}</Text>
+      <Text style={styles.label}>Next Promise Date (Optional)</Text>
+      <TouchableOpacity 
+        onPress={showNextPromiseDatePicker} 
+        style={[styles.input, styles.datePicker]}
+        disabled={submitting}
+      >
+        <Text style={styles.dateText}>
+          {nextPromiseDate ? nextPromiseDate.toDateString() : "Select date (optional)"}
+        </Text>
       </TouchableOpacity>
       <DateTimePickerModal
-        isVisible={isDatePickerVisible}
+        isVisible={isNextPromiseDatePickerVisible}
         mode="date"
-        onConfirm={handleConfirmDate}
-        onCancel={hideDatePicker}
+        onConfirm={handleConfirmNextPromiseDate}
+        onCancel={hideNextPromiseDatePicker}
         minimumDate={new Date()}
       />
 
       {/* Bill Allocations */}
       <Text style={[styles.label, { marginTop: 16 }]}>Bill Allocations</Text>
       {billAllocations.map((alloc, idx) => (
-        <View key={idx} style={styles.billAllocRow}>
-          <TextInput
-            style={[styles.input, styles.billAllocInput]}
-            placeholder="Bill ID"
-            keyboardType="numeric"
-            value={alloc.bill_id}
-            onChangeText={(val) => updateBillAllocation(idx, "bill_id", val)}
-          />
-          <TextInput
-            style={[styles.input, styles.billAllocInput]}
-            placeholder="Amount"
-            keyboardType="numeric"
-            value={alloc.amount}
-            onChangeText={(val) => updateBillAllocation(idx, "amount", val)}
-          />
+        <View key={idx} style={styles.billAllocContainer}>
+          <View style={styles.billAllocRow}>
+            <TextInput
+              style={[styles.input, styles.billAllocInput]}
+              placeholder="Bill ID"
+              keyboardType="numeric"
+              value={alloc.bill_id}
+              onChangeText={(val) => updateBillAllocation(idx, "bill_id", val)}
+              editable={!submitting}
+            />
+            <TextInput
+              style={[styles.input, styles.billAllocInput]}
+              placeholder="Amount (₹)"
+              keyboardType="numeric"
+              value={alloc.amount}
+              onChangeText={(val) => updateBillAllocation(idx, "amount", val)}
+              editable={!submitting}
+            />
+            {billAllocations.length > 1 && (
+              <TouchableOpacity 
+                style={styles.removeButton}
+                onPress={() => removeBillAllocation(idx)}
+                disabled={submitting}
+              >
+                <Text style={styles.removeButtonText}>×</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       ))}
-      <TouchableOpacity style={styles.addButton} onPress={addAnotherPayment}>
-        <Text style={styles.addButtonText}>+ Add Another Payment</Text>
+      
+      <TouchableOpacity 
+        style={[styles.addButton, submitting && styles.disabledButton]} 
+        onPress={addAnotherPayment}
+        disabled={submitting}
+      >
+        <Text style={styles.addButtonText}>+ Add Another Bill</Text>
       </TouchableOpacity>
 
       {/* Comments */}
-      <Text style={styles.label}>Comments</Text>
+      <Text style={styles.label}>Comments (Optional)</Text>
       <TextInput
         style={[styles.input, { height: 80, textAlignVertical: "top" }]}
         multiline
-        placeholder="Enter comments"
+        placeholder="Enter any additional comments"
         value={comments}
         onChangeText={setComments}
+        editable={!submitting}
       />
 
+      {/* Location Status */}
+      <View style={styles.locationStatus}>
+        <Text style={styles.locationLabel}>Location Status: </Text>
+        <Text style={[styles.locationText, location ? styles.locationSuccess : styles.locationError]}>
+          {location ? "✓ Verified" : "⚠ Required"}
+        </Text>
+      </View>
+
       {/* Submit Button */}
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-        <Text style={styles.submitButtonText}>Submit Payment</Text>
+      <TouchableOpacity 
+        style={[styles.submitButton, submitting && styles.disabledButton]} 
+        onPress={submitPayment}
+        disabled={submitting}
+      >
+        {submitting ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.submitButtonText}>Submit Payment</Text>
+        )}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -189,6 +409,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#184977",
     marginBottom: 20
+  },
+  infoBox: {
+    backgroundColor: "#e6fbfa",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#b2d9e8",
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#184977",
+    fontWeight: "600",
   },
   label: {
     fontSize: 15,
@@ -211,12 +444,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 3,
   },
-  noBgInput: {
-    backgroundColor: "transparent",
-    shadowColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#b2d9e8",
-  },
   pickerContainer: {
     borderWidth: 1,
     borderColor: "#b2d9e8",
@@ -231,13 +458,35 @@ const styles = StyleSheet.create({
   datePicker: {
     justifyContent: "center"
   },
+  dateText: {
+    color: "#184977",
+    fontWeight: "600",
+  },
+  billAllocContainer: {
+    marginBottom: 8,
+  },
   billAllocRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
+    alignItems: "center",
+    marginBottom: 8,
   },
   billAllocInput: {
-    width: "48%",
+    flex: 1,
+    marginRight: 8,
+    marginBottom: 0,
+  },
+  removeButton: {
+    backgroundColor: "#ff4444",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  removeButtonText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
   },
   addButton: {
     backgroundColor: "#1f75fe",
@@ -251,15 +500,44 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 16,
   },
+  locationStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  locationLabel: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "600",
+  },
+  locationText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  locationSuccess: {
+    color: "#209653",
+  },
+  locationError: {
+    color: "#d73838",
+  },
   submitButton: {
     backgroundColor: "#2266f1",
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
+    marginTop: 10,
   },
   submitButtonText: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
-  }
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
 });

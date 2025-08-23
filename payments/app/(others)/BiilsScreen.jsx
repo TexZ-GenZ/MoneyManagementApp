@@ -149,7 +149,8 @@ export default function CompanyBillsList() {
                     due_date: item.due_date, 
                     status: item.status, 
                     amount_paid: item.amount_paid,
-                    bill_amount: item.amount
+                    bill_amount: item.amount, 
+                    bill_id: item.id
                 }
             })}
         >
