@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
-import { useRouter } from "expo-router";
-import { StorageService } from "../../src/services/storageService";
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { StorageService } from '../../src/services/storageService';
+import Screen from '../../src/ui/components/Screen';
+import { Card } from '../../src/ui/components/Card';
+import { tokens } from '../../src/ui/tokens';
 
 // Demo fetch -- replace with real API call
 // const fetchCompanies = async()=>{
@@ -9,192 +12,213 @@ import { StorageService } from "../../src/services/storageService";
 //   console.log(res.json())
 //   return res.json()
 // } 
-export default function CompanyListScreen() {
+export default function ExecutiveCompaniesScreen() {
+  const router = useRouter();
+  const { execId, execUsername } = useLocalSearchParams();
+
+  // Raw data
   const [companies, setCompanies] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
-  const router = useRouter()
+  // UI state
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all'); // all | overdue | zero | active
+  // Removed sorting state per updated UX (simpler filter-only view)
 
-  useEffect(() => {
-    loadCompanies();
-  }, []);
-
-    const fetchAuthHeader = async () => {
-      let header = await StorageService.getAuthHeader();
-      return header ? header : null
-    }
-
-  const loadCompanies = async () => {
-    setLoading(true);
-    try {
-      const header = await fetchAuthHeader();
-      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/executives/5/companies`, {
-        method: "GET",
-        headers: header
-      });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      const data = await response.json();
-      const dataArr = data.items
-
-      console.log(dataArr);
-
-      setCompanies(dataArr);
-      setFiltered(dataArr);
-    } catch (e) {
-      setCompanies([]);
-      setFiltered([]);
-    } finally {
-      setLoading(false);
-    }
+  const fetchAuthHeader = async () => {
+    const header = await StorageService.getAuthHeader();
+    return header || null;
   };
 
-  const handleSearch = (text) => {
-    setSearch(text);
-    if (!text.trim()) {
-      setFiltered(companies);
-      return;
+  const loadCompanies = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true); else setRefreshing(true);
+    setError(null);
+    try {
+      if (!execId) { setCompanies([]); return; }
+      const header = await fetchAuthHeader();
+      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/executives/${execId}/companies`, { method: 'GET', headers: header });
+      if (!response.ok) throw new Error('Failed to load');
+      const data = await response.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      setCompanies(items);
+    } catch (e) {
+      setError(e.message || 'Error');
+      setCompanies([]);
+    } finally {
+      setLoading(false); setRefreshing(false);
     }
-    const lower = text.toLowerCase();
-    const results = companies.filter(
-      (c) =>
+  }, [execId]);
+
+  useEffect(() => { loadCompanies(); }, [loadCompanies]);
+
+  const today = useMemo(() => new Date(), []);
+  const parseDate = (d) => { try { return d ? new Date(d) : null; } catch { return null; } };
+  const isPast = (d) => d && d < new Date(today.toDateString());
+  const formatDate = (d) => {
+    const dt = parseDate(d); if (!dt) return '—';
+    return dt.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
+  };
+  const money = (v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    const num = typeof v === 'number' ? v : parseFloat(v);
+    if (isNaN(num)) return '—';
+    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const filtered = useMemo(() => {
+    const lower = search.trim().toLowerCase();
+    const list = companies.filter(c => {
+      if (!lower) return true;
+      return (
         (c.name && c.name.toLowerCase().includes(lower)) ||
         (c.code && c.code.toLowerCase().includes(lower))
+      );
+    }).filter(c => {
+      const credit = parseDate(c.credit_date);
+      const promise = parseDate(c.promise_date);
+      const overdue = isPast(credit) || isPast(promise);
+      const outbalNum = parseFloat(c.outbal);
+      switch (filter) {
+        case 'overdue': return overdue;
+        case 'zero': return !outbalNum;
+        case 'active': return outbalNum > 0;
+        default: return true;
+      }
+    });
+    // Default ordering: highest outbal first for prioritization
+    return list.sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0));
+  }, [companies, search, filter]);
+
+  // Removed aggregate totals per user request
+
+  const onRefresh = () => loadCompanies(true);
+
+  const renderTag = (label, type) => (
+    <View style={[styles.statusTag, type === 'overdue' && styles.tagOverdue]}>
+      <Text style={styles.statusTagText}>{label}</Text>
+    </View>
+  );
+
+  const renderItem = ({ item }) => {
+    const creditPast = isPast(parseDate(item.credit_date));
+    const promisePast = isPast(parseDate(item.promise_date));
+    const overdue = creditPast || promisePast;
+    return (
+      <TouchableOpacity
+        style={styles.cardTouchable}
+        activeOpacity={0.75}
+        onPress={() => router.push({ pathname: '../(others)/BiilsScreen', params: { name: item.name, code: item.code, outbal: item.outbal } })}
+      >
+        <Card style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.name} numberOfLines={1}>{item.name || '—'}</Text>
+            <Text style={styles.code}>{item.code}</Text>
+          </View>
+          {(item.area || item.location) && (
+            <Text style={styles.area}>{item.area || item.location}</Text>
+          )}
+          <View style={styles.metaRow}>
+            <Text style={styles.meta}><Text style={styles.metaLabel}>Credit </Text>{formatDate(item.credit_date)}</Text>
+            <Text style={styles.meta}><Text style={styles.metaLabel}>Promise </Text>{formatDate(item.promise_date)}</Text>
+          </View>
+          <View style={styles.singleOutbalRow}>
+            <Text style={styles.outbal}>Outstanding Balance: <Text style={styles.outbalValue}>{money(item.outbal)}</Text></Text>
+          </View>
+          <View style={styles.tagsRow}>
+            {overdue ? renderTag('Overdue', 'overdue') : renderTag('Clear', 'ok')}
+          </View>
+        </Card>
+      </TouchableOpacity>
     );
-    setFiltered(results);
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.5} onPress={() => router.push({
-      pathname: "../(others)/BiilsScreen",
-      params: { name: item.name, code: item.code, amount: item.amount, outbal: item.outbal }
-    })}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.code}>{item.code}</Text>
-      </View>
-       <Text style={styles.value}>{item.area}</Text>
-
-      <Text style={styles.label}>Credit: <Text style={styles.value}>{item.credit_date}</Text></Text>
-
-      <Text style={[styles.label, { marginLeft: 0 }]}>Promise : <Text style={styles.value}>{item.promise_date}</Text></Text>
-      {/* </View> */}
-      <View >
-        <Text style={styles.label}>Outbal: <Text style={[styles.value, { color: "#e26660" }]}>{item.outbal}</Text></Text>
-        <Text style={[styles.label]}>Amount: <Text style={[styles.value]}>{item.amount}</Text></Text>
-      </View>
+  const FilterChip = ({ value, label }) => (
+    <TouchableOpacity onPress={() => setFilter(value)} activeOpacity={0.7} style={[styles.chip, filter === value && styles.chipActive]}>
+      <Text style={[styles.chipText, filter === value && styles.chipTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
 
+  // Removed sort chips per request
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Companies</Text>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search by company name or code"
-        value={search}
-        onChangeText={handleSearch}
-        placeholderTextColor="#abc"
-      />
+    <Screen title={execUsername ? execUsername : 'Executive'} subtitle="Assigned Companies">
+      <View style={styles.searchWrapper}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search companies"
+          value={search}
+          onChangeText={setSearch}
+          placeholderTextColor={tokens.colors.textFaint}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+      </View>
+      <View style={styles.filterWrap}>
+        <FilterChip value="all" label="All" />
+        <FilterChip value="overdue" label="Overdue" />
+        <FilterChip value="active" label=">0 Outbal" />
+        <FilterChip value="zero" label="Zero" />
+      </View>
       {loading ? (
-        <ActivityIndicator size="large" color="#1f75fe" style={{ marginTop: 30 }} />
+        <ActivityIndicator size="large" color={tokens.colors.accent} style={{ marginTop: 32 }} />
+      ) : error ? (
+        <Card style={styles.errorCard}><Text style={styles.errorText}>Failed to load companies. Pull to retry.</Text></Card>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.code}
           renderItem={renderItem}
-          ListEmptyComponent={<Text style={styles.empty}>No companies found.</Text>}
-          contentContainerStyle={{ paddingBottom: 30 }}
+          ListEmptyComponent={<Text style={styles.empty}>No companies match.</Text>}
+          contentContainerStyle={{ paddingBottom: 60 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tokens.colors.accent} />}
         />
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#f8fafd",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#102943",
-    marginBottom: 12,
-  },
+  searchWrapper: { marginBottom: 12 },
   searchInput: {
-    backgroundColor: "#e6fbfa",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-    fontSize: 16,
-    color: "#1c4064",
-    borderWidth: 1,
-    borderColor: "#d0e0e0",
-    fontWeight: "500",
-    shadowColor: "#bae4ec",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 1,
-  },
-  card: {
-    backgroundColor: "#fff",
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
-    shadowColor: "#bae4ec",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 9,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 5,
-  },
-  name: {
-    fontSize: 18,
-    fontWeight: "500",
-    color: "#000",
-    flex: 1,
-    flexWrap: "wrap",
-  },
-  code: {
-    fontSize: 14,
-    color: "#000",
-    fontWeight: "400",
-    marginLeft: 8,
-    alignSelf: "center",
-  },
-  row: {
-    flexDirection: "row",
-    marginTop: 3,
-    marginBottom: 1,
-    alignItems: "center"
-  },
-  label: {
-    fontSize: 14,
-    color: "rgba(0,0,0,0.6)",
-    fontWeight: "400",
-    marginTop: 4,
-  },
-  value: {
-    fontWeight: "400",
-    color: "#000",
-    fontSize: 14,
-  },
-  empty: {
-    color: "#8e99b6",
-    textAlign: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     fontSize: 16,
-    padding: 24,
-  }
+    color: tokens.colors.text,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  filterWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  chip: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 22, paddingVertical: 6, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  chipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
+  chipText: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 },
+  chipTextActive: { color: '#000' },
+  sortChip: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 22, paddingVertical: 6, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  sortChipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
+  sortChipText: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 },
+  sortChipTextActive: { color: '#000' },
+  cardTouchable: { marginBottom: 14 },
+  card: { paddingVertical: 16, paddingHorizontal: 16 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  name: { fontSize: 15, fontWeight: '600', color: tokens.colors.text, flex: 1, paddingRight: 8 },
+  code: { fontSize: 13, color: tokens.colors.textDim, fontWeight: '500' },
+  area: { fontSize: 11, color: tokens.colors.textDim, marginBottom: 6 },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  meta: { fontSize: 12, color: tokens.colors.textDim },
+  metaLabel: { color: tokens.colors.text, fontWeight: '600' },
+  singleOutbalRow: { marginTop: 2 },
+  outbal: { fontSize: 12, color: tokens.colors.textDim },
+  outbalValue: { color: tokens.colors.danger, fontWeight: '700' },
+  tagsRow: { flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' },
+  statusTag: { backgroundColor: 'rgba(255,255,255,0.10)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 14 },
+  tagOverdue: { backgroundColor: tokens.colors.danger },
+  statusTagText: { fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.6 },
+  empty: { color: tokens.colors.textDim, textAlign: 'center', fontSize: 14, padding: 24 },
+  errorCard: { padding: 16, marginTop: 24 },
+  errorText: { color: tokens.colors.danger, fontSize: 14, textAlign: 'center' }
 });

@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { StorageService } from "../../src/services/storageService";
 
-const API_BASE_URL = 'https://moneymanagementapp-production.up.railway.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
 
 export default function ExecutiveDetailsScreen() {
   const { execId, execMobile, execUsername } = useLocalSearchParams();
@@ -25,6 +25,7 @@ export default function ExecutiveDetailsScreen() {
   const [fetchingCompany, setFetchingCompany] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [assigningCompany, setAssigningCompany] = useState(false);
+  const [role, setRole] = useState(null); // decoded role for permission logic
 
   const fetchAuthHeader = async () => {
     let header = await StorageService.getAuthHeader();
@@ -33,8 +34,22 @@ export default function ExecutiveDetailsScreen() {
 
 
   useEffect(() => {
+    decodeRole();
     fetchAssignedCompanies();
   }, []);
+
+  const decodeRole = async () => {
+    try {
+      const tok = await StorageService.getToken();
+      if (!tok?.access_token) return;
+      const parts = tok.access_token.split('.');
+      if (parts.length < 2) return;
+      const payloadJson = JSON.parse(Buffer.from(parts[1].replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString('utf8'));
+      setRole(payloadJson.role || payloadJson.roles || payloadJson['https://role'] || null);
+    } catch (e) {
+      setRole(null);
+    }
+  };
 
   useEffect(() => {
     const delayedFetch = setTimeout(() => {
@@ -54,7 +69,7 @@ export default function ExecutiveDetailsScreen() {
     try {
       setLoading(true);
       const header = await fetchAuthHeader();
-      
+
       const response = await fetch(`${API_BASE_URL}/executives/${execId}/companies`, {
         method: 'GET',
         headers: header,
@@ -109,6 +124,7 @@ export default function ExecutiveDetailsScreen() {
   };
 
   const handleAssign = async () => {
+    if (role === 'accountant') return; // safeguard
     if (!companyDetails || !execId) return;
 
     try {
@@ -147,6 +163,7 @@ export default function ExecutiveDetailsScreen() {
   };
 
   const handleUnassign = async (company) => {
+    if (role === 'accountant') return; // read-only for accountants
     Alert.alert(
       "Confirm Unassign",
       `Are you sure you want to unassign ${company.name} from ${execUsername}?`,
@@ -158,7 +175,7 @@ export default function ExecutiveDetailsScreen() {
           onPress: async () => {
             try {
               const header = await fetchAuthHeader();
-              
+
 
               const response = await fetch(`${API_BASE_URL}/admin/executives/${execId}/assign/${company.code}`, {
                 method: 'DELETE',
@@ -193,12 +210,14 @@ export default function ExecutiveDetailsScreen() {
         <Text style={styles.companyName}>{item.name || item.company_name}</Text>
         <Text style={styles.companyCode}>{item.code || item.company_code}</Text>
       </View>
-      <TouchableOpacity
-        style={styles.unassignButton}
-        onPress={() => handleUnassign(item)}
-      >
-        <Text style={styles.unassignButtonText}>Unassign</Text>
-      </TouchableOpacity>
+      {role !== 'accountant' && (
+        <TouchableOpacity
+          style={styles.unassignButton}
+          onPress={() => handleUnassign(item)}
+        >
+          <Text style={styles.unassignButtonText}>Unassign</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -212,7 +231,8 @@ export default function ExecutiveDetailsScreen() {
         <Text style={styles.infoId}>ID: {execId}</Text>
       </View>
 
-      {/* Assign Company Section */}
+      {/* Assign Company Section (hidden for accountants) */}
+      {role !== 'accountant' && (
       <View style={styles.assignSection}>
         <Text style={styles.sectionTitle}>Assign New Company</Text>
 
@@ -258,7 +278,8 @@ export default function ExecutiveDetailsScreen() {
             <Text style={styles.notFoundText}>Company not found</Text>
           </View>
         )}
-      </View>
+  </View>
+  )}
 
       {/* Current Companies */}
       <View style={styles.companiesSection}>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, View, StyleSheet } from 'react-native';
 
 export interface TabBarIconProps {
   name: React.ComponentProps<typeof Ionicons>['name'];
@@ -10,17 +10,17 @@ export interface TabBarIconProps {
 }
 
 export function TabBarIcon({ name, color, style, onPress }: TabBarIconProps) {
-  const IconComponent = (
-    <Ionicons name={name} size={28} color={color} style={style} />
-  );
-
+  const inner = <Ionicons name={name} size={26} color={color} />;
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} style={style}>
-        <Ionicons name={name} size={28} color={color} />
+      <TouchableOpacity onPress={onPress} style={[styles.wrap, style]} activeOpacity={0.7}>
+        {inner}
       </TouchableOpacity>
     );
   }
-
-  return IconComponent;
+  return <View style={[styles.wrap, style]}>{inner}</View>;
 }
+
+const styles = StyleSheet.create({
+  wrap: { alignItems: 'center', justifyContent: 'center', width: 34, height: 34 },
+});

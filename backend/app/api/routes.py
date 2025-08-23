@@ -14,6 +14,9 @@ from app.schemas.company import (
     CompanyUpdateCredit,
     CompanyUpdatePromise,
     CompanyDashboard,
+    CompanyAssignmentList,
+    AssignmentBatchIn,
+    UnassignBatchIn,
 )
 from app.schemas.bill import BillList, BillOut
 from app.schemas.payment import (
@@ -655,7 +658,8 @@ def unassign_company(
 # Executive: get my companies or by id
 @router.get(
     "/executives/{executive_id}/companies",
-    dependencies=[Depends(require_roles("admin", "executive"))],
+    # Allow accountants read access to executive company assignments
+    dependencies=[Depends(require_roles("admin", "executive", "accountant"))],
 )
 def get_executive_companies(
     executive_id: int,
@@ -709,14 +713,17 @@ def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid role")
         q = q.filter(User.role == r)
-    items = [UserOut(
-        id=u.id,
-        username=u.username,
-        role=u.role,
-        area=u.area,
-        mobile=u.mobile,
-        is_active=u.is_active,
-    ) for u in q.all()]
+    items = [
+        UserOut(
+            id=u.id,
+            username=u.username,
+            role=u.role,
+            area=u.area,
+            mobile=u.mobile,
+            is_active=u.is_active,
+        )
+        for u in q.all()
+    ]
     return UserList(items=items, total=len(items))
 
 
@@ -746,8 +753,21 @@ def admin_update_username(user_id: int, username: str, db: Session = Depends(get
 
 
 # Admin: deactivate user
-@router.patch("/admin/users/{user_id}/deactivate", response_model=UserOut, dependencies=[Depends(require_roles("admin"))])
-def admin_deactivate_user(user_id: int, db: Session = Depends(get_db)):
+@router.patch(
+    "/admin/users/{user_id}/deactivate",
+    response_model=UserOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_deactivate_user(
+    user_id: int,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Safety: never allow an admin to deactivate themselves to avoid lockout.
+    if current.id == user_id and current.role == Role.admin:
+        raise HTTPException(
+            status_code=400, detail="Cannot deactivate your own admin account"
+        )
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -763,7 +783,12 @@ def admin_deactivate_user(user_id: int, db: Session = Depends(get_db)):
         is_active=u.is_active,
     )
 
-@router.patch("/admin/users/{user_id}/activate", response_model=UserOut, dependencies=[Depends(require_roles("admin"))])
+
+@router.patch(
+    "/admin/users/{user_id}/activate",
+    response_model=UserOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
 def admin_activate_user(user_id: int, db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if not u:
@@ -1071,3 +1096,101 @@ def admin_recalc_all(db: Session = Depends(get_db)):
         recalc_company_totals(db, c.code)
         count += 1
     return {"recalculated": count}
+
+
+# === Executive / Company assignment management (admin only) ===
+
+
+@router.get(
+    "/admin/assignments/companies",
+    response_model=CompanyAssignmentList,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def list_company_assignments(
+    db: Session = Depends(get_db), unassigned_only: bool = Query(False)
+):
+    assignments = {a.company_code: a for a in db.query(ExecAssignment).all()}
+    # Include inactive executives so we can show placeholder instead of appearing unassigned
+    exec_users = {u.id: u for u in db.query(User).filter(User.role == Role.executive)}
+    q = db.query(Company).filter(Company.is_archived == False)
+    items = []
+    for comp in q.all():
+        a = assignments.get(comp.code)
+        if unassigned_only and a:
+            continue
+        exec_user = exec_users.get(a.executive_id) if a else None
+        items.append(
+            {
+                "code": comp.code,
+                "name": comp.name,
+                # If there's an assignment row but user missing (deleted), preserve id; if user inactive mark active False
+                "assigned_executive_id": (
+                    exec_user.id if exec_user else (a.executive_id if a else None)
+                ),
+                "assigned_executive_username": (
+                    exec_user.username if exec_user else None
+                ),
+                "assigned_executive_active": (
+                    exec_user.is_active if exec_user else None
+                ),
+            }
+        )
+    return CompanyAssignmentList(items=items, total=len(items))
+
+
+# Debug: raw assignment rows (admin only)
+@router.get(
+    "/admin/assignments/raw",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def raw_assignments(db: Session = Depends(get_db)):
+    rows = db.query(ExecAssignment).all()
+    return {
+        "count": len(rows),
+        "rows": [
+            {"company_code": r.company_code, "executive_id": r.executive_id}
+            for r in rows
+        ],
+    }
+
+
+@router.post(
+    "/admin/assignments/batch",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def batch_assign(payload: AssignmentBatchIn, db: Session = Depends(get_db)):
+    exec_user = db.get(User, payload.executive_id)
+    if not exec_user or exec_user.role != Role.executive:
+        raise HTTPException(status_code=400, detail="invalid executive_id")
+    updated: List[str] = []
+    for code in payload.company_codes:
+        comp = db.get(Company, code)
+        if not comp or comp.is_archived:
+            continue
+        existing = (
+            db.query(ExecAssignment).filter(ExecAssignment.company_code == code).first()
+        )
+        if existing:
+            existing.executive_id = payload.executive_id
+        else:
+            db.add(ExecAssignment(company_code=code, executive_id=payload.executive_id))
+        updated.append(code)
+    db.commit()
+    return {"assigned": updated, "executive_id": payload.executive_id}
+
+
+@router.post(
+    "/admin/assignments/unassign",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def batch_unassign(payload: UnassignBatchIn, db: Session = Depends(get_db)):
+    removed: List[str] = []
+    for code in payload.company_codes:
+        existing = (
+            db.query(ExecAssignment).filter(ExecAssignment.company_code == code).first()
+        )
+        if existing:
+            db.delete(existing)
+            removed.append(code)
+    db.commit()
+    return {"unassigned": removed}

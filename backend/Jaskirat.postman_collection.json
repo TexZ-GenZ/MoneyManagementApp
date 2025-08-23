@@ -1155,25 +1155,52 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
         ],
         "url": {
           "raw": "http://localhost:8000/admin/recalc-all",
           "protocol": "http",
-          "host": ["localhost"],
+          "host": [
+            "localhost"
+          ],
           "port": "8000",
-          "path": ["admin","recalc-all"]
+          "path": [
+            "admin",
+            "recalc-all"
+          ]
         }
       },
       "event": [
-        {"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('status is 200', function () { pm.response.to.have.status(200); });"]}}
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
       ]
     },
     {
       "name": "Info - Upload Notes",
       "request": {
         "method": "GET",
-        "url": {"raw": "http://localhost:8000/auth/me","protocol": "http","host":["localhost"],"port":"8000","path":["auth","me"]}
+        "url": {
+          "raw": "http://localhost:8000/auth/me",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "auth",
+            "me"
+          ]
+        }
       },
       "description": "Documentation: Use /uploads/master and /uploads/transactions with accountant token. Max file size 5MB. Returns metrics or error if lock in place. Executives auto-created per AREA (inactive)."
     },
@@ -1546,58 +1573,58 @@
         }
       }
     },
-      {
-        "name": "Admin - Activate User",
-        "request": {
-          "method": "PATCH",
-          "header": [
-            {
-              "key": "Authorization",
-              "value": "Bearer {{admin_token}}"
-            }
-          ],
-          "url": {
-            "raw": "http://localhost:8000/admin/users/{{exec_id}}/activate",
-            "protocol": "http",
-            "host": [
-              "localhost"
-            ],
-            "port": "8000",
-            "path": [
-              "admin",
-              "users",
-              "{{exec_id}}",
-              "activate"
-            ]
+    {
+      "name": "Admin - Activate User",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
           }
-        }
-      },
-      {
-        "name": "Admin - Deactivate User (PATCH)",
-        "request": {
-          "method": "PATCH",
-          "header": [
-            {
-              "key": "Authorization",
-              "value": "Bearer {{admin_token}}"
-            }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users/{{exec_id}}/activate",
+          "protocol": "http",
+          "host": [
+            "localhost"
           ],
-          "url": {
-            "raw": "http://localhost:8000/admin/users/{{exec_id}}/deactivate",
-            "protocol": "http",
-            "host": [
-              "localhost"
-            ],
-            "port": "8000",
-            "path": [
-              "admin",
-              "users",
-              "{{exec_id}}",
-              "deactivate"
-            ]
-          }
+          "port": "8000",
+          "path": [
+            "admin",
+            "users",
+            "{{exec_id}}",
+            "activate"
+          ]
         }
-      },
+      }
+    },
+    {
+      "name": "Admin - Deactivate User (PATCH)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{admin_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:8000/admin/users/{{exec_id}}/deactivate",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8000",
+          "path": [
+            "admin",
+            "users",
+            "{{exec_id}}",
+            "deactivate"
+          ]
+        }
+      }
+    },
     {
       "name": "Notifications - Pending (All Types)",
       "request": {

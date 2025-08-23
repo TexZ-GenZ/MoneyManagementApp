@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  ScrollView, 
-  Alert, 
-  ActivityIndicator 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
@@ -15,12 +15,12 @@ import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { Picker } from '@react-native-picker/picker';
 import { StorageService } from "../../src/services/storageService";
 
-const API_BASE_URL = 'https://moneymanagementapp-production.up.railway.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
 const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer"];
 
 // Simple UUID v4 generator
 const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
     const v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -69,13 +69,13 @@ export default function CollectPaymentScreen() {
       if (status !== "granted") {
         setLocationError(true);
         Alert.alert(
-          "Location Permission", 
+          "Location Permission",
           "Location permission is required to verify your position during payment collection.",
           [{ text: "OK" }]
         );
         return;
       }
-      
+
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
         timeout: 10000,
@@ -102,7 +102,7 @@ export default function CollectPaymentScreen() {
     if (billAllocations.length > 1) {
       const updated = billAllocations.filter((_, idx) => idx !== index);
       setBillAllocations(updated);
-      
+
       // Recalculate total amount
       const totalAmount = updated.reduce((sum, alloc) => {
         const amount = parseFloat(alloc.amount) || 0;
@@ -145,10 +145,10 @@ export default function CollectPaymentScreen() {
     // Check if total allocation amounts match collected amount
     const totalAllocated = billAllocations.reduce((sum, alloc) => sum + Number(alloc.amount || 0), 0);
     const collectedAmount = Number(amountCollected);
-    
+
     if (Math.abs(totalAllocated - collectedAmount) > 0.01) { // Allow small floating point differences
       Alert.alert(
-        "Amount Mismatch", 
+        "Amount Mismatch",
         `Total allocated amount (₹${totalAllocated.toFixed(2)}) doesn't match collected amount (₹${collectedAmount.toFixed(2)}).`
       );
       return false;
@@ -175,10 +175,10 @@ export default function CollectPaymentScreen() {
     setSubmitting(true);
 
     try {
-      const token =  await StorageService.getToken();
+      const token = await StorageService.getToken();
       console.log(token.access_token)
       const idempotencyKey = generateUUID();
-      
+
       const payload = {
         company_code,
         collected_at: collectedAt.toISOString(),
@@ -221,11 +221,11 @@ export default function CollectPaymentScreen() {
       console.log("Payment submitted successfully:", result);
 
       Alert.alert(
-        "Success", 
+        "Success",
         "Payment submitted successfully!",
         [
-          { 
-            text: "OK", 
+          {
+            text: "OK",
             onPress: () => {
               router.back();
             }
@@ -236,7 +236,7 @@ export default function CollectPaymentScreen() {
     } catch (error) {
       console.error("Error submitting payment:", error);
       Alert.alert(
-        "Submission Failed", 
+        "Submission Failed",
         error.message || "Failed to submit payment. Please check your connection and try again.",
         [
           { text: "Retry", onPress: submitPayment },
@@ -262,7 +262,7 @@ export default function CollectPaymentScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.title}>Collect Payment</Text>
-      
+
       {company_code && (
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>Company: {company_code}</Text>
@@ -313,8 +313,8 @@ export default function CollectPaymentScreen() {
 
       {/* Next Promise Date */}
       <Text style={styles.label}>Next Promise Date (Optional)</Text>
-      <TouchableOpacity 
-        onPress={showNextPromiseDatePicker} 
+      <TouchableOpacity
+        onPress={showNextPromiseDatePicker}
         style={[styles.input, styles.datePicker]}
         disabled={submitting}
       >
@@ -347,7 +347,7 @@ export default function CollectPaymentScreen() {
               editable={!submitting}
             />
             {billAllocations.length > 1 && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.removeButton}
                 onPress={() => removeBillAllocation(idx)}
                 disabled={submitting}
@@ -358,9 +358,9 @@ export default function CollectPaymentScreen() {
           </View>
         </View>
       ))}
-      
-      <TouchableOpacity 
-        style={[styles.addButton, submitting && styles.disabledButton]} 
+
+      <TouchableOpacity
+        style={[styles.addButton, submitting && styles.disabledButton]}
         onPress={addAnotherPayment}
         disabled={submitting}
       >
@@ -387,8 +387,8 @@ export default function CollectPaymentScreen() {
       </View>
 
       {/* Submit Button */}
-      <TouchableOpacity 
-        style={[styles.submitButton, submitting && styles.disabledButton]} 
+      <TouchableOpacity
+        style={[styles.submitButton, submitting && styles.disabledButton]}
         onPress={submitPayment}
         disabled={submitting}
       >

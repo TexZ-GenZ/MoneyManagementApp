@@ -218,7 +218,10 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                         continue
                     if code in seen_codes:
                         duplicate_codes += 1
-                        log.warning("duplicate company code encountered in master import: %s", code)
+                        log.warning(
+                            "duplicate company code encountered in master import: %s",
+                            code,
+                        )
                         continue
                     seen_codes.add(code)
                     name = str(r.get("account_n") or r.get("name") or code).strip()
@@ -240,20 +243,33 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                     location = ", ".join([p for p in addr_parts if p]) or None
                     comp = db.get(Company, code)
                     if not comp:
-                        db.add(Company(code=code, name=name, area=area, location=location, is_archived=False))
+                        db.add(
+                            Company(
+                                code=code,
+                                name=name,
+                                area=area,
+                                location=location,
+                                is_archived=False,
+                            )
+                        )
                         inserted += 1
                         if location:
                             companies_with_location += 1
                     else:
                         changed = False
                         if comp.name != name:
-                            comp.name = name; changed = True
+                            comp.name = name
+                            changed = True
                         if comp.area != area:
-                            comp.area = area; changed = True
+                            comp.area = area
+                            changed = True
                         if location and comp.location != location:
-                            comp.location = location; changed = True; companies_with_location += 1
+                            comp.location = location
+                            changed = True
+                            companies_with_location += 1
                         if comp.is_archived:
-                            comp.is_archived = False; changed = True
+                            comp.is_archived = False
+                            changed = True
                         if changed:
                             updated += 1
                         else:
@@ -261,11 +277,16 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                     if (inserted + updated) % CHUNK_SIZE == 0:
                         db.flush()
                 if seen_codes:
-                    db.query(Company).filter(~Company.code.in_(seen_codes)).update({Company.is_archived: True}, synchronize_session=False)
+                    db.query(Company).filter(~Company.code.in_(seen_codes)).update(
+                        {Company.is_archived: True}, synchronize_session=False
+                    )
                 db.flush()
                 created_counter = {"new_executives_created": 0}
                 area_user_cache: dict[str, User] = {}
-                existing_assignments = { (a.company_code): a for a in db.execute(select(ExecAssignment)).scalars().all() }
+                existing_assignments = {
+                    (a.company_code): a
+                    for a in db.execute(select(ExecAssignment)).scalars().all()
+                }
                 for code in seen_codes:
                     comp = db.get(Company, code)
                     if not comp:
@@ -273,19 +294,30 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                     if comp.area:
                         user = area_user_cache.get(comp.area)
                         if not user:
-                            user = _get_or_create_executive(db, comp.area, created_counter)
+                            user = _get_or_create_executive(
+                                db, comp.area, created_counter
+                            )
                             area_user_cache[comp.area] = user
-                        if (code not in existing_assignments or existing_assignments[code].executive_id != user.id):
+                        if (
+                            code not in existing_assignments
+                            or existing_assignments[code].executive_id != user.id
+                        ):
                             if code in existing_assignments:
-                                db.delete(existing_assignments[code]); assignments_removed += 1
-                            db.add(ExecAssignment(executive_id=user.id, company_code=code)); assignments_added += 1
+                                db.delete(existing_assignments[code])
+                                assignments_removed += 1
+                            db.add(
+                                ExecAssignment(executive_id=user.id, company_code=code)
+                            )
+                            assignments_added += 1
                     else:
                         if code in existing_assignments:
-                            db.delete(existing_assignments[code]); assignments_removed += 1
+                            db.delete(existing_assignments[code])
+                            assignments_removed += 1
                 new_executives_created = created_counter["new_executives_created"]
             db.commit()
         except Exception:
-            db.rollback(); raise
+            db.rollback()
+            raise
         duration = time.time() - started
         archived = max(0, existing_count - len(seen_codes))
         metrics = {
@@ -393,43 +425,78 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                         debit = 0
                     raw_amount = Decimal(debit)
                     if raw_amount == 0:
-                        zero_debit_skipped += 1; continue
+                        zero_debit_skipped += 1
+                        continue
                     if raw_amount < 0:
                         negative_debit += 1
                     if not due_date:
                         from datetime import timedelta
                         from app.core.config import settings
+
                         if bill_date:
-                            due_date = bill_date + timedelta(days=settings.DEFAULT_CREDIT_TERM_DAYS)
+                            due_date = bill_date + timedelta(
+                                days=settings.DEFAULT_CREDIT_TERM_DAYS
+                            )
                             if raw_amount > 0:
                                 fallback_due_assigned += 1
                     new_amount = raw_amount.quantize(Decimal("0.00"))
                     if not db.get(Company, code):
                         db.add(Company(code=code, name=code, area=None))
-                    bill = db.query(Bill).filter(Bill.company_code == code, Bill.bill_number == bill_no).one_or_none()
+                    bill = (
+                        db.query(Bill)
+                        .filter(Bill.company_code == code, Bill.bill_number == bill_no)
+                        .one_or_none()
+                    )
                     if not bill:
-                        bill = Bill(bill_number=bill_no, company_code=code, bill_date=bill_date, due_date=due_date, amount=new_amount, amount_paid=Decimal(0), status=BillStatus.pending, is_archived=False)
-                        db.add(bill); inserted += 1
+                        bill = Bill(
+                            bill_number=bill_no,
+                            company_code=code,
+                            bill_date=bill_date,
+                            due_date=due_date,
+                            amount=new_amount,
+                            amount_paid=Decimal(0),
+                            status=BillStatus.pending,
+                            is_archived=False,
+                        )
+                        db.add(bill)
+                        inserted += 1
                     else:
                         changed = False
-                        if bill.company_code != code: bill.company_code = code; changed = True
-                        if bill.bill_date != bill_date: bill.bill_date = bill_date; changed = True
-                        if bill.due_date != due_date: bill.due_date = due_date; changed = True
-                        if bill.amount != new_amount: bill.amount = new_amount; changed = True
-                        if bill.is_archived: bill.is_archived = False; changed = True
-                        if changed: updated += 1
-                        else: skipped += 1
-                    if (inserted + updated) % CHUNK_SIZE == 0: db.flush()
+                        if bill.company_code != code:
+                            bill.company_code = code
+                            changed = True
+                        if bill.bill_date != bill_date:
+                            bill.bill_date = bill_date
+                            changed = True
+                        if bill.due_date != due_date:
+                            bill.due_date = due_date
+                            changed = True
+                        if bill.amount != new_amount:
+                            bill.amount = new_amount
+                            changed = True
+                        if bill.is_archived:
+                            bill.is_archived = False
+                            changed = True
+                        if changed:
+                            updated += 1
+                        else:
+                            skipped += 1
+                    if (inserted + updated) % CHUNK_SIZE == 0:
+                        db.flush()
                 archived_count = 0
                 if seen_numbers:
-                    existing_bills = db.query(Bill).filter(Bill.is_archived == False).all()
+                    existing_bills = (
+                        db.query(Bill).filter(Bill.is_archived == False).all()
+                    )
                     for b in existing_bills:
                         key = f"{b.company_code}::{b.bill_number}"
                         if key not in seen_numbers:
-                            b.is_archived = True; archived_count += 1
+                            b.is_archived = True
+                            archived_count += 1
             db.commit()
         except Exception:
-            db.rollback(); raise
+            db.rollback()
+            raise
         for code in touched_codes:
             recalc_company_totals(db, code)
         duration = time.time() - started

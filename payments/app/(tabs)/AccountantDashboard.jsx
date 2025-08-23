@@ -1,182 +1,129 @@
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView, FlatList } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import GridBackground from '../(others)/GridBGComponent';
 import { useEffect, useState } from 'react';
 import { StorageService } from '../../src/services/storageService';
-
-const { width } = Dimensions.get('window');
+import Screen from '../../src/ui/components/Screen';
+import Card from '../../src/ui/components/Card';
+import { tokens } from '../../src/ui/tokens';
 
 export default function AccountantDashboard() {
   const [recentPayments, setRecentPayments] = useState([]);
+  const [loadingRecent, setLoadingRecent] = useState(true);
   const router = useRouter();
 
-  const buttons = [
-    { label: 'Approve', icon: 'checkmark', action: () => { router.push('../(others)/NotifyAccountant') } },
-    { label: 'Companies', icon: 'business-outline', action: () => { router.push('../CompanyList/AllCompanies') } },
-    // { label: 'Executives', icon: 'person-outline', action: () => { router.push('../(others)/ExecutiveList') } },
-    { label: 'Upload', icon: 'add-circle-outline', action: () => { router.push('../(others)/Upload') } }
+  const navItems = [
+    { label: 'Approve', icon: 'checkmark', route: '../(others)/NotifyAccountant' },
+    { label: 'Companies', icon: 'business-outline', route: '../CompanyList/AllCompanies' },
+    { label: 'Executives', icon: 'people-outline', route: '../(others)/ExecutiveList' },
+    { label: 'Upload', icon: 'add-circle-outline', route: '../(others)/Upload' },
   ];
 
-
-  // fetch payments with company names
   useEffect(() => {
+    let isMounted = true;
     const fetchPayments = async () => {
       try {
         const token = await StorageService.getToken();
-        const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=5`, {
+        setLoadingRecent(true);
+        const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=6`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token.access_token}`,
           },
         });
-        const {items} = await response.json();
-
-        if (response.ok && Array.isArray(items)) {
-
-          setRecentPayments(items);
-        }
-
+        const json = await response.json();
+        const items = json?.items || [];
+        if (isMounted && response.ok && Array.isArray(items)) setRecentPayments(items);
       } catch (err) {
-        console.error("Payments fetch error:", err);
+        console.error('Payments fetch error:', err);
+      } finally {
+        isMounted && setLoadingRecent(false);
       }
     };
     fetchPayments();
+    return () => { isMounted = false; };
   }, []);
 
   return (
-    <LinearGradient
-      colors={['#000', '#000']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
-      <GridBackground />
-      <SafeAreaView style={styles.container}>
-        {/* Top Section */}
-        <View style={styles.topBar}>
-          <Text style={styles.heading}>Welcome Back 👋</Text>
-          <Text style={styles.subheading}>Here's your quick access</Text>
-        </View>
-
-        {/* Card Container */}
-        <View style={styles.cardContainer}>
-          <View style={styles.grid}>
-            {buttons.map((btn, index) => (
-              <TouchableOpacity key={index} style={[styles.iconWrapper, { marginTop: 18 }]} onPress={btn.action}>
-                <View style={{ padding: 12, borderRadius: 32, backgroundColor: '#c8f14c' }}>
-                  <Ionicons name={btn.icon} size={28} color="#000" />
-                </View>
-                <Text style={styles.label}>
-                  {btn.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Recent Section */}
-        <View style={{ marginTop: 24 }}>
-          <Text style={styles.recentHeading}>Recent</Text>
+    <Screen title="Accountant" subtitle="Quick access & recent activity">
+      <Card style={styles.navCard}>
+        <FlatList
+          data={navItems}
+          keyExtractor={i => i.label}
+          numColumns={3}
+          columnWrapperStyle={styles.navRow}
+          scrollEnabled={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              style={styles.navItem}
+              onPress={() => router.push(item.route)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.navIconWrap}><Ionicons name={item.icon} size={22} color="#000" /></View>
+              <Text style={styles.navLabel}>{item.label}</Text>
+            </TouchableOpacity>
+          )}
+        />
+      </Card>
+      <View style={styles.sectionSpacer} />
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>Recent Payments</Text>
+        <TouchableOpacity onPress={() => router.push('../(others)/NotifyAccountant')}><Text style={styles.sectionLink}>View All</Text></TouchableOpacity>
+      </View>
+      <Card style={styles.recentCard}>
+        {loadingRecent ? (
+          <View style={styles.loadingWrap}><ActivityIndicator color={tokens.colors.accent} /></View>
+        ) : recentPayments.length === 0 ? (
+          <Text style={styles.emptyText}>No recent pending payments.</Text>
+        ) : (
           <FlatList
             data={recentPayments}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.recentItem} onPress={() => router.push('../(others)/NotifyAccountant')}>
-                <Ionicons name="cash-outline" size={22} color="#c8f14c" />
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.recentTitle}>{item.company_code}</Text>
-                  <Text style={styles.recentSubtitle}>
-                    {item.amount_collected ? `₹${item.amount_collected}` : "No Amount"} • {item.status || "Pending"}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
+            keyExtractor={(item, idx) => idx.toString()}
+            scrollEnabled={false}
+            renderItem={({ item, index }) => {
+              const isLast = index === recentPayments.length - 1;
+              return (
+                <TouchableOpacity
+                  style={[styles.recentRow, isLast && styles.recentRowLast]}
+                  onPress={() => router.push('../(others)/NotifyAccountant')}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.recentIcon}><Ionicons name="cash-outline" size={18} color={tokens.colors.accent} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.recentTitle} numberOfLines={1}>{item.company_code}</Text>
+                    <Text style={styles.recentMeta} numberOfLines={1}>{item.amount_collected ? `₹${item.amount_collected}` : 'No Amount'} • {item.status || 'Pending'}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={tokens.colors.textDim} />
+                </TouchableOpacity>
+              );
+            }}
           />
-        </View>
-
-      </SafeAreaView>
-    </LinearGradient>
+        )}
+      </Card>
+    </Screen>
   );
+
 }
 
 const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 30,
-  },
-  topBar: {
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  heading: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#f9f9f9',
-  },
-  subheading: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 4,
-  },
-  cardContainer: {
-    backgroundColor: '#000',
-    borderRadius: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-  },
-  iconWrapper: {
-    width: (width - 80) / 3,
-    aspectRatio: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  label: {
-    fontSize: 13,
-    color: 'white',
-    marginTop: 8,
-    fontFamily: 'monospace',
-    textAlign: 'center',
-  },
-  recentHeading: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
-    marginBottom: 10,
-    fontFamily: 'Inter',
-    textAlign: 'left',
-  },
-  recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
-  },
-  recentTitle: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  recentSubtitle: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  
+  navCard: { paddingVertical: 20, paddingHorizontal: 8 },
+  navRow: { justifyContent: 'space-between', marginBottom: 16 },
+  navItem: { width: '32%', alignItems: 'center', paddingVertical: 12, borderRadius: 16, backgroundColor: '#111', borderWidth: 1, borderColor: tokens.colors.border },
+  navIconWrap: { backgroundColor: tokens.colors.accent, padding: 12, borderRadius: 28, marginBottom: 6 },
+  navLabel: { color: tokens.colors.text, fontSize: 13, fontWeight: '600', textAlign: 'center', letterSpacing: 0.3 },
+  sectionSpacer: { height: 28 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10 },
+  sectionTitle: { color: tokens.colors.text, fontSize: 17, fontWeight: '700', letterSpacing: 0.3 },
+  sectionLink: { color: tokens.colors.accent, fontSize: 12, fontWeight: '600', paddingVertical: 4, paddingHorizontal: 4 },
+  recentCard: { paddingVertical: 4, paddingHorizontal: 0, overflow: 'hidden' },
+  recentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 18, borderBottomWidth: 1, borderColor: tokens.colors.border },
+  recentRowLast: { borderBottomWidth: 0 },
+  recentIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: tokens.colors.cardAlt, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  recentTitle: { color: tokens.colors.text, fontSize: 14, fontWeight: '600' },
+  recentMeta: { color: tokens.colors.textDim, fontSize: 11, marginTop: 3 },
+  loadingWrap: { paddingVertical: 34 },
+  emptyText: { color: tokens.colors.textDim, fontSize: 12, padding: 18 },
 });

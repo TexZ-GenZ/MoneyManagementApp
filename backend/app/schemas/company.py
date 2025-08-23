@@ -45,3 +45,28 @@ class CompanyDashboard(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CompanyAssignment(BaseModel):
+    code: str
+    name: Optional[str] = None
+    assigned_executive_id: Optional[int] = None
+    assigned_executive_username: Optional[str] = None
+    assigned_executive_active: Optional[bool] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyAssignmentList(BaseModel):
+    items: List[CompanyAssignment]
+    total: int
+
+
+class AssignmentBatchIn(BaseModel):
+    company_codes: List[str]
+    executive_id: int
+
+
+class UnassignBatchIn(BaseModel):
+    company_codes: List[str]

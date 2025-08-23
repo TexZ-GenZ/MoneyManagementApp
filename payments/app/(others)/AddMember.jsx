@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, SafeAreaView, KeyboardAvoidingView } from "react-native";
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, KeyboardAvoidingView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { StorageService } from "../../src/services/storageService";
 import { useRouter } from "expo-router";
-import GridBackground from '../(others)/GridBGComponent';
+import Screen from "../../src/ui/components/Screen";
+import Card from "../../src/ui/components/Card";
+import { tokens } from "../../src/ui/tokens";
 
 export default function AddUserScreen() {
   const [name, setName] = useState("");
@@ -96,23 +97,9 @@ export default function AddUserScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={['#000', '#000']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
-      <GridBackground />
-      <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">
-          {/* Header */}
-          <View style={styles.topBar}>
-            <Text style={styles.title}>Add User ➕</Text>
-            <Text style={styles.subtitle}>Create a new user account</Text>
-          </View>
-
-          {/* Form Card */}
-          <View style={styles.cardContainer}>
+    <Screen title="Add User" subtitle="Create a new user account" scroll>
+      <KeyboardAvoidingView behavior="padding">
+        <Card style={styles.cardContainer}>
             {/* Name Field */}
             <View style={styles.fieldContainer}>
               <Text style={styles.label}>Username</Text>
@@ -181,14 +168,13 @@ export default function AddUserScreen() {
                 </View>
               </View>
             </View>
-          </View>
-
           {/* Submit Button */}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.submitButton, loading && styles.submitButtonDisabled]} 
+            <TouchableOpacity
+              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
               onPress={handleSubmit}
               disabled={loading}
+              activeOpacity={0.85}
             >
               {loading ? (
                 <View style={styles.loadingContent}>
@@ -202,73 +188,41 @@ export default function AddUserScreen() {
               )}
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </Card>
+      </KeyboardAvoidingView>
 
-        {/* Error Modal */}
-        <Modal
-          visible={isModalVisible}
-          animationType="fade"
-          transparent
-          onRequestClose={() => setIsModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Ionicons name="alert-circle" size={48} color="#ff6b6b" />
-                <Text style={styles.modalTitle}>Error</Text>
-              </View>
-              <Text style={styles.modalText}>{error}</Text>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => setIsModalVisible(false)}
-              >
-                <Text style={styles.modalButtonText}>OK</Text>
-              </TouchableOpacity>
+      {/* Error Modal */}
+      <Modal
+        visible={isModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="alert-circle" size={48} color="#ff6b6b" />
+              <Text style={styles.modalTitle}>Error</Text>
             </View>
+            <Text style={styles.modalText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setIsModalVisible(false)}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      </SafeAreaView>
-    </LinearGradient>
+        </View>
+      </Modal>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 30,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  topBar: {
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#f9f9f9',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 4,
-  },
   cardContainer: {
-    backgroundColor: '#000',
-    borderRadius: 20,
     paddingVertical: 24,
     paddingHorizontal: 16,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   fieldContainer: {
     marginBottom: 20,
@@ -323,7 +277,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   submitButton: {
-    backgroundColor: '#c8f14c',
+  backgroundColor: '#c8f14c', /* keep accent to match rest of design */
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 16,

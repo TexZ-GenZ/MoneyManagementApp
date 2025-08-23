@@ -1,177 +1,187 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import GridBackground from '../(others)/GridBGComponent';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { StorageService } from '@/src/services/storageService';
 import { useAppDispatch } from '@/src/store/hooks';
 import { logoutUser } from '@/src/store/authSlice';
 import { useRouter } from 'expo-router';
+import Screen from '@/src/ui/components/Screen';
+import Card from '@/src/ui/components/Card';
+import { tokens } from '@/src/ui/tokens';
+import Constants from 'expo-constants';
 
 type MeResponse = {
   id: string | number;
   username: string;
-  role: string;
+  role: string; // Admin | Accountant | Executive ...
   area?: string;
   mobile?: string;
 };
 
-let mock : MeResponse={
-  id:1,
-  username:"emma",
-  role:"Admin",
-  area:"",
-  mobile:"9876543210"
+type DecodedToken = { exp?: number; iat?: number; [k: string]: any };
+
+
+function decodeJwt(token?: string): DecodedToken | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    // RN may not have atob; attempt Buffer if available
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    let jsonStr = '';
+    if (typeof atob === 'function') {
+      jsonStr = atob(b64);
+    } else if (typeof Buffer !== 'undefined') {
+      jsonStr = Buffer.from(b64, 'base64').toString('utf8');
+    } else {
+      return null;
+    }
+    return JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
 }
 
 export default function ProfileScreen() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [decoded, setDecoded] = useState<DecodedToken | null>(null);
 
-  const router = useRouter()
+  const router = useRouter();
   const dispatch = useAppDispatch();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = await StorageService.getToken();
-        const BASE = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI;
-        const res = await fetch(`${BASE}/auth/me`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token?.access_token}`,
-          },
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.message || 'Failed to fetch profile');
-        setMe(data as MeResponse);
+  const baseUrl = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI || '-';
+  const appVersion = Constants.expoConfig?.version || '1.0.0';
 
-        //setMe(mock)
-      } catch (e: any) {
-        setError(e?.message || 'Something went wrong');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const token = await StorageService.getToken();
+      if (token?.access_token) setDecoded(decodeJwt(token.access_token));
+      const res = await fetch(`${baseUrl}/auth/me`, {
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Failed to fetch profile');
+      setMe(data as MeResponse);
+    } catch (e: any) {
+      setError(e?.message || 'Unable to load profile');
+    } finally {
+      setLoading(false);
+    }
+  }, [baseUrl]);
 
-    const handleLogout = async () => {
-    // Use the centralized logout thunk to clear storage and auth state
+  useEffect(() => { load(); }, [load]);
+
+  const handleLogout = () => {
     dispatch(logoutUser());
     router.replace('/login');
   };
 
+  const now = Date.now();
+  const expMs = decoded?.exp ? decoded.exp * 1000 : undefined;
+  const expiresInMin = expMs ? Math.max(0, Math.round((expMs - now) / 60000)) : undefined;
+
+
   return (
-    <LinearGradient colors={['#000', '#000']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={{ flex: 1 }}>
-      <GridBackground />
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>My Profile</Text>
-
-        {loading && (
-          <View style={styles.center}>
-            <ActivityIndicator />
-            <Text style={styles.muted}>Loading...</Text>
-          </View>
-        )}
-
-        {error && (
-          <View style={styles.center}>
-            <Text style={styles.error}>{error}</Text>
-          </View>
-        )}
-
-        {me && (
-          <View style={styles.card}>
-            <Row label="ID" value={String(me.id)} />
-            <Row label="Username" value={me.username} />
+  <Screen title="My Profile" subtitle="" contentStyle={undefined}>
+      {loading && (
+        <View style={styles.center}> 
+          <ActivityIndicator color={tokens.colors.accent} />
+          <Text style={styles.muted}>Loading profile...</Text>
+        </View>
+      )}
+      {!loading && error && (
+        <Card style={{ marginTop: 12 }}>
+          <Text style={styles.error}>{error}</Text>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: tokens.colors.accent, marginTop: 14 }]} onPress={load}>
+            <Text style={styles.actionBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </Card>
+      )}
+      {!loading && me && (
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <Card style={styles.cardSection}>
+            <View style={styles.headerRow}>
+              <Text style={styles.name}>{me.username}</Text>
+              <RoleBadge role={me.role} />
+            </View>
+            <Text style={styles.subMeta}>User ID: {me.id}</Text>
+          </Card>
+          <Card style={styles.cardSection}>
+            <SectionTitle text="Account" />
             <Row label="Role" value={me.role} />
             <Row label="Area" value={me.area || '-'} />
             <Row label="Mobile" value={me.mobile || '-'} last />
+          </Card>
+          <Card style={styles.cardSection}>
+            <SectionTitle text="Session" />
+            <Row label="Expires In" value={expiresInMin !== undefined ? `${expiresInMin} min` : '-'} />
+            <Row label="Expires At" value={expMs ? new Date(expMs).toLocaleString() : '-'} />
+            <Row label="Issued At" value={decoded?.iat ? new Date(decoded.iat * 1000).toLocaleString() : '-'} last />
+          </Card>
+          <Card style={styles.cardSection}>
+            <SectionTitle text="App" />
+            <Row label="Version" value={appVersion} last />
+          </Card>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: tokens.colors.accent, flex: 1 }]} onPress={load}>
+              <Text style={styles.actionBtnText}>Refresh</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: tokens.colors.danger, flex: 1 }]} onPress={handleLogout}>
+              <Text style={styles.actionBtnText}>Logout</Text>
+            </TouchableOpacity>
           </View>
-        )}
-
-        
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    </LinearGradient>
+        </ScrollView>
+      )}
+    </Screen>
   );
 }
 
 function Row({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
   return (
     <View style={[styles.row, !last && styles.rowBorder]}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={styles.rowValue}>{value}</Text>
     </View>
   );
 }
 
+function SectionTitle({ text }: { text: string }) {
+  return <Text style={styles.sectionTitle}>{text}</Text>;
+}
+
+function RoleBadge({ role }: { role: string }) {
+  const colorMap: Record<string, string> = {
+    Admin: tokens.colors.accent,
+    Accountant: tokens.colors.info,
+    Executive: tokens.colors.success,
+  };
+  const bg = colorMap[role] || tokens.colors.accentAlt;
+  return (
+    <View style={[styles.roleBadge, { backgroundColor: bg }]}> 
+      <Text style={styles.roleBadgeText}>{role}</Text>
+    </View>
+  );
+}
+
+// Helpers for settings editing
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 30,
-    marginTop:30
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#f9f9f9',
-    marginBottom: 16,
-  },
-  card: {
-    backgroundColor: '#0a0a0a',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(200, 241, 76, 0.3)',
-  },
-  row: {
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  rowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
-  },
-  label: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-  },
-  value: {
-    color: '#c8f14c', // neon accent
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  center: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  muted: {
-    marginTop: 8,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  error: {
-    color: '#ff6b6b',
-  },
-  logoutBtn: {
-    marginTop: 24,
-    backgroundColor: '#ff3b3b',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#ff3b3b',
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  logoutText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  center: { marginTop: 30, alignItems: 'center' },
+  muted: { marginTop: 10, color: tokens.colors.textDim, fontSize: 13 },
+  error: { color: tokens.colors.danger, fontSize: 14 },
+  cardSection: { marginTop: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  name: { fontSize: 20, fontWeight: '700', color: tokens.colors.text, flex: 1, paddingRight: 10 },
+  subMeta: { marginTop: 6, fontSize: 12, color: tokens.colors.textDim },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: tokens.colors.textSubtle, marginBottom: 4, letterSpacing: 0.5 },
+  row: { paddingVertical: 10, flexDirection: 'row', alignItems: 'flex-start' },
+  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: tokens.colors.divider },
+  rowLabel: { width: 110, color: tokens.colors.textDim, fontSize: 13, paddingRight: 8 },
+  rowValue: { flex: 1, color: tokens.colors.text, fontSize: 14, fontWeight: '600', textAlign: 'right', flexWrap: 'wrap' },
+  roleBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, alignSelf: 'flex-start' },
+  roleBadgeText: { color: '#000', fontWeight: '700', fontSize: 12 },
+  actionBtn: { paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+  actionBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
 });

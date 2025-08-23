@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView } from "react-native";
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
-import {StorageService} from "../../src/services/storageService";
-import GridBackground from '../(others)/GridBGComponent';
-
-import {useRouter} from "expo-router"
+import { StorageService } from "../../src/services/storageService";
+import { useRouter } from "expo-router";
+import Screen from "../../src/ui/components/Screen";
+import Card from "../../src/ui/components/Card";
+import { tokens } from "../../src/ui/tokens";
 
 export default function AdminExecutiveList() {
   const [executives, setExecutives] = useState([]);
@@ -60,144 +60,85 @@ export default function AdminExecutiveList() {
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
-      style={styles.executiveItem}
-      onPress={()=>router.push({
-        pathname: '../(others)/AssignCompany',
-        params : {execId : item.id, execUsername:item.username, execMobile : item.mobile}
+      style={styles.execTouchable}
+      onPress={() => router.push({
+        pathname: '../CompanyList/ExecutiveCompanies',
+        params: { execId: item.id, execUsername: item.username }
       })}
     >
-      <View style={styles.executiveInfo}>
-        <View style={styles.executiveIconWrapper}>
-          <Ionicons name="person" size={22} color="#c8f14c" />
+      <Card style={styles.execCard} padded={true}>
+        <View style={styles.executiveInfo}>
+          <View style={styles.executiveIconWrapper}>
+            <Ionicons name="person" size={22} color={tokens.colors.accent} />
+          </View>
+          <View style={styles.executiveDetails}>
+            <Text style={styles.executiveName}>{item.username}</Text>
+            <Text style={styles.executivePhone}>{item.mobile || "No phone"}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={tokens.colors.textDim} />
         </View>
-        <View style={styles.executiveDetails}>
-          <Text style={styles.executiveName}>{item.username}</Text>
-          <Text style={styles.executivePhone}>{item.mobile || "No phone"}</Text>
-        </View>
-      </View>
-      <View style={styles.arrowWrapper}>
-        <Ionicons name="chevron-forward" size={20} color="rgba(255, 255, 255, 0.4)" />
-      </View>
+      </Card>
     </TouchableOpacity>
   );
 
   return (
-    <LinearGradient
-      colors={['#000', '#000']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
-      <GridBackground />
-      <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.topBar}>
-          <Text style={styles.title}>Executives 👥</Text>
-          <Text style={styles.subtitle}>Manage and assign companies</Text>
+    <Screen title="Executives" subtitle="View list of executives">
+      <Card style={styles.searchCard}>
+        <View style={styles.searchWrapper}>
+          <Ionicons name="search-outline" size={20} color={tokens.colors.accent} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name or phone..."
+            placeholderTextColor={tokens.colors.textDim}
+            value={search}
+            onChangeText={handleSearch}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => { setSearch(""); setFiltered(executives); }}>
+              <Ionicons name="close-circle" size={20} color={tokens.colors.textDim} />
+            </TouchableOpacity>
+          )}
         </View>
-
-        {/* Search Card */}
-        <View style={styles.cardContainer}>
-          <View style={styles.searchWrapper}>
-            <Ionicons
-              name="search-outline"
-              size={20}
-              color="#c8f14c"
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by name or phone..."
-              placeholderTextColor="rgba(255, 255, 255, 0.5)"
-              value={search}
-              onChangeText={handleSearch}
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => {
-                setSearch("");
-                setFiltered(executives);
-              }}>
-                <Ionicons name="close-circle" size={20} color="rgba(255, 255, 255, 0.5)" />
-              </TouchableOpacity>
-            )}
+      </Card>
+      <View style={styles.resultHeader}>
+        <Text style={styles.resultsHeading}>
+          {search ? `Search Results (${filtered.length})` : `All Executives (${executives.length})`}
+        </Text>
+      </View>
+      <View style={styles.listFlex}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={tokens.colors.accent} />
+            <Text style={styles.loadingText}>Loading executives...</Text>
           </View>
-        </View>
-
-        {/* Results */}
-        <View style={styles.resultsSection}>
-          <View style={styles.resultHeader}>
-            <Text style={styles.resultsHeading}>
-              {search ? `Search Results (${filtered.length})` : `All Executives (${executives.length})`}
-            </Text>
-          </View>
-          
-          <View style={styles.cardContainer}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#c8f14c" />
-                <Text style={styles.loadingText}>Loading executives...</Text>
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderItem}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={filtered.length === 0 ? { flexGrow: 1, justifyContent: 'center' } : { paddingBottom: 40 }}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={48} color={tokens.colors.textDim} />
+                <Text style={styles.emptyText}>
+                  {search ? "No executives match your search" : "No executives found"}
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  {search ? "Try a different search term" : "Add executives to get started"}
+                </Text>
               </View>
-            ) : (
-              <FlatList
-                data={filtered}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderItem}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                  <View style={styles.emptyContainer}>
-                    <Ionicons name="people-outline" size={48} color="rgba(255, 255, 255, 0.3)" />
-                    <Text style={styles.emptyText}>
-                      {search ? "No executives match your search" : "No executives found"}
-                    </Text>
-                    <Text style={styles.emptySubtext}>
-                      {search ? "Try a different search term" : "Add executives to get started"}
-                    </Text>
-                  </View>
-                }
-              />
-            )}
-          </View>
-        </View>
-      </SafeAreaView>
-    </LinearGradient>
+            }
+          />
+        )}
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 30,
-  },
-  topBar: {
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#f9f9f9',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 4,
-  },
-  cardContainer: {
-    backgroundColor: '#000',
-    borderRadius: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
-    marginBottom: 20,
-  },
+  searchCard: { paddingVertical: 20, paddingHorizontal: 16, marginBottom: 24 },
+  listFlex: { flex: 1, paddingHorizontal: 4 },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -217,17 +158,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
   },
-  resultsSection: {
-    flex: 1,
-  },
+  resultsSection: { flex: 1 },
   resultHeader: {
     marginBottom: 10,
   },
-  resultsHeading: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
-    fontFamily: 'Inter',
-  },
+  resultsHeading: { color: tokens.colors.text, fontSize: 16, fontWeight: '600' },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -238,41 +173,20 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
   },
-  executiveItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
+  execTouchable: { marginBottom: 14 },
+  execCard: { paddingVertical: 14, paddingHorizontal: 14 },
+  executiveItem: { },
   executiveInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  executiveIconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(200, 241, 76, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
+  executiveIconWrapper: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(200, 241, 76, 0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 16 },
   executiveDetails: {
     flex: 1,
   },
-  executiveName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  executivePhone: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-  },
+  executiveName: { color: tokens.colors.text, fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  executivePhone: { color: tokens.colors.textDim, fontSize: 14 },
   arrowWrapper: {
     marginLeft: 12,
   },
@@ -281,17 +195,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 40,
   },
-  emptyText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 16,
-    fontWeight: '500',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 14,
-    marginTop: 4,
-    textAlign: 'center',
-  },
+  emptyText: { color: tokens.colors.textDim, fontSize: 16, fontWeight: '500', marginTop: 16, textAlign: 'center' },
+  emptySubtext: { color: tokens.colors.textDim, fontSize: 14, marginTop: 4, textAlign: 'center', opacity: 0.6 },
 });

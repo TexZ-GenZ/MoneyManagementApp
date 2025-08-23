@@ -4,7 +4,7 @@ import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 
 import { initializeAuth, logoutUser } from '../../src/store/authSlice';
 import { useAppDispatch, useAppSelector } from '../../src/store/hooks';
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, Text } from 'react-native';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -66,15 +66,29 @@ export default function TabLayout() {
         headerTitleStyle: {
           fontWeight: '600',
         },
+        tabBarItemStyle: { paddingVertical: 12, justifyContent: 'center', alignItems: 'center' },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+        tabBarIconStyle: { marginTop: 0 },
         tabBarStyle: Platform.select({
           ios: {
             position: 'absolute',
             backgroundColor: '#000',
             borderTopColor: 'transparent',
+            height: 82,
+            paddingTop: 10,
+            paddingBottom: 18,
           },
           default: {
             backgroundColor: '#000',
             borderTopColor: 'transparent',
+            elevation: 20,
+            height: 78,
+            paddingTop: 10,
+            paddingBottom: 18,
+            shadowColor: '#000',
+            shadowOpacity: 0.4,
+            shadowOffset: { width: 0, height: -2 },
+            shadowRadius: 12,
           },
         }),
       }}>
@@ -88,7 +102,10 @@ export default function TabLayout() {
           title: 'Admin Dashboard',
           href: userRole === 'admin' ? '/AdminDashboard' : null,
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} color={color} />
+            <TabBarIcon name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} color={color} style={{ transform: [{ translateY: -6 }] }} />
+          ),
+          tabBarLabel: ({ color }) => (
+            <Text style={{ color, fontSize: 12, fontWeight: '600', marginTop: 0, transform: [{ translateY: -4 }] }}>Admin Dashboard</Text>
           ),
         }}
       />
@@ -119,7 +136,10 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} />
+            <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} style={{ transform: [{ translateY: -18 }] }} />
+          ),
+          tabBarLabel: ({ color }) => (
+            <Text style={{ color, fontSize: 12, fontWeight: '600', marginTop: 0, transform: [{ translateY: -16 }] }}>Profile</Text>
           ),
           headerRight: () => (
             <TabBarIcon

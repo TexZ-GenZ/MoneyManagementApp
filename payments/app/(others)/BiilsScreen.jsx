@@ -1,443 +1,178 @@
-import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState, useCallback } from "react";
-import { 
-    View, 
-    Text, 
-    FlatList, 
-    StyleSheet, 
-    ActivityIndicator, 
-    TouchableOpacity,
-    RefreshControl,
-    Alert
-} from "react-native";
-import { useRouter } from "expo-router";
-import { Picker } from '@react-native-picker/picker';
+import { useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { useRouter } from 'expo-router';
+// Picker removed; chip filters used
+import Screen from '../../src/ui/components/Screen';
+import { Card } from '../../src/ui/components/Card';
+import { tokens } from '../../src/ui/tokens';
+import StatusBadge from '../../src/ui/components/StatusBadge';
+import { formatCurrency, formatDate } from '../../src/ui/format';
+import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 
-const API_BASE_URL = 'https://moneymanagementapp-production.up.railway.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI; // unified base
 
 export default function CompanyBillsList() {
     const { name, code, amount, outbal } = useLocalSearchParams();
     const [bills, setBills] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
-    const [currentPage, setCurrentPage] = useState(0);
+    // pagination removed
     const [sortFilter, setSortFilter] = useState('oldest');
     const [statusFilter, setStatusFilter] = useState('pending');
-    const [showFilters, setShowFilters] = useState(false);
+    // chip filter state (showFilters removed)
+    const statusOptions = [
+        { label: 'All', value: 'all' },
+        { label: 'Pending', value: 'pending' },
+        { label: 'Paid', value: 'paid' },
+    ];
+    const sortOptions = [
+        { label: 'Oldest', value: 'oldest' },
+        { label: 'Recent', value: 'recent' },
+        { label: 'Amount', value: 'amount_desc' },
+    ];
 
-    const router = useRouter();
-    const ITEMS_PER_PAGE = 20;
-
-    useEffect(() => {
-        resetAndFetchBills();
-    }, [sortFilter, statusFilter]);
-
-    const resetAndFetchBills = () => {
-        setBills([]);
-        setCurrentPage(0);
-        setHasMore(true);
-        fetchBills(0, true);
-    };
-
-    const fetchBills = async (page = 0, reset = false) => {
-        if (!reset && page === 0) setLoading(true);
-        if (page > 0) setLoadingMore(true);
-
-        try {
-            const skip = page * ITEMS_PER_PAGE;
-            const url = `${API_BASE_URL}/companies/${code}/bills?status=${statusFilter}&sort=${sortFilter}&skip=${skip}&limit=${ITEMS_PER_PAGE}`;
-            
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (reset || page === 0) {
-                setBills(data.items || []);
-            } else {
-                setBills(prevBills => [...prevBills, ...(data.items || [])]);
-            }
-            
-            setHasMore(data.items && data.items.length === ITEMS_PER_PAGE);
-            setCurrentPage(page);
-            
-        } catch (error) {
-            console.error('Error fetching bills:', error);
-            Alert.alert('Error', 'Failed to fetch bills. Please try again.');
-        } finally {
-            setLoading(false);
-            setLoadingMore(false);
-            setRefreshing(false);
-        }
-    };
-
-    const onRefresh = useCallback(() => {
-        setRefreshing(true);
-        resetAndFetchBills();
-    }, [sortFilter, statusFilter]);
-
-    const loadMoreBills = () => {
-        if (!loadingMore && hasMore) {
-            fetchBills(currentPage + 1);
-        }
-    };
-
-    const renderFilterSection = () => (
-        <View style={styles.filterContainer}>
-            <TouchableOpacity 
-                style={styles.filterToggle}
-                onPress={() => setShowFilters(!showFilters)}
-            >
-                <Text style={styles.filterIcon}>⚡</Text>
-                <Text style={styles.filterText}>Filter</Text>
-                <Text style={styles.filterArrow}>{showFilters ? '▼' : '▶'}</Text>
-            </TouchableOpacity>
-            
-            {showFilters && (
-                <View style={styles.filterOptions}>
-                    <View style={styles.filterRow}>
-                        <Text style={styles.filterLabel}>Sort:</Text>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={sortFilter}
-                                onValueChange={(value) => setSortFilter(value)}
-                                style={styles.picker}
-                            >
-                                <Picker.Item label="Oldest First" value="oldest" />
-                                <Picker.Item label="Recent First" value="recent" />
-                                <Picker.Item label="Amount (High to Low)" value="amount_desc" />
-                            </Picker>
-                        </View>
-                    </View>
-                    
-                    <View style={styles.filterRow}>
-                        <Text style={styles.filterLabel}>Status:</Text>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={statusFilter}
-                                onValueChange={(value) => setStatusFilter(value)}
-                                style={styles.picker}
-                            >
-                                <Picker.Item label="Pending" value="pending" />
-                                <Picker.Item label="Paid" value="paid" />
-                            </Picker>
-                        </View>
-                    </View>
-                </View>
-            )}
-        </View>
-    );
-
-    const renderBillItem = ({ item }) => (
-        <TouchableOpacity 
-            style={styles.billCard} 
-            activeOpacity={0.7} 
-            onPress={() => router.push({
-                pathname: "./PaymentDetail",
-                params: {
-                    name, 
-                    code, 
-                    amount, 
-                    outbal, 
-                    bill_number: item.bill_number, 
-                    bill_date: item.bill_date, 
-                    due_date: item.due_date, 
-                    status: item.status, 
-                    amount_paid: item.amount_paid,
-                    bill_amount: item.amount, 
-                    bill_id: item.id
-                }
-            })}
-        >
-            <View style={styles.row}>
-                <Text style={styles.billNumber}>{item.bill_number}</Text>
-                <Text style={[styles.status, billStatusColor(item.status)]}>
-                    {item.status.toUpperCase()}
-                </Text>
-            </View>
-
-            <Text style={styles.label}>
-                Bill Date: <Text style={styles.value}>{item.bill_date}</Text>
-            </Text>
-            <Text style={styles.label}>
-                Due Date: <Text style={styles.value}>{item.due_date}</Text>
-            </Text>
-
-            <Text style={styles.label}>
-                Amount: <Text style={[styles.value, { color: "black" }]}>₹{item.amount}</Text>
-            </Text>
-            <Text style={styles.label}>
-                Paid: <Text style={[styles.value, { color: "#189A7D", fontWeight:'500' }]}>₹{item.amount_paid}</Text>
-            </Text>
+    const FilterChip = ({ active, label, onPress }) => (
+        <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={[styles.chip, active && styles.chipActive]}>
+            <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
         </TouchableOpacity>
     );
 
-    const renderFooter = () => {
-        if (!loadingMore) return null;
-        return (
-            <View style={styles.footerLoader}>
-                <ActivityIndicator color="#1f75fe" size="small" />
-                <Text style={styles.loadingText}>Loading more bills...</Text>
-            </View>
-        );
-    };
+    const renderFilters = () => (
+        <View style={styles.filterChipsWrapper}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+                {statusOptions.map(o => (
+                    <FilterChip key={o.value} label={o.label} active={statusFilter === o.value} onPress={() => setStatusFilter(o.value)} />
+                ))}
+                <View style={styles.dividerVertical} />
+                {sortOptions.map(o => (
+                    <FilterChip key={o.value} label={o.label} active={sortFilter === o.value} onPress={() => setSortFilter(o.value)} />
+                ))}
+            </ScrollView>
+        </View>
+    );
+    const router = useRouter();
+    // pagination constants removed
 
+    useEffect(() => { fetchBills(); }, [sortFilter, statusFilter]);
+
+    const fetchBills = async () => {
+        setLoading(true); setRefreshing(false);
+        try {
+            const statusParam = statusFilter === 'all' ? '' : `status=${statusFilter}&`;
+            const url = `${API_BASE_URL}/companies/${code}/bills?${statusParam}sort=${sortFilter}`;
+            const response = await fetch(url); if (!response.ok) throw new Error('HTTP error');
+            const data = await response.json();
+            setBills(data.items || []);
+        } catch (e) { console.error(e); Alert.alert('Error', 'Failed to fetch bills.'); }
+        finally { setLoading(false); setRefreshing(false); }
+    };
+    const onRefresh = useCallback(() => { setRefreshing(true); fetchBills(); }, [sortFilter, statusFilter]);
+
+    // old accordion filter removed
+
+    const renderBillItem = ({ item }) => (
+        <TouchableOpacity style={styles.billTouchable} activeOpacity={0.7} onPress={() => router.push({ pathname: './PaymentDetail', params: { name, code, amount, outbal, bill_number: item.bill_number, bill_date: item.bill_date, due_date: item.due_date, status: item.status, amount_paid: item.amount_paid, bill_amount: item.amount, bill_id: item.id } })}>
+            <Card style={styles.billCard}>
+                <View style={styles.billRowTop}>
+                    <Text style={styles.billNumber}>{item.bill_number}</Text>
+                    <StatusBadge status={item.status} />
+                </View>
+                <View style={styles.billMetaRow}>
+                    <Text style={styles.billMeta}>Bill: {formatDate(item.bill_date)}</Text>
+                    <Text style={styles.billMeta}>Due: {formatDate(item.due_date)}</Text>
+                </View>
+                <View style={styles.billAmounts}>
+                    <Text style={styles.amountMain}>{formatCurrency(item.amount)}</Text>
+                    <Text style={styles.amountPaidLabel}>Paid <Text style={styles.amountPaid}>{formatCurrency(item.amount_paid)}</Text></Text>
+                </View>
+            </Card>
+        </TouchableOpacity>
+    );
+    // footer removed (no pagination)
     const renderEmptyComponent = () => (
         <View style={styles.emptyContainer}>
             <Text style={styles.empty}>No bills found for the selected filters.</Text>
-            <TouchableOpacity 
-                style={styles.retryButton}
-                onPress={resetAndFetchBills}
-            >
-                <Text style={styles.retryText}>Retry</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.retryButton} onPress={fetchBills}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
         </View>
     );
-
     return (
-        <View style={styles.container}>
-            <View style={styles.companyBox}>
-                <Text style={styles.compName}>{name}</Text>
-                <View style={styles.row}>
-                    <Text style={styles.code}>Code: {code}</Text>
+        <Screen title={name} subtitle={`Code ${code}`}>
+            <Card style={styles.companyCard}>
+                <View style={styles.statsRow}>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Outstanding Balance</Text>
+                        <Text style={styles.statValueDanger}>{formatCurrency(outbal)}</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Total Amount</Text>
+                        <Text style={styles.statValueAccent}>{formatCurrency(amount)}</Text>
+                    </View>
                 </View>
-
-                <Text style={styles.label}>
-                    Amount: <Text style={[styles.amount, styles.value]}>₹{amount}</Text>
-                </Text>
-                <Text style={styles.label}>
-                    Outstanding: <Text style={[styles.outbal, styles.value]}>₹{outbal}</Text>
-                </Text>
+            </Card>
+            <Card style={styles.filtersCard}>
+                {renderFilters()}
+            </Card>
+            <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{bills.length}</Text></View>
+            <View style={styles.billLabelsRow}>
+                <Text style={[styles.billLabelCol, {flex:1.4}]}>Bill #</Text>
+                <Text style={[styles.billLabelCol, {flex:1}]}>Bill Date</Text>
+                <Text style={[styles.billLabelCol, {flex:1}]}>Due</Text>
+                <Text style={[styles.billLabelCol, {flex:1}]}>Amount</Text>
+                <Text style={[styles.billLabelCol, {flex:0.9}]}>Paid</Text>
             </View>
-
-            {renderFilterSection()}
-
-            <View style={styles.billsHeader}>
-                <Text style={styles.title}>Bills</Text>
-                <Text style={styles.billCount}>
-                    {bills.length} bill{bills.length !== 1 ? 's' : ''}
-                </Text>
-            </View>
-
             {loading ? (
-                <ActivityIndicator color="#1f75fe" size="large" style={{ marginTop: 22 }} />
+                <View style={{ marginTop: 10 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
             ) : (
                 <FlatList
                     data={bills}
-                    keyExtractor={item => item.id ? item.id.toString() : item.bill_number}
+                    keyExtractor={item => (item.id ? item.id.toString() : item.bill_number)}
                     renderItem={renderBillItem}
                     ListEmptyComponent={renderEmptyComponent}
-                    ListFooterComponent={renderFooter}
-                    onEndReached={loadMoreBills}
-                    onEndReachedThreshold={0.1}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                    }
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 80 }}
                 />
             )}
-        </View>
+        </Screen>
     );
 }
 
-// Helper to color bill status
-function billStatusColor(status) {
-    switch (status) {
-        case "pending":
-            return { backgroundColor: "#ffe3e3", color: "#d73838" };
-        case "paid":
-            return { backgroundColor: "#e9f8ed", color: "#209653" };
-        case "partial":
-            return { backgroundColor: "#fff5e6", color: "#e37a1d" };
-        default:
-            return { backgroundColor: "#f0f0f0", color: "#666" };
-    }
-}
-
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        padding: 16,
-        backgroundColor: "#f8fafd"
-    },
-    companyBox: {
-        backgroundColor: "#fff",
-        padding: 18,
-        borderRadius: 18,
-        marginBottom: 18,
-        shadowColor: "#bae4ec",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 5,
-        elevation: 2,
-    },
-    compName: {
-        fontSize: 22,
-        fontWeight: "800",
-        color: "#000",
-        marginBottom: 5
-    },
-    code: {
-        fontSize: 15,
-        color: "#000",
-        fontWeight: "600"
-    },
-    row: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: 6,
-        marginBottom: 6
-    },
-    label: {
-        fontSize: 14,
-        color: "black",
-        fontWeight: "400"
-    },
-    amount: {
-        color: "#000",
-        fontWeight: "500"
-    },
-    outbal: {
-        color: "#db5151",
-        fontWeight: "700"
-    },
-    value: {
-        fontSize: 15,
-        fontWeight: "400"
-    },
-    filterContainer: {
-        backgroundColor: "#fff",
-        borderRadius: 12,
-        marginBottom: 16,
-        shadowColor: "#bae4ec",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 3,
-        elevation: 1,
-    },
-    filterToggle: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 16,
-    },
-    filterIcon: {
-        fontSize: 18,
-        marginRight: 8,
-    },
-    filterText: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#000",
-        flex: 1,
-    },
-    filterArrow: {
-        fontSize: 14,
-        color: "#666",
-    },
-    filterOptions: {
-        borderTopWidth: 1,
-        borderTopColor: "#f0f0f0",
-        padding: 16,
-        paddingTop: 12,
-    },
-    filterRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 12,
-    },
-    filterLabel: {
-        fontSize: 14,
-        fontWeight: "500",
-        color: "#333",
-        width: 60,
-    },
-    pickerContainer: {
-        flex: 1,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: "#e0e0e0",
-        backgroundColor: "#f9f9f9",
-    },
-    picker: {
-        height: 60,
-    },
-    billsHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 12,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: "700",
-        color: "rgba(0, 0, 0, 0.8)",
-    },
-    billCount: {
-        fontSize: 14,
-        color: "#666",
-        fontWeight: "500",
-    },
-    billCard: {
-        backgroundColor: "#fff",
-        borderRadius: 14,
-        padding: 16,
-        marginBottom: 14,
-        shadowColor: "#bae4ec",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-        elevation: 2
-    },
-    billNumber: {
-        fontSize: 15,
-        color: "#000",
-        fontWeight: "700",
-    },
-    status: {
-        fontSize: 11,
-        fontWeight: "600",
-        borderRadius: 8,
-        overflow: "hidden",
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        textTransform: "capitalize",
-        marginLeft: "auto",
-    },
-    footerLoader: {
-        flexDirection: "row",
-        justifyContent: "center",
-        alignItems: "center",
-        paddingVertical: 20,
-    },
-    loadingText: {
-        marginLeft: 10,
-        fontSize: 14,
-        color: "#666",
-    },
-    emptyContainer: {
-        alignItems: "center",
-        paddingVertical: 40,
-    },
-    empty: {
-        textAlign: "center",
-        color: "#8e99b6",
-        fontSize: 15,
-        marginBottom: 16,
-    },
-    retryButton: {
-        backgroundColor: "#1f75fe",
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 8,
-    },
-    retryText: {
-        color: "#fff",
-        fontSize: 14,
-        fontWeight: "600",
-    },
+    companyCard: { marginBottom: 16 },
+    statsRow: { flexDirection: 'row', gap: 12 },
+    statBox: { flex: 1, backgroundColor: tokens.colors.cardAlt, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: tokens.colors.border },
+    statLabel: { fontSize: 11, color: tokens.colors.textDim, marginBottom: 6, letterSpacing: 0.3, fontWeight: '600' },
+    statValueAccent: { fontSize: 15, fontWeight: '700', color: tokens.colors.accent },
+    statValueDanger: { fontSize: 15, fontWeight: '700', color: tokens.colors.danger },
+    listHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+    sectionTitle: { color: tokens.colors.text, fontWeight: '700', fontSize: 16 },
+    count: { color: tokens.colors.textDim, marginLeft: 8, fontSize: 13 },
+    // old accordion filter styles removed
+    billTouchable: { marginBottom: 14 },
+    billCard: { padding: 16 },
+    billRowTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+    billNumber: { fontSize: 15, fontWeight: '700', color: tokens.colors.text, flex: 1 },
+    billMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+    billMeta: { fontSize: 12, color: tokens.colors.textDim },
+    billAmounts: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    amountMain: { fontSize: 16, fontWeight: '700', color: tokens.colors.accent },
+    amountPaidLabel: { fontSize: 12, color: tokens.colors.textDim },
+    amountPaid: { color: tokens.colors.success, fontWeight: '600' },
+    footerLoader: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 20 },
+    loadingText: { marginLeft: 10, fontSize: 14, color: tokens.colors.textDim },
+    emptyContainer: { alignItems: 'center', paddingVertical: 40 },
+    empty: { textAlign: 'center', color: tokens.colors.textDim, fontSize: 14, marginBottom: 16 },
+    billLabelsRow: { flexDirection: 'row', paddingHorizontal: 2, marginBottom: 8 },
+    billLabelCol: { fontSize: 10, color: tokens.colors.textSubtle, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+    retryButton: { backgroundColor: tokens.colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+    retryText: { color: '#000', fontSize: 14, fontWeight: '600' },
+    filtersCard: { marginBottom: 14, paddingVertical: 10, paddingHorizontal: 12 },
+    filterChipsWrapper: { },
+    chipsRow: { paddingRight: 4, alignItems: 'center' },
+    chip: { backgroundColor: 'rgba(255,255,255,0.08)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+    chipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
+    chipText: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '600' },
+    chipTextActive: { color: '#000' },
+    dividerVertical: { width: 1, height: 20, backgroundColor: tokens.colors.divider, marginHorizontal: 2 },
 });

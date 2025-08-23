@@ -1703,62 +1703,62 @@
                 }
             }
         },
-            {
-                "name": "Admin - Activate User",
-                "request": {
-                    "method": "PATCH",
-                    "header": [
-                        {
-                            "key": "Authorization",
-                            "value": "Bearer {{admin_token}}"
-                        }
-                    ],
-                    "url": {
-                        "raw": "https://moneymanagementapp-production.up.railway.app/admin/users/{{exec_id}}/activate",
-                        "protocol": "https",
-                        "host": [
-                            "moneymanagementapp-production",
-                            "up",
-                            "railway",
-                            "app"
-                        ],
-                        "path": [
-                            "admin",
-                            "users",
-                            "{{exec_id}}",
-                            "activate"
-                        ]
+        {
+            "name": "Admin - Activate User",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{admin_token}}"
                     }
-                }
-            },
-            {
-                "name": "Admin - Deactivate User (PATCH)",
-                "request": {
-                    "method": "PATCH",
-                    "header": [
-                        {
-                            "key": "Authorization",
-                            "value": "Bearer {{admin_token}}"
-                        }
+                ],
+                "url": {
+                    "raw": "https://moneymanagementapp-production.up.railway.app/admin/users/{{exec_id}}/activate",
+                    "protocol": "https",
+                    "host": [
+                        "moneymanagementapp-production",
+                        "up",
+                        "railway",
+                        "app"
                     ],
-                    "url": {
-                        "raw": "https://moneymanagementapp-production.up.railway.app/admin/users/{{exec_id}}/deactivate",
-                        "protocol": "https",
-                        "host": [
-                            "moneymanagementapp-production",
-                            "up",
-                            "railway",
-                            "app"
-                        ],
-                        "path": [
-                            "admin",
-                            "users",
-                            "{{exec_id}}",
-                            "deactivate"
-                        ]
-                    }
+                    "path": [
+                        "admin",
+                        "users",
+                        "{{exec_id}}",
+                        "activate"
+                    ]
                 }
-            },
+            }
+        },
+        {
+            "name": "Admin - Deactivate User (PATCH)",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{admin_token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "https://moneymanagementapp-production.up.railway.app/admin/users/{{exec_id}}/deactivate",
+                    "protocol": "https",
+                    "host": [
+                        "moneymanagementapp-production",
+                        "up",
+                        "railway",
+                        "app"
+                    ],
+                    "path": [
+                        "admin",
+                        "users",
+                        "{{exec_id}}",
+                        "deactivate"
+                    ]
+                }
+            }
+        },
         {
             "name": "Notifications - Pending (All Types)",
             "request": {

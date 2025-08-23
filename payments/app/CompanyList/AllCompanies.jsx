@@ -1,193 +1,118 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
-import { useRouter } from "expo-router";
+import React, { useEffect, useState } from 'react';
+import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
+import Screen from '../../src/ui/components/Screen';
+import { Card } from '../../src/ui/components/Card';
+import { tokens } from '../../src/ui/tokens';
 
-// Demo fetch -- replace with real API call
-// const fetchCompanies = async()=>{
-//   const res = await 
-//   console.log(res.json())
-//   return res.json()
-// } 
 export default function CompanyListScreen() {
   const [companies, setCompanies] = useState([]);
   const [filtered, setFiltered] = useState([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-  const router = useRouter()
-
-  useEffect(() => {
-    loadCompanies();
-  }, []);
+  useEffect(() => { loadCompanies(); }, []);
 
   const loadCompanies = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies`, {
-        method: "GET",
-        headers: { "content-type": "application/json" },
-      });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
+      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies`, { method: 'GET', headers: { 'content-type': 'application/json' } });
+      if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
-      const dataArr = data.items
-
-      console.log(dataArr);
-
+      const dataArr = data.items || [];
       setCompanies(dataArr);
       setFiltered(dataArr);
     } catch (e) {
-      setCompanies([]);
-      setFiltered([]);
-    } finally {
-      setLoading(false);
-    }
+      setCompanies([]); setFiltered([]);
+    } finally { setLoading(false); }
   };
 
   const handleSearch = (text) => {
     setSearch(text);
-    if (!text.trim()) {
-      setFiltered(companies);
-      return;
-    }
+    if (!text.trim()) { setFiltered(companies); return; }
     const lower = text.toLowerCase();
-    const results = companies.filter(
-      (c) =>
-        (c.name && c.name.toLowerCase().includes(lower)) ||
-        (c.code && c.code.toLowerCase().includes(lower))
-    );
-    setFiltered(results);
+    setFiltered(companies.filter(c => (c.name && c.name.toLowerCase().includes(lower)) || (c.code && c.code.toLowerCase().includes(lower))));
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.card} activeOpacity={0.5} onPress={() => router.push({
-      pathname: "../(others)/BiilsScreen",
-      params: { name: item.name, code: item.code, amount: item.amount, outbal: item.outbal }
-    })}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.code}>{item.code}</Text>
-      </View>
-       <Text style={styles.value}>{item.area}</Text>
-
-      <Text style={styles.label}>Credit: <Text style={styles.value}>{item.credit_date}</Text></Text>
-
-      <Text style={[styles.label, { marginLeft: 0 }]}>Promise : <Text style={styles.value}>{item.promise_date}</Text></Text>
-      {/* </View> */}
-      <View >
-        <Text style={styles.label}>Outbal: <Text style={[styles.value, { color: "#e26660" }]}>{item.outbal}</Text></Text>
-        <Text style={[styles.label]}>Amount: <Text style={[styles.value]}>{item.amount}</Text></Text>
-      </View>
+    <TouchableOpacity
+      style={styles.cardTouchable}
+      activeOpacity={0.7}
+      onPress={() => router.push({ pathname: '../(others)/BiilsScreen', params: { name: item.name, code: item.code, amount: item.amount, outbal: item.outbal } })}
+    >
+      <Card style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.code}>{item.code}</Text>
+        </View>
+        <Text style={styles.area}>{item.area}</Text>
+        <View style={styles.rowLine} />
+        <View style={styles.metaRow}>
+          <Text style={styles.meta}><Text style={styles.metaLabel}>Credit</Text> {item.credit_date || '—'}</Text>
+          <Text style={styles.meta}><Text style={styles.metaLabel}>Promise</Text> {item.promise_date || '—'}</Text>
+        </View>
+        <View style={styles.amountRow}>
+          <Text style={styles.outbal}>Outbal: <Text style={styles.outbalValue}>{item.outbal}</Text></Text>
+          <Text style={styles.amount}>Amt: <Text style={styles.amountValue}>{item.amount}</Text></Text>
+        </View>
+      </Card>
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Companies</Text>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search by company name or code"
-        value={search}
-        onChangeText={handleSearch}
-        placeholderTextColor="#abc"
-      />
+    <Screen title="Companies" subtitle="Browse all companies">
+      <View style={styles.searchWrapper}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name or code"
+          value={search}
+          onChangeText={handleSearch}
+          placeholderTextColor={tokens.colors.textFaint}
+        />
+      </View>
       {loading ? (
-        <ActivityIndicator size="large" color="#1f75fe" style={{ marginTop: 30 }} />
+        <ActivityIndicator size="large" color={tokens.colors.accent} style={{ marginTop: 30 }} />
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.code}
           renderItem={renderItem}
           ListEmptyComponent={<Text style={styles.empty}>No companies found.</Text>}
-          contentContainerStyle={{ paddingBottom: 30 }}
+          contentContainerStyle={{ paddingBottom: 60 }}
+          showsVerticalScrollIndicator={false}
         />
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#f8fafd",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#102943",
-    marginBottom: 12,
-  },
+  searchWrapper: { marginBottom: 16 },
   searchInput: {
-    backgroundColor: "#e6fbfa",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-    fontSize: 16,
-    color: "#1c4064",
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: tokens.colors.text,
     borderWidth: 1,
-    borderColor: "#d0e0e0",
-    fontWeight: "500",
-    shadowColor: "#bae4ec",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
-    shadowColor: "#bae4ec",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 9,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 5,
-  },
-  name: {
-    fontSize: 18,
-    fontWeight: "500",
-    color: "#000",
-    flex: 1,
-    flexWrap: "wrap",
-  },
-  code: {
-    fontSize: 14,
-    color: "#000",
-    fontWeight: "400",
-    marginLeft: 8,
-    alignSelf: "center",
-  },
-  row: {
-    flexDirection: "row",
-    marginTop: 3,
-    marginBottom: 1,
-    alignItems: "center"
-  },
-  label: {
-    fontSize: 14,
-    color: "rgba(0,0,0,0.6)",
-    fontWeight: "400",
-    marginTop: 4,
-  },
-  value: {
-    fontWeight: "400",
-    color: "#000",
-    fontSize: 14,
-  },
-  empty: {
-    color: "#8e99b6",
-    textAlign: "center",
-    fontSize: 16,
-    padding: 24,
-  }
+  cardTouchable: { marginBottom: 16 },
+  card: { paddingVertical: 18, paddingHorizontal: 16 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  name: { fontSize: 16, fontWeight: '600', color: tokens.colors.text, flex: 1, paddingRight: 8 },
+  code: { fontSize: 13, color: tokens.colors.textDim, fontWeight: '500' },
+  area: { fontSize: 12, color: tokens.colors.textDim, marginBottom: 8 },
+  rowLine: { height: 1, backgroundColor: tokens.colors.divider, marginBottom: 10 },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  meta: { fontSize: 12, color: tokens.colors.textDim },
+  metaLabel: { color: tokens.colors.text, fontWeight: '600' },
+  amountRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  outbal: { fontSize: 12, color: tokens.colors.textDim },
+  outbalValue: { color: tokens.colors.danger, fontWeight: '700' },
+  amount: { fontSize: 12, color: tokens.colors.textDim },
+  amountValue: { color: tokens.colors.accent, fontWeight: '700' },
+  empty: { color: tokens.colors.textDim, textAlign: 'center', fontSize: 15, padding: 24 },
 });

@@ -56,7 +56,7 @@ class ApiService {
     credentials: LoginCredentials
   ): Promise<{ access_token: string; token_type: string }> {
     // Use the exact login URL to avoid accidental baseURL concatenation
-    const loginUrl = "https://moneymanagementapp-production.up.railway.app/auth/login";
+    const loginUrl = `${this.baseURL}/auth/login`;
 
     const res = await fetch(loginUrl, {
       method: "POST",
@@ -87,7 +87,7 @@ class ApiService {
 
   async refreshToken(): Promise<{ token: string }> {
     const tokenObj = await StorageService.getToken();
-  const refresh_token = (tokenObj as any)?.refresh_token;
+    const refresh_token = (tokenObj as any)?.refresh_token;
     if (!refresh_token) {
       throw new Error("No refresh token available");
     }
