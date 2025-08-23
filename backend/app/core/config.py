@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     CREDIT_EXTENSION_DAYS: int = 10
+    # Used when imported transaction rows lack an explicit due date; added to bill_date
+    DEFAULT_CREDIT_TERM_DAYS: int = 30
     NOTIF_EVERY_HOURS: int = 2
     PAYMENT_NOTIF_DAILY_HOUR: int = 9
     CORS_ALLOWED_ORIGINS: List[str] = ["*"]

@@ -66,6 +66,9 @@ from app.models.models import (
 
 router = APIRouter()
 
+# Simple upload size guard (bytes). Adjust if realistic data requires more.
+MAX_UPLOAD_SIZE = 15 * 1024 * 1024  # 5 MB
+
 
 @router.post("/auth/login", response_model=Token)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
@@ -85,14 +88,14 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/auth/me", response_model=UserOut)
-def auth_me(user: User = Depends(get_current_user)):
-    """Return the currently authenticated user's basic profile derived from JWT."""
+def get_me(user: User = Depends(get_current_user)):
     return UserOut(
         id=user.id,
         username=user.username,
-        role=user.role.value if hasattr(user.role, "value") else str(user.role),
+        role=user.role,
         area=user.area,
         mobile=user.mobile,
+        is_active=user.is_active,
     )
 
 
@@ -706,7 +709,14 @@ def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid role")
         q = q.filter(User.role == r)
-    items = q.all()
+    items = [UserOut(
+        id=u.id,
+        username=u.username,
+        role=u.role,
+        area=u.area,
+        mobile=u.mobile,
+        is_active=u.is_active,
+    ) for u in q.all()]
     return UserList(items=items, total=len(items))
 
 
@@ -725,18 +735,50 @@ def admin_update_username(user_id: int, username: str, db: Session = Depends(get
     u.username = username
     db.commit()
     db.refresh(u)
-    return u
+    return UserOut(
+        id=u.id,
+        username=u.username,
+        role=u.role,
+        area=u.area,
+        mobile=u.mobile,
+        is_active=u.is_active,
+    )
 
 
 # Admin: deactivate user
-@router.delete("/admin/users/{user_id}", dependencies=[Depends(require_roles("admin"))])
+@router.patch("/admin/users/{user_id}/deactivate", response_model=UserOut, dependencies=[Depends(require_roles("admin"))])
 def admin_deactivate_user(user_id: int, db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
     u.is_active = False
     db.commit()
-    return {"ok": True}
+    db.refresh(u)
+    return UserOut(
+        id=u.id,
+        username=u.username,
+        role=u.role,
+        area=u.area,
+        mobile=u.mobile,
+        is_active=u.is_active,
+    )
+
+@router.patch("/admin/users/{user_id}/activate", response_model=UserOut, dependencies=[Depends(require_roles("admin"))])
+def admin_activate_user(user_id: int, db: Session = Depends(get_db)):
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    u.is_active = True
+    db.commit()
+    db.refresh(u)
+    return UserOut(
+        id=u.id,
+        username=u.username,
+        role=u.role,
+        area=u.area,
+        mobile=u.mobile,
+        is_active=u.is_active,
+    )
 
 
 # Admin: hard delete user (only allowed for executives without references)
@@ -771,17 +813,7 @@ def admin_hard_delete_user(user_id: int, db: Session = Depends(get_db)):
 ## (Removed legacy /notifications/pending endpoints; use /notifications with filters.)
 
 
-# Imports (stubs)
-@router.post("/imports/master", dependencies=[Depends(require_roles("admin"))])
-def import_master(db: Session = Depends(get_db)):
-    metrics = do_import_master(db)
-    return {"ok": True, **metrics}
-
-
-@router.post("/imports/transactions", dependencies=[Depends(require_roles("admin"))])
-def import_transactions(db: Session = Depends(get_db)):
-    metrics = do_import_transactions(db)
-    return {"ok": True, **metrics}
+## Removed /imports/* endpoints; use /uploads/* (accountant) for file ingestion directly.
 
 
 # File upload variants (multipart) that save files then call import
@@ -793,6 +825,10 @@ def upload_master(file: UploadFile = File(...), db: Session = Depends(get_db)):
     dest = DATA_DIR / "master.dbf"
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     content = file.file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413, detail=f"File too large; max {MAX_UPLOAD_SIZE} bytes"
+        )
     dest.write_bytes(content)
     metrics = do_import_master(db)
     return {"ok": True, "saved": str(dest), **metrics}
@@ -805,6 +841,10 @@ def upload_transactions(file: UploadFile = File(...), db: Session = Depends(get_
     dest = DATA_DIR / "transactions.dbf"
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     content = file.file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413, detail=f"File too large; max {MAX_UPLOAD_SIZE} bytes"
+        )
     dest.write_bytes(content)
     metrics = do_import_transactions(db)
     return {"ok": True, "saved": str(dest), **metrics}
@@ -1017,3 +1057,17 @@ def admin_reset(db: Session = Depends(get_db)):
     ensure_settings_row(db)
     db.commit()
     return {"ok": True}
+
+
+@router.post(
+    "/admin/recalc-all",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_recalc_all(db: Session = Depends(get_db)):
+    """Recalculate totals & credit dates for all non-archived companies (admin only)."""
+    companies = db.query(Company).filter(Company.is_archived == False).all()
+    count = 0
+    for c in companies:
+        recalc_company_totals(db, c.code)
+        count += 1
+    return {"recalculated": count}

@@ -17,6 +17,7 @@ class UserOut(BaseModel):
     role: str
     area: Optional[str] = None
     mobile: Optional[str] = None
+    is_active: bool
 
     class Config:
         from_attributes = True
