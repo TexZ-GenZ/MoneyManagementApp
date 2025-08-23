@@ -136,7 +136,7 @@ export default function AccountantDashboard() {
               data={recentPayments}
               keyExtractor={(item, index) => index.toString()}
               renderItem={({ item }) => (
-                <View style={styles.recentItem}>
+                <TouchableOpacity style={styles.recentItem} onPress={() => router.push('../(others)/NotifyAdmin')}>
                   <Ionicons name="cash-outline" size={22} color="#c8f14c" />
                   <View style={{ marginLeft: 12 }}>
                     <Text style={styles.recentTitle}>{item.companyName || item.company_code || "Unknown Company"}</Text>
@@ -144,7 +144,7 @@ export default function AccountantDashboard() {
                       {item.amount_collected ? `₹${item.amount_collected}` : "No Amount"} • {new Date(item.collected_at).toLocaleDateString('en-IN') || "Pending"}
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               )}
             />
           </View>
