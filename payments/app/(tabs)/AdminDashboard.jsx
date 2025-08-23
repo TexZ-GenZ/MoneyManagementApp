@@ -13,7 +13,7 @@ export default function AccountantDashboard() {
   const router = useRouter();
 
   const buttons = [
-    { label: 'Approve', icon: 'alert-circle-outline', action: () => { router.push('../(others)/NotifyAdmin') } },
+    { label: 'Approve', icon: 'checkmark', action: () => { router.push('../(others)/NotifyAdmin') } },
     { label: 'Companies', icon: 'business-outline', action: () => { router.push('../CompanyList/AllCompanies') } },
     { label: 'Executives', icon: 'person-outline', action: () => { router.push('../(others)/ExecutiveList') } },
     { label: 'Delete', icon: 'trash-outline', action: () => { router.push('../(others)/DeleteUser') } },
@@ -110,7 +110,7 @@ export default function AccountantDashboard() {
         <View style={styles.topBar}>
           <Text style={styles.heading}>Welcome Back 👋</Text>
           <Text style={styles.subheading}>Here's your quick access</Text>
-        </View>
+        </View> 
 
         {/* Card Container */}
         <View style={styles.cardContainer}>
@@ -136,7 +136,7 @@ export default function AccountantDashboard() {
               data={recentPayments}
               keyExtractor={(item, index) => index.toString()}
               renderItem={({ item }) => (
-                <View style={styles.recentItem}>
+                <TouchableOpacity style={styles.recentItem} onPress={() => router.push('../(others)/NotifyAdmin')}>
                   <Ionicons name="cash-outline" size={22} color="#c8f14c" />
                   <View style={{ marginLeft: 12 }}>
                     <Text style={styles.recentTitle}>{item.companyName || item.company_code || "Unknown Company"}</Text>
@@ -144,7 +144,7 @@ export default function AccountantDashboard() {
                       {item.amount_collected ? `₹${item.amount_collected}` : "No Amount"} • {new Date(item.collected_at).toLocaleDateString('en-IN') || "Pending"}
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               )}
             />
           </View>

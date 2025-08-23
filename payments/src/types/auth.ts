@@ -1,13 +1,9 @@
 export interface User {
   id: string;
   username: string;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
   role: 'admin' | 'accountant' | 'executive';
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  area?: string | null;
+  mobile?: string | null;
 }
 
 export interface AuthState {
