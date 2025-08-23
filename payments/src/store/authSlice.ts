@@ -26,11 +26,18 @@ export const loginUser = createAsyncThunk(
 
       await StorageService.saveToken(tokenInterface);
 
-      // No user info in response; set user to null
+      // Try to fetch current user immediately after login
+      let user = null;
+      try {
+        user = await ApiService.getCurrentUser();
+      } catch (err) {
+        // ignore; user may not be available immediately
+      }
+
       return {
         access_token: response.access_token,
         token_type: response.token_type,
-        user: null,
+        user,
       };
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -44,7 +51,19 @@ export const initializeAuth = createAsyncThunk(
     try {
       const token = await StorageService.getToken();
       if (!token) return null;
-      return `${token.token_type} ${token.access_token}`;
+
+      // If we have a token, validate it by fetching the current user
+      try {
+        const user = await ApiService.getCurrentUser();
+        return {
+          token: `${token.token_type} ${token.access_token}`,
+          user,
+        };
+      } catch (err) {
+        // Token invalid or /auth/me failed -> clear token and return null
+        await StorageService.deleteToken();
+        return null;
+      }
     } catch (error: any) {
       await StorageService.deleteToken();
       return null;
@@ -131,7 +150,8 @@ const authSlice = createSlice({
       .addCase(initializeAuth.fulfilled, (state, action) => {
         state.isLoading = false;
         if (action.payload) {
-          state.token = action.payload;
+          state.token = action.payload.token;
+          state.user = action.payload.user || null;
           state.isAuthenticated = true;
         } else {
           state.user = null;

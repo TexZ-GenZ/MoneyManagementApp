@@ -13,9 +13,9 @@ export default function AccountantDashboard() {
   const router = useRouter();
 
   const buttons = [
-    { label: 'Approve', icon: 'alert-circle-outline', action: () => { router.push('../(others)/NotifyAccountant') } },
+    { label: 'Approve', icon: 'checkmark', action: () => { router.push('../(others)/NotifyAccountant') } },
     { label: 'Companies', icon: 'business-outline', action: () => { router.push('../CompanyList/AllCompanies') } },
-    { label: 'Executives', icon: 'person-outline', action: () => { router.push('../(others)/ExecutiveList') } },
+    // { label: 'Executives', icon: 'person-outline', action: () => { router.push('../(others)/ExecutiveList') } },
     { label: 'Upload', icon: 'add-circle-outline', action: () => { router.push('../(others)/Upload') } }
   ];
 
@@ -35,7 +35,7 @@ export default function AccountantDashboard() {
         const data = await response.json();
 
         if (response.ok && Array.isArray(data)) {
-          
+
           setRecentPayments(data);
         }
       } catch (err) {
@@ -95,6 +95,7 @@ export default function AccountantDashboard() {
             )}
           />
         </View>
+
       </SafeAreaView>
     </LinearGradient>
   );
@@ -176,4 +177,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
+  
 });

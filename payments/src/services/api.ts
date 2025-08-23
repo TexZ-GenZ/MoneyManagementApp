@@ -105,27 +105,28 @@ class ApiService {
 
   // User API
   async getCurrentUser(): Promise<User> {
+    // Server may return a minimal user object like:
+    // { id: 1, username: 'admin', role: 'admin', area: null, mobile: null }
     const response = await this.request<{
       id: number;
-      name: string;
-      email: string;
-      phone?: string;
+      username: string;
       role: string;
-      is_active: boolean;
-      created_at: string;
+      area?: string | null;
+      mobile?: string | null;
+      // optional legacy fields
+      name?: string;
+      email?: string;
+      is_active?: boolean;
+      created_at?: string;
       updated_at?: string;
     }>("/auth/me");
 
     return {
       id: response.id.toString(),
-      username: response.email,
-      firstName: response.name.split(" ")[0],
-      lastName: response.name.split(" ").slice(1).join(" "),
-      email: response.email,
-      role: response.role as "admin" | "accountant" | "executive",
-      isActive: response.is_active,
-      createdAt: response.created_at,
-      updatedAt: response.updated_at || response.created_at,
+      username: response.username,
+      role: response.role as 'admin' | 'accountant' | 'executive',
+      area: response.area ?? null,
+      mobile: response.mobile ?? null,
     };
   }
 

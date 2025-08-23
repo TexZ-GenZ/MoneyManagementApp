@@ -13,7 +13,7 @@ export default function AccountantDashboard() {
   const router = useRouter();
 
   const buttons = [
-    { label: 'Approve', icon: 'alert-circle-outline', action: () => { router.push('../(others)/NotifyAdmin') } },
+    { label: 'Approve', icon: 'checkmark', action: () => { router.push('../(others)/NotifyAdmin') } },
     { label: 'Companies', icon: 'business-outline', action: () => { router.push('../CompanyList/AllCompanies') } },
     { label: 'Executives', icon: 'person-outline', action: () => { router.push('../(others)/ExecutiveList') } },
     { label: 'Delete', icon: 'trash-outline', action: () => { router.push('../(others)/DeleteUser') } },

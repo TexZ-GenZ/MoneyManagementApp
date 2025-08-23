@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   TextInput,
   Text,
@@ -28,18 +28,22 @@ const Input: React.FC<InputProps> = ({
   errorStyle,
   ...textInputProps
 }) => {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.container, containerStyle]}>
       {label && (
-        <Text style={[styles.label, labelStyle]}>{label}</Text>
+        <Text style={[styles.label, focused && styles.labelFocused, labelStyle]}>{label}</Text>
       )}
       <TextInput
         style={[
           styles.input,
+          focused && styles.inputFocused,
           error && styles.inputError,
           inputStyle
         ]}
         placeholderTextColor={COLORS.GRAY}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         {...textInputProps}
       />
       {error && (
@@ -55,23 +59,28 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '400',
     color: COLORS.DARK,
     marginBottom: 8,
   },
+  labelFocused: {
+    color: '#00BFFF',
+  },
   input: {
-    borderWidth: 1,
-    borderColor: COLORS.GRAY,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.12)',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
     fontSize: 16,
     color: COLORS.DARK,
     backgroundColor: COLORS.WHITE,
     minHeight: 44,
   },
+  inputFocused: {
+    borderBottomColor: '#00BFFF', // light blue when active
+  },
   inputError: {
-    borderColor: COLORS.ERROR,
+    borderBottomColor: COLORS.ERROR,
   },
   error: {
     fontSize: 14,
