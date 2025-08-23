@@ -30,7 +30,7 @@ export default function PaymentDetails() {
 
         try {
             setLoading(true);
-            
+
             const response = await fetch(`${API_BASE_URL}/bills/${bill_id}/payments`, {
                 method: 'GET',
                 headers: {
@@ -48,15 +48,15 @@ export default function PaymentDetails() {
             }
 
             const data = await response.json();
-            
+
             // Handle both array response and object with items array
             const payments = Array.isArray(data) ? data : (data.items || data.payments || []);
             setPaymentHistory(payments);
-            
+
         } catch (error) {
             console.error('Error fetching payment history:', error);
             Alert.alert(
-                'Error', 
+                'Error',
                 'Failed to fetch payment history. Please check your connection and try again.',
                 [
                     { text: 'Retry', onPress: fetchPaymentHistory },
@@ -92,21 +92,21 @@ export default function PaymentDetails() {
                             {item.accountant_comment || "No comment"}
                         </Text>
                     </View>
-                    
+
                     <View style={styles.commentRow}>
                         <Text style={styles.commentLabel}>Admin:</Text>
                         <Text style={styles.commentValue}>
                             {item.admin_comment || "No comment"}
                         </Text>
                     </View>
-                    
+
                     <View style={styles.commentRow}>
                         <Text style={styles.commentLabel}>Location Verified:</Text>
-                        <Text style={[styles.commentValue, { 
-                            color: item.exec_location_verified ? "#209653" : "#d73838" 
+                        <Text style={[styles.commentValue, {
+                            color: item.exec_location_verified ? "#209653" : "#d73838"
                         }]}>
-                            {item.exec_location_verified === undefined 
-                                ? "N/A" 
+                            {item.exec_location_verified === undefined
+                                ? "N/A"
                                 : item.exec_location_verified ? "Yes" : "No"
                             }
                         </Text>
@@ -118,7 +118,7 @@ export default function PaymentDetails() {
 
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
-        
+
         try {
             const date = new Date(dateString);
             return date.toLocaleString('en-IN', {
@@ -149,7 +149,7 @@ export default function PaymentDetails() {
             <Text style={styles.label}>
                 Method: <Text style={styles.value}>{item.method || 'N/A'}</Text>
             </Text>
-            
+
             {item.transaction_id && (
                 <Text style={styles.label}>
                     Transaction ID: <Text style={styles.value}>{item.transaction_id}</Text>
@@ -163,7 +163,7 @@ export default function PaymentDetails() {
     const renderEmptyComponent = () => (
         <View style={styles.emptyContainer}>
             <Text style={styles.empty}>No payments found for this bill.</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
                 style={styles.retryButton}
                 onPress={fetchPaymentHistory}
             >
@@ -194,7 +194,7 @@ export default function PaymentDetails() {
                 <Text style={styles.label}>
                     Outstanding: <Text style={[styles.outbal, styles.value]}>₹{outbal}</Text>
                 </Text>
-                
+
                 {paymentHistory.length > 0 && (
                     <Text style={styles.label}>
                         Total Paid: <Text style={[styles.totalPaid, styles.value]}>₹{getTotalPaid()}</Text>
@@ -229,21 +229,19 @@ export default function PaymentDetails() {
             )}
 
             {userRole === "executive" && (
-                <TouchableOpacity 
-                    style={styles.button} 
-                    activeOpacity={0.7} 
-                    onPress={() => {router.push({
+                <TouchableOpacity
+                    style={styles.button}
+                    activeOpacity={0.7}
+                    onPress={() => router.push({
                         pathname: "./PaymentScreen",
-                        params: { 
+                        params: {
                             company_code: code,
                             bill_id: bill_id,
                             bill_number: bill_number,
                             bill_amount: amount
                         }
                     })
-                    console.log(code, bill_id, bill_number)}
-
-                }
+                    }
                 >
                     <Text style={styles.buttonText}>Add Payment</Text>
                 </TouchableOpacity>
