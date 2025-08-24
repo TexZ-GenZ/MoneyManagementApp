@@ -5,13 +5,29 @@ import { StatusBar } from 'expo-status-bar';
 import { Provider } from 'react-redux';
 import { useColorScheme } from 'react-native';
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import 'react-native-reanimated';
 
-import {store} from "../src/store"
+import { store } from "../src/store"
 import { initializeAuth } from '../src/store/authSlice';
 
 function AppContent() {
   const colorScheme = useColorScheme();
+
+  // Configure Android channel once
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('default', {
+        name: 'General',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 240, 120, 240],
+        lightColor: '#2E86AB',
+        // sound can be added if custom file included: sound: 'custom.wav'
+      }).catch(() => { });
+    }
+  }, []);
+
 
   useEffect(() => {
     // Initialize authentication when app starts
