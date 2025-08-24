@@ -28,6 +28,7 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { COLORS } from '../../utils/constants';
+import { getApiUrl } from '../../utils/config';
 import { validateForm, VALIDATION_RULES } from '../../utils/validation';
 //import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -116,7 +117,8 @@ async function sendPushTokenToBackend(token) {
       return;
     }
 
-    const response = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/push-token`, {
+    // Use centralized API URL builder so deployment base URL is respected everywhere
+    const response = await fetch(getApiUrl('/auth/push-token'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -31,7 +31,8 @@ export const isStaging = ENVIRONMENT === 'staging';
 
 // API URL helpers
 export const getApiUrl = (endpoint: string = '') => {
-  const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+  const rawBase = API_BASE_URL || '';
+  const baseUrl = rawBase.endsWith('/') ? rawBase.slice(0, -1) : rawBase;
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   return `${baseUrl}${cleanEndpoint}`;
 };
@@ -44,6 +45,13 @@ if (isDevelopment && DEBUG_MODE) {
     debugMode: DEBUG_MODE,
     features: config.features,
   });
+}
+
+// Production safety guard: warn if debug accidentally enabled
+if (isProduction && DEBUG_MODE) {
+  // Single warning; keeps bundle lightweight without throwing
+  // eslint-disable-next-line no-console
+  console.warn('DEBUG_MODE is enabled while ENVIRONMENT=production. Disable it in eas.json env for production builds.');
 }
 
 export default config;
