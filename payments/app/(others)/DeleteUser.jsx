@@ -120,15 +120,14 @@ import GridBackground from '../(others)/GridBGComponent';
       );
 
       if (!res.ok) {
-        const resData = await res.json();
-        setError(resData.message || "Failed to deactivate user.");
+        setError("An error occurred during this operation.");
       } else {
         Alert.alert("Success", "⚠️ User deactivated!");
         setUserDetails(null);
         setInputValue("");
       }
     } catch (err) {
-      setError("Network error. Please try again.");
+      setError("An error occurred during this operation.");
     }
     setLoading(false);
   };
@@ -168,15 +167,14 @@ import GridBackground from '../(others)/GridBGComponent';
       );
 
       if (!res.ok) {
-        const resData = await res.json();
-        setError(resData.message || "Failed to delete user.");
+        setError("An error occurred during this operation.");
       } else {
         Alert.alert("Success", "✅ User deleted successfully!");
         setUserDetails(null);
         setInputValue("");
       }
     } catch (err) {
-      setError("Network error. Please try again.");
+      setError("An error occurred during this operation.");
     }
     setLoading(false);
   };

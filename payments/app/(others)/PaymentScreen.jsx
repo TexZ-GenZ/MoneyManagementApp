@@ -159,7 +159,23 @@ export default function CollectPaymentScreen() {
   const submitPayment = async () => {
     if (!validateInputs()) return;
 
-    // Location no longer required; optional capture only.
+    // Location is now required
+    if (!location || !location.latitude || !location.longitude) {
+      Alert.alert(
+        "Location Required",
+        "Location must be captured to submit payment.",
+        [
+          {
+            text: "Retry",
+            onPress: async () => {
+              await fetchLocation();
+            }
+          },
+          { text: "Cancel", style: "cancel" }
+        ]
+      );
+      return;
+    }
 
     setSubmitting(true);
 
@@ -173,19 +189,14 @@ export default function CollectPaymentScreen() {
         amount_collected: Number(amountCollected),
         method: paymentMethod.toLowerCase(),
         comments: comments.trim() || undefined,
-        // No explicit verification flag now; coords captured separately.
         next_promise_date: nextPromiseDate ? nextPromiseDate.toISOString().split("T")[0] : undefined,
         bill_allocations: billAllocations.map(b => ({
           bill_id: b.bill_id,
           amount: Number(b.amount)
-        }))
+        })),
+        exec_lat: location.latitude,
+        exec_lng: location.longitude
       };
-
-      // Add coordinates if available
-      if (location?.latitude && location?.longitude) {
-        payload.exec_lat = location.latitude;
-        payload.exec_lng = location.longitude;
-      }
 
       const response = await fetch(`${API_BASE_URL}/payments`, {
         method: 'POST',
@@ -220,7 +231,7 @@ export default function CollectPaymentScreen() {
     } catch (error) {
       Alert.alert(
         "Submission Failed",
-        error.message || "Failed to submit payment. Please check your connection and try again.",
+        "An error occurred during this operation.",
         [
           { text: "Retry", onPress: submitPayment },
           { text: "Cancel", style: "cancel" }

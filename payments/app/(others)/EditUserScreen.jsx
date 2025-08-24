@@ -93,7 +93,7 @@ export default function EditUserScreen() {
         router.replace("/"); // Navigate to home page
       }
     } catch (error) {
-      Alert.alert("❌ Update failed", error.message || "Something went wrong.");
+      Alert.alert("❌ Update failed", "An error occurred during this operation.");
     } finally {
       setLoading(false);
     }

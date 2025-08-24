@@ -61,18 +61,18 @@ export default function AddUserScreen() {
       const resData = await res.json();
 
       if (!res.ok) {
-        // Handle error -> show modal
-        setError(resData?.message || "Something went wrong!");
-        setIsModalVisible(true);
+  // Handle error -> show modal
+  setError("An error occurred during this operation.");
+  setIsModalVisible(true);
       } else {
         // On success -> navigate to Home
         router.back()
       }
 
     } catch (error) {
-      console.error("Error adding user:", error);
-      setError("Network error. Please try again!");
-      setIsModalVisible(true);
+  console.error("Error adding user:", error);
+  setError("An error occurred during this operation.");
+  setIsModalVisible(true);
     } finally {
       setLoading(false);
     }

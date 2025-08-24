@@ -112,7 +112,7 @@ export default function CompanyAssignments() {
                 return;
             }
             throw new Error('assignments_endpoint');
-        } catch (e) { console.error(e); Alert.alert('Error', 'Failed to load companies (assignments).'); }
+        } catch (e) { console.error(e); Alert.alert('Error', 'An error occurred during this operation.'); }
         finally { setLoading(false); }
     }, [currentUserRole]);
 
@@ -124,7 +124,7 @@ export default function CompanyAssignments() {
             if (!res.ok) throw new Error('execs');
             const data = await res.json();
             setExecutives((data.items || data || []));
-        } catch (e) { console.error(e); Alert.alert('Error', 'Failed to load executives'); }
+        } catch (e) { console.error(e); Alert.alert('Error', 'An error occurred during this operation.'); }
         finally { setExecutiveLoading(false); }
     }, []);
 
@@ -204,7 +204,7 @@ export default function CompanyAssignments() {
             setAssignModalVisible(false);
             clearSelection();
         } catch (e) { console.error(e); Alert.alert('Assign Failed', 'Could not assign'); }
-        finally { setMutating(false); }
+    finally { setMutating(false); }
     };
 
     const performUnassign = async () => {

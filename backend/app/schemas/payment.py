@@ -34,6 +34,7 @@ class PaymentOut(BaseModel):
     exec_location_verified: Optional[bool] = None
     exec_lat: Optional[float] = None
     exec_lng: Optional[float] = None
+    comments: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -87,6 +88,7 @@ class PaymentDetailOut(BaseModel):
     admin_review_at: Optional[datetime] = None
     accountant_comment: Optional[str] = None
     admin_comment: Optional[str] = None
+    comments: Optional[str] = None  # executive's comment
     allocations: List[PaymentAllocationDetail]
 
     class Config:

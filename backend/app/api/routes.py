@@ -433,6 +433,7 @@ def accountant_pending(db: Session = Depends(get_db), skip: int = 0, limit: int 
     q = db.query(Payment).filter(Payment.status == PaymentStatus.submitted)
     total = q.count()
     items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    # Ensure comments field is included in PaymentOut
     return PaymentList(items=items, total=total)
 
 
@@ -459,6 +460,7 @@ def list_company_payments(
         )
     total = q.count()
     items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    # Ensure comments field is included in PaymentOut
     return PaymentList(items=items, total=total)
 
 
@@ -501,6 +503,7 @@ def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
         admin_review_at=getattr(p, "admin_review_at", None),
         accountant_comment=getattr(p, "accountant_comment", None),
         admin_comment=getattr(p, "admin_comment", None),
+        comments=getattr(p, "comments", None),
         allocations=allocations,
     )
 
@@ -1136,6 +1139,7 @@ def admin_pending(db: Session = Depends(get_db), skip: int = 0, limit: int = 50)
     q = db.query(Payment).filter(Payment.status == PaymentStatus.accountant_approved)
     total = q.count()
     items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    # Ensure comments field is included in PaymentOut
     return PaymentList(items=items, total=total)
 
 
@@ -1334,3 +1338,89 @@ def batch_unassign(payload: UnassignBatchIn, db: Session = Depends(get_db)):
             removed.append(code)
     db.commit()
     return {"unassigned": removed}
+
+
+# Unified payment approval/rejection history (all users, paginated)
+@router.get(
+    "/payments/history",
+)
+def payments_history(
+    db: Session = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=50),
+):
+    # Payments approved or rejected by either admin or accountant
+    q = db.query(Payment).filter(
+        Payment.status.in_([
+            PaymentStatus.admin_approved,
+            PaymentStatus.declined_by_admin,
+            PaymentStatus.accountant_approved,
+            PaymentStatus.declined_by_accountant,
+        ])
+    )
+    total = q.count()
+    items = (
+        q.order_by(
+            Payment.admin_review_at.desc().nullslast(),
+            Payment.accountant_review_at.desc().nullslast(),
+            Payment.collected_at.desc()
+        )
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for p in items:
+        result.append({
+            "id": p.id,
+            "company_code": p.company_code,
+            "executive_id": p.executive_id,
+            "collected_at": p.collected_at,
+            "amount_collected": float(p.amount_collected),
+            "method": p.method,
+            "status": p.status.value if hasattr(p.status, "value") else str(p.status),
+            "admin_review_at": p.admin_review_at,
+            "admin_comment": p.admin_comment,
+            "accountant_review_at": p.accountant_review_at,
+            "accountant_comment": p.accountant_comment,
+            "comments": p.comments,
+        })
+    return {"items": result, "total": total}
+
+# Admin: payment approval/rejection history (last 10, paginated, status included)
+@router.get(
+    "/admin/payments/history",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_payment_history(
+    db: Session = Depends(get_db),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=50),
+):
+    # Only payments approved or rejected by admin
+    q = db.query(Payment).filter(
+        Payment.status.in_([PaymentStatus.admin_approved, PaymentStatus.declined_by_admin])
+    )
+    total = q.count()
+    items = (
+        q.order_by(Payment.admin_review_at.desc().nullslast(), Payment.collected_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    # Response shape: like notifications, but with status
+    result = []
+    for p in items:
+        result.append({
+            "id": p.id,
+            "company_code": p.company_code,
+            "executive_id": p.executive_id,
+            "collected_at": p.collected_at,
+            "amount_collected": float(p.amount_collected),
+            "method": p.method,
+            "status": p.status.value if hasattr(p.status, "value") else str(p.status),
+            "admin_review_at": p.admin_review_at,
+            "admin_comment": p.admin_comment,
+            "comments": p.comments,
+        })
+    return {"items": result, "total": total}

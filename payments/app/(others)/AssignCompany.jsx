@@ -156,7 +156,7 @@ export default function ExecutiveDetailsScreen() {
 
     } catch (error) {
       console.error('Error assigning company:', error);
-      Alert.alert('Error', error.message || 'Failed to assign company. Please try again.');
+  Alert.alert('Error', 'An error occurred during this operation.');
     } finally {
       setAssigningCompany(false);
     }

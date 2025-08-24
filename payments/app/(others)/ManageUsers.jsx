@@ -90,6 +90,7 @@ export default function ManageUsers() {
             const created = await r.json();
             setRawUsers(prev => [...prev, created].sort((a, b) => a.username.localeCompare(b.username)));
             setCreateUsername(''); setCreateMobile(''); setCreatePassword(''); setCreateRole('executive');
+            setCreateModalVisible(false); // Close modal on success
         } catch (e) { console.error(e); Alert.alert('Create Failed', 'Could not create user.'); }
         finally { setCreating(false); }
     };
@@ -135,6 +136,7 @@ export default function ManageUsers() {
             const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${u.id}/hard-delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } });
             if (!r.ok) throw new Error('HTTP');
             setRawUsers(prev => prev.filter(x => x.id !== u.id));
+            setEditModalVisible(false); // Close edit modal on successful delete
         } catch (e) { console.error(e); Alert.alert('Delete Failed', 'Could not delete user.'); }
         finally { setDeletingId(null); }
     };

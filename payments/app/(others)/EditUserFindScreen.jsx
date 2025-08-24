@@ -39,7 +39,7 @@ export default function EditUserFindScreen() {
         );
 
         if (!res.ok) {
-          setError("Failed to fetch users");
+          setError("An error occurred during this operation.");
           return;
         }
 
@@ -47,8 +47,8 @@ export default function EditUserFindScreen() {
         setUsers(data);
         setFilteredUsers(data); // show all initially
       } catch (err) {
-        setError("Error fetching users");
-        console.error(err);
+  setError("An error occurred during this operation.");
+  console.error(err);
       }
     };
 

@@ -97,7 +97,9 @@ export default function AccountantNotifyScreen() {
                     data={filteredItems}
                     keyExtractor={item => item.id.toString()}
                     renderItem={renderItem}
-                    ListEmptyComponent={<Text style={styles.empty}>{search ? 'No matches found.' : 'No pending approvals.'}</Text>}
+                    ListEmptyComponent={() => (
+                        <Text style={styles.empty}>{search ? 'No matches found.' : 'No pending approvals.'}</Text>
+                    )}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     contentContainerStyle={{ paddingBottom: 60 }}
                     showsVerticalScrollIndicator={false}

@@ -245,10 +245,10 @@ const LoginScreen = () => {
         router.replace('/(tabs)');
 
       } else {
-        Alert.alert('Login Failed', result.payload || 'Please check your credentials and try again.');
+        Alert.alert('Login Failed'|| 'Please check your credentials and try again.');
       }
     } catch (error) {
-      Alert.alert('Login Failed', error.message || 'Please check your credentials and try again.');
+      Alert.alert('Login Failed' || 'Please check your credentials and try again.');
     }
   };
 
@@ -327,7 +327,7 @@ const LoginScreen = () => {
 
             {error && (
               <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
+                <Text style={styles.errorText}>Invalid Credentials</Text>
               </View>
             )}
 

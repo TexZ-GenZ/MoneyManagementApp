@@ -113,7 +113,10 @@ export default function PaymentApprovalDetail() {
     };
 
     return (
-        <Screen title={payment ? payment.company_code : 'Payment'} subtitle={payment ? `ID ${payment.id}` : ''}>
+        <Screen
+            title={payment ? payment.company_code : 'Payment'}
+            subtitle={payment ? (<Text>ID {payment.id}</Text>) : null}
+        >
             {loading ? <ActivityIndicator color={tokens.colors.accent} style={{ marginTop: 40 }} /> : (
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }} scrollEnabled={outerScrollEnabled}>
                     <Card style={styles.card}>

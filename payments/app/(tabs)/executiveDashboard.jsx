@@ -35,8 +35,8 @@ export default function ExecutiveDashboard() {
       const items = Array.isArray(data.items) ? data.items : data;
       setCompanies(items || []);
     } catch (e) {
-      setError(e.message || 'Failed to load');
-      setCompanies([]);
+  setError('An error occurred during this operation.');
+  setCompanies([]);
     } finally { setLoading(false); }
   }, []);
 
@@ -73,7 +73,7 @@ export default function ExecutiveDashboard() {
   const enriched = useMemo(() => companies.map(c => ({ ...c, __cls: classify(c) })), [companies, classify]);
   const overdueCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'overdue').sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0)), [enriched]);
   const todayCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'today').sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0)), [enriched]);
-  const upcomingCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'upcoming').sort((a, b) => (c.__cls.due - b.__cls.due)), [enriched]);
+  const upcomingCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'upcoming').sort((a, b) => (a.__cls.due - b.__cls.due)), [enriched]);
 
   const activeList = viewMode === 'today' ? todayCompanies : viewMode === 'upcoming' ? upcomingCompanies : overdueCompanies;
   const previewList = activeList.slice(0, 8);

@@ -65,7 +65,7 @@ export default function CompanyBillsList() {
             const data = await response.json();
             setBills(data.items || []);
         } catch (e) { console.error(e); Alert.alert('Error', 'Failed to fetch bills.'); }
-        finally { setLoading(false); setRefreshing(false); }
+    finally { setLoading(false); setRefreshing(false); }
     };
     const onRefresh = useCallback(() => { setRefreshing(true); fetchBills(); }, [sortFilter, statusFilter]);
 
@@ -114,13 +114,7 @@ export default function CompanyBillsList() {
                 {renderFilters()}
             </Card>
             <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{bills.length}</Text></View>
-            <View style={styles.billLabelsRow}>
-                <Text style={[styles.billLabelCol, { flex: 1.4 }]}>Bill #</Text>
-                <Text style={[styles.billLabelCol, { flex: 1 }]}>Bill Date</Text>
-                <Text style={[styles.billLabelCol, { flex: 1 }]}>Due</Text>
-                <Text style={[styles.billLabelCol, { flex: 1 }]}>Amount</Text>
-                <Text style={[styles.billLabelCol, { flex: 0.9 }]}>Paid</Text>
-            </View>
+            
             {loading ? (
                 <View style={{ marginTop: 10 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
             ) : (

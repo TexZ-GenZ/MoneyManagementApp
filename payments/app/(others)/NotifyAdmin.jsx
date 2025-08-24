@@ -7,6 +7,7 @@ import { Card } from '../../src/ui/components/Card';
 import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 import { tokens } from '../../src/ui/tokens';
 import ApprovalItemCard from '../../src/ui/components/ApprovalItemCard';
+import { onPaymentUpdate } from '../../src/events/paymentEvents';
 
 // Mock executiveId to name mapping - you might want to fetch this from API too
 const executiveNames = {
@@ -51,13 +52,64 @@ export default function AdminNotifyScreen() {
 
     useEffect(() => { fetchApprovalData(); }, []);
 
+    // Listen for payment updates and refetch when a payment is updated elsewhere
+    useEffect(() => {
+        const off = onPaymentUpdate(ev => {
+            if (!ev || !ev.id) return;
+            fetchApprovalData();
+        });
+        return off;
+    }, []);
+
     const onRefresh = () => { setRefreshing(true); fetchApprovalData(); };
 
-    const handleApprove = (item) => { (async () => { setActionSubmittingId(item.id); try { const t = await StorageService.getToken(); const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/${item.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t?.access_token}` } }); if (!r.ok) throw new Error('HTTP'); await r.json(); setApprovalItems(p => p.filter(i => i.id !== item.id)); } catch (e) { console.error(e); Alert.alert('Approve Failed', 'Failed to approve.'); } finally { setActionSubmittingId(null); } })(); };
+    const handleApprove = (item) => {
+        (async () => {
+            setActionSubmittingId(item.id);
+            try {
+                const t = await StorageService.getToken();
+                const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/${item.id}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t?.access_token}` }
+                });
+                if (!r.ok) throw new Error('HTTP');
+                await r.json();
+                // Remove from list immediately
+                setApprovalItems(prev => prev.filter(i => i.id !== item.id));
+            } catch (e) {
+                console.error(e);
+                Alert.alert('Approve Failed', 'Failed to approve.');
+            } finally {
+                setActionSubmittingId(null);
+            }
+        })();
+    };
 
     const handleReject = (item) => { setModalAction('reject'); setModalItem(item); setModalComment(''); setModalVisible(true); };
 
-    const handleModalSubmit = async () => { if (!modalItem) return; setSubmitting(true); try { const t = await StorageService.getToken(); const comment = encodeURIComponent(modalComment.trim() || ''); const url = `${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/${modalItem.id}/decline?comment=${comment}`; const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t?.access_token}` } }); if (!r.ok) throw new Error('HTTP'); await r.json(); setModalVisible(false); setApprovalItems(p => p.filter(i => i.id !== modalItem.id)); } catch (e) { console.error(e); Alert.alert('Action Failed', 'Failed to reject payment.'); } finally { setSubmitting(false); } };
+    const handleModalSubmit = async () => {
+        if (!modalItem) return;
+        setSubmitting(true);
+        try {
+            const t = await StorageService.getToken();
+            const comment = encodeURIComponent(modalComment.trim() || '');
+            const url = `${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/${modalItem.id}/decline?comment=${comment}`;
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t?.access_token}` }
+            });
+            if (!r.ok) throw new Error('HTTP');
+            await r.json();
+            setModalVisible(false);
+            // Remove from list immediately
+            setApprovalItems(prev => prev.filter(i => i.id !== modalItem.id));
+        } catch (e) {
+            console.error(e);
+            Alert.alert('Action Failed', 'Failed to reject payment.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
     const renderItem = ({ item }) => (
         <ApprovalItemCard
