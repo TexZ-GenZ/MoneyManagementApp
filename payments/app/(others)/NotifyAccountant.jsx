@@ -8,9 +8,10 @@ import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 import { tokens } from '../../src/ui/tokens';
 import ApprovalItemCard from '../../src/ui/components/ApprovalItemCard';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function AccountantNotifyScreen() {
-    const BASE = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI;
+    const BASE = API_BASE_URL;
     const [search, setSearch] = useState('');
     const [approvalItems, setApprovalItems] = useState([]);
     const [loading, setLoading] = useState(true);

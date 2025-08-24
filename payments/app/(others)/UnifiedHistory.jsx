@@ -3,6 +3,7 @@ import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, Activity
 import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
+import { API_BASE_URL } from '../../src/utils/constants';
 import { formatDateTime, formatCurrency } from '../../src/ui/format';
 import { StorageService } from '../../src/services/storageService';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -10,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import StatusBadge from '../../src/ui/components/StatusBadge';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
+// Use central API base configured via EXPO_PUBLIC_API_BASE_URL
 
 export default function UnifiedHistory() {
     const [items, setItems] = useState([]);

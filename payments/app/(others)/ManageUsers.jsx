@@ -5,6 +5,7 @@ import { getErrorMessage } from '../../src/utils/helpers';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
+import { API_BASE_URL } from '../../src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
 import { StorageService } from '../../src/services/storageService';
 import { useRouter } from 'expo-router';
@@ -52,7 +53,7 @@ export default function ManageUsers() {
         setLoading(true);
         try {
             const h = await StorageService.getAuthHeader();
-            const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users`, { headers: { 'Content-Type': 'application/json', ...h } });
+            const res = await fetch(`${API_BASE_URL}/admin/users`, { headers: { 'Content-Type': 'application/json', ...h } });
             if (!res.ok) throw new Error('Fetch failed');
             const data = await res.json();
             const list = data.items || data || [];
@@ -90,7 +91,7 @@ export default function ManageUsers() {
         try {
             const h = await StorageService.getAuthHeader();
             const body = { username: createUsername.trim(), password: createPassword.trim(), mobile: createMobile.trim() || undefined, role: createRole, area: '' };
-            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
+            const r = await fetch(`${API_BASE_URL}/admin/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
             if (!r.ok) throw new Error('HTTP');
             setCreateModalVisible(false); // close modal immediately
             setCreateUsername(''); setCreateMobile(''); setCreatePassword(''); setCreateRole('executive');
@@ -107,19 +108,19 @@ export default function ManageUsers() {
             // parallel patch calls for changed fields
             const promises = [];
             if (editUsername.trim() && editUsername.trim() !== editUser.username) {
-                promises.push(fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${editUser.id}/username?username=${encodeURIComponent(editUsername.trim())}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
+                promises.push(fetch(`${API_BASE_URL}/admin/users/${editUser.id}/username?username=${encodeURIComponent(editUsername.trim())}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
             }
             if (editMobile.trim() !== (editUser.mobile || '')) {
-                promises.push(fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${editUser.id}/mobile?mobile=${encodeURIComponent(editMobile.trim())}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
+                promises.push(fetch(`${API_BASE_URL}/admin/users/${editUser.id}/mobile?mobile=${encodeURIComponent(editMobile.trim())}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
             }
             if (editPassword.trim()) {
-                promises.push(fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${editUser.id}/password?new_password=${encodeURIComponent(editPassword.trim())}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
+                promises.push(fetch(`${API_BASE_URL}/admin/users/${editUser.id}/password?new_password=${encodeURIComponent(editPassword.trim())}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
             }
             // prevent attempting self-admin deactivation (backend also guards, but we skip the call entirely)
             const isSelfAdmin = currentUser && editUser && String(currentUser.id) === String(editUser.id) && editUser.role === 'admin';
             if (!isSelfAdmin && editIsActive !== editUser.is_active) {
                 const endpoint = editIsActive ? 'activate' : 'deactivate';
-                promises.push(fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${editUser.id}/${endpoint}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
+                promises.push(fetch(`${API_BASE_URL}/admin/users/${editUser.id}/${endpoint}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } }));
             }
             const responses = await Promise.all(promises);
             if (responses.some(r => !r.ok)) throw new Error('Failed');
@@ -169,7 +170,7 @@ export default function ManageUsers() {
     const safeDeactivate = async (u) => {
         try {
             const h = await StorageService.getAuthHeader();
-            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${u.id}/deactivate`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } });
+            const r = await fetch(`${API_BASE_URL}/admin/users/${u.id}/deactivate`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } });
             if (r.ok) await fetchUsers();
         } catch (e) { }
     };
@@ -178,7 +179,7 @@ export default function ManageUsers() {
         try {
             const h = await StorageService.getAuthHeader();
             // 1) assignments for executive (admin can call this)
-            const aResp = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/executives/${userId}/companies`, { headers: { 'Content-Type': 'application/json', ...h } });
+            const aResp = await fetch(`${API_BASE_URL}/executives/${userId}/companies`, { headers: { 'Content-Type': 'application/json', ...h } });
             let assignments = 0;
             if (aResp.ok) {
                 const aj = await aResp.json();
@@ -186,13 +187,13 @@ export default function ManageUsers() {
             }
             // 2) pending payments for this executive
             let pendingSubmitted = 0, pendingAdmin = 0;
-            const p1 = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
+            const p1 = await fetch(`${API_BASE_URL}/accountant/payments/pending?skip=0&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
             if (p1.ok) {
                 const pj = await p1.json();
                 const items = pj?.items || [];
                 pendingSubmitted = items.filter(it => String(it.executive_id) === String(userId)).length;
             }
-            const p2 = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/pending?skip=0&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
+            const p2 = await fetch(`${API_BASE_URL}/admin/payments/pending?skip=0&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
             if (p2.ok) {
                 const pj = await p2.json();
                 const items = pj?.items || [];
@@ -207,7 +208,7 @@ export default function ManageUsers() {
         setDeletingId(u.id);
         try {
             const h = await StorageService.getAuthHeader();
-            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${u.id}/hard-delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } });
+            const r = await fetch(`${API_BASE_URL}/admin/users/${u.id}/hard-delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } });
             if (r.status === 400) {
                 // Try to get error detail
                 let detail = 'Cannot delete user.';

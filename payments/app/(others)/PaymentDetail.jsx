@@ -11,7 +11,7 @@ import { tokens } from '../../src/ui/tokens';
 import { formatCurrency, formatDateTime, formatDate } from '../../src/ui/format';
 import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function PaymentDetails() {
     // Params (may be partial / stale, we'll refetch authoritative data)

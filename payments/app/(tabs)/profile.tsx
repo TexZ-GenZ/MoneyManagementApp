@@ -8,6 +8,7 @@ import Screen from '@/src/ui/components/Screen';
 import Card from '@/src/ui/components/Card';
 import { tokens } from '@/src/ui/tokens';
 import Constants from 'expo-constants';
+import { API_BASE_URL } from '@/src/utils/constants';
 
 type MeResponse = {
   id: string | number;
@@ -50,7 +51,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const dispatch = useAppDispatch();
 
-  const baseUrl = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI || '-';
+  const baseUrl = API_BASE_URL || '-';
   const appVersion = Constants.expoConfig?.version || '1.0.0';
 
   const load = useCallback(async () => {

@@ -6,6 +6,7 @@ import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { StorageService } from '../../src/services/storageService';
 import { useRouter } from 'expo-router';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function ExecutiveDashboard() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function ExecutiveDashboard() {
     setLoading(true); setError(null);
     try {
       const token = await StorageService.getToken();
-      const base = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI;
+      const base = API_BASE_URL;
       // Primary endpoint for exec
       let resp = await fetch(`${base}/me/companies`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` } });
       let data = await resp.json();

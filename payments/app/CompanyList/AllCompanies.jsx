@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function CompanyListScreen() {
   const [companies, setCompanies] = useState([]);
@@ -34,7 +35,7 @@ export default function CompanyListScreen() {
     else if (sortMode === 'AMOUNT_ASC') params.set('sort', 'amount_asc');
     else params.set('sort', 'name_asc');
     if (search.trim().length >= 2) params.set('q', search.trim());
-    const url = `${process.env.EXPO_PUBLIC_APP_URI}/companies?${params.toString()}`;
+    const url = `${API_BASE_URL}/companies?${params.toString()}`;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -69,7 +70,7 @@ export default function CompanyListScreen() {
     setLoading(true);
     try {
       // Initial fetch honors default sort (outbal desc)
-      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies?skip=0&limit=1000&sort=outbal_desc`, { method: 'GET', headers: { 'content-type': 'application/json' } });
+      const response = await fetch(`${API_BASE_URL}/companies?skip=0&limit=1000&sort=outbal_desc`, { method: 'GET', headers: { 'content-type': 'application/json' } });
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
       const dataArr = data.items || [];
@@ -102,7 +103,7 @@ export default function CompanyListScreen() {
       else if (sortMode === 'AMOUNT_DESC') params.set('sort', 'amount_desc');
       else if (sortMode === 'AMOUNT_ASC') params.set('sort', 'amount_asc');
       else params.set('sort', 'name_asc');
-      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies?${params.toString()}`, { method: 'GET', headers: { 'content-type': 'application/json' } });
+      const response = await fetch(`${API_BASE_URL}/companies?${params.toString()}`, { method: 'GET', headers: { 'content-type': 'application/json' } });
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
       const items = data.items || [];

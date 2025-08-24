@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StorageService } from '../../src/services/storageService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 /*
  UX Goals:
@@ -42,7 +43,7 @@ export default function CompanyAssignments() {
         setLoading(true);
         try {
             const h = await StorageService.getAuthHeader();
-            const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/assignments/companies`, { headers: { 'Content-Type': 'application/json', ...h } });
+            const res = await fetch(`${API_BASE_URL}/admin/assignments/companies`, { headers: { 'Content-Type': 'application/json', ...h } });
             if (res.ok) {
                 const data = await res.json();
                 console.log('[Assignments] direct endpoint items sample', data.items?.slice(0, 5));
@@ -51,11 +52,11 @@ export default function CompanyAssignments() {
                 if (!anyAssigned) {
                     // Attempt raw fallback reconstruction
                     try {
-                        const rawRes = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/assignments/raw`, { headers: { 'Content-Type': 'application/json', ...h } });
+                        const rawRes = await fetch(`${API_BASE_URL}/admin/assignments/raw`, { headers: { 'Content-Type': 'application/json', ...h } });
                         if (rawRes.ok) {
                             const rawData = await rawRes.json();
                             if (rawData.count > 0) {
-                                const execListRes = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users?role=executive&limit=1000`, { headers: { 'Content-Type': 'application/json', ...h } });
+                                const execListRes = await fetch(`${API_BASE_URL}/admin/users?role=executive&limit=1000`, { headers: { 'Content-Type': 'application/json', ...h } });
                                 let execMap = {};
                                 if (execListRes.ok) {
                                     const execPayload = await execListRes.json();
@@ -76,7 +77,7 @@ export default function CompanyAssignments() {
                 // Secondary fallback if still zero but raw shows assignments
                 if (!items.some(i => i.assigned_executive_id)) {
                     try {
-                        const rawRes2 = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/assignments/raw`, { headers: { 'Content-Type': 'application/json', ...h } });
+                        const rawRes2 = await fetch(`${API_BASE_URL}/admin/assignments/raw`, { headers: { 'Content-Type': 'application/json', ...h } });
                         if (rawRes2.ok) {
                             const rawData2 = await rawRes2.json();
                             if (rawData2.count > 0) {
@@ -92,18 +93,18 @@ export default function CompanyAssignments() {
             }
             if (res.status === 404) {
                 console.log('[Assignments] fallback mode');
-                const compRes = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies?skip=0&limit=1000`, { headers: { 'Content-Type': 'application/json', ...h } });
+                const compRes = await fetch(`${API_BASE_URL}/companies?skip=0&limit=1000`, { headers: { 'Content-Type': 'application/json', ...h } });
                 if (!compRes.ok) throw new Error('companies_list');
                 const compData = await compRes.json();
                 const baseItems = (compData.items || []).map(c => ({ code: c.code, name: c.name, assigned_executive_id: null, assigned_executive_username: null }));
-                const execRes = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`, { headers: { 'Content-Type': 'application/json', ...h } });
+                const execRes = await fetch(`${API_BASE_URL}/admin/executives`, { headers: { 'Content-Type': 'application/json', ...h } });
                 if (execRes.ok) {
                     const execs = await execRes.json();
                     const assignmentsMap = {};
                     let anyForbidden = false;
                     await Promise.all(execs.map(async ex => {
                         try {
-                            const ecRes = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/executives/${ex.id}/companies`, { headers: { 'Content-Type': 'application/json', ...h } });
+                            const ecRes = await fetch(`${API_BASE_URL}/executives/${ex.id}/companies`, { headers: { 'Content-Type': 'application/json', ...h } });
                             if (ecRes.status === 403) { anyForbidden = true; return; }
                             if (!ecRes.ok) return;
                             const ecData = await ecRes.json();
@@ -128,7 +129,7 @@ export default function CompanyAssignments() {
         setExecutiveLoading(true);
         try {
             const h = await StorageService.getAuthHeader();
-            const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users?role=executive&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
+            const res = await fetch(`${API_BASE_URL}/admin/users?role=executive&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
             if (!res.ok) throw new Error('execs');
             const data = await res.json();
             setExecutives((data.items || data || []));
@@ -214,13 +215,13 @@ export default function CompanyAssignments() {
         try {
             const h = await StorageService.getAuthHeader();
             const body = { company_codes: Array.from(selected), executive_id: execId };
-            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/assignments/batch`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
+            const r = await fetch(`${API_BASE_URL}/admin/assignments/batch`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
             if (!r.ok) {
                 if (r.status === 404) {
                     // fallback sequential assignment
                     for (const code of body.company_codes) {
                         try {
-                            await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives/${execId}/assign/${code}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h } });
+                            await fetch(`${API_BASE_URL}/admin/executives/${execId}/assign/${code}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h } });
                         } catch (_) { }
                     }
                 } else { throw new Error('assign'); }
@@ -238,14 +239,14 @@ export default function CompanyAssignments() {
         try {
             const h = await StorageService.getAuthHeader();
             const body = { company_codes: Array.from(selected) };
-            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/assignments/unassign`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
+            const r = await fetch(`${API_BASE_URL}/admin/assignments/unassign`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
             if (!r.ok) {
                 if (r.status === 404) {
                     // fallback sequential unassign using current company assigned_executive_id
                     for (const code of body.company_codes) {
                         const c = companies.find(x => x.code === code);
                         if (c && c.assigned_executive_id) {
-                            try { await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives/${c.assigned_executive_id}/assign/${code}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } }); } catch (_) { }
+                            try { await fetch(`${API_BASE_URL}/admin/executives/${c.assigned_executive_id}/assign/${code}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } }); } catch (_) { }
                         }
                     }
                 } else { throw new Error('unassign'); }

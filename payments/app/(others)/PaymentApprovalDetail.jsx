@@ -12,7 +12,7 @@ import { tokens } from '../../src/ui/tokens';
 import { StorageService } from '../../src/services/storageService';
 import { formatCurrency, formatDateTime } from '../../src/ui/format';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function PaymentApprovalDetail() {
     const { payment_id, read_only } = useLocalSearchParams();

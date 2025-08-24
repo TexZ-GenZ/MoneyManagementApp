@@ -8,13 +8,14 @@ import { StorageService } from '../../src/services/storageService';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function AccountantDashboard() {
   const [recentPayments, setRecentPayments] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
   const [pendingTotal, setPendingTotal] = useState(0);
   const router = useRouter();
-  const BASE = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI;
+  const BASE = API_BASE_URL;
 
   const navItems = [
     { label: 'Approve pending payments', icon: 'checkmark', route: '../(others)/NotifyAccountant' },
