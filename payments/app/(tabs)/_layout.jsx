@@ -60,19 +60,19 @@ export default function TabLayout() {
     ios: {
       backgroundColor: '#27323d',
       borderTopColor: '#364350',
-      // Give extra inner space for the home indicator
-      height: 60 + insets.bottom + 10,
       paddingTop: 8,
-      paddingBottom: insets.bottom + 14,
+      // Add the bottom safe area explicitly so we never overlap the home indicator
+      paddingBottom: insets.bottom + 12,
+      height: 60 + insets.bottom + 12,
     },
     default: {
       backgroundColor: '#27323d',
       borderTopColor: '#364350',
       elevation: 20,
-      // Ensure enough space for gesture nav/back areas
-      height: 58 + Math.max(insets.bottom, 14),
       paddingTop: 8,
-      paddingBottom: 12 + Math.max(insets.bottom, 14),
+      // Always lift the bar above gesture/nav area using safe area inset
+      paddingBottom: insets.bottom + 16,
+      height: 70 + insets.bottom,
       shadowColor: '#000',
       shadowOpacity: 0.3,
       shadowOffset: { width: 0, height: -2 },
@@ -86,14 +86,31 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#9fdf56',
         tabBarInactiveTintColor: 'rgba(255,255,255,0.55)',
         headerShown: false,
+        // Avoid covering inputs; hide the bar when keyboard shows
+        tabBarHideOnKeyboard: true,
         headerStyle: { backgroundColor: '#1f2933' },
         headerTitleStyle: {
           fontWeight: '600',
           color: '#ffffff'
         },
-        tabBarItemStyle: { paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '700', marginTop: 2 },
-        tabBarIconStyle: { marginTop: 0, alignItems: 'center', justifyContent: 'center' },
+        tabBarItemStyle: {
+          paddingVertical: 6,
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: 52,
+          flex: 1,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '700',
+          marginTop: 2,
+          marginBottom: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 0,
+          alignItems: 'center',
+          justifyContent: 'center'
+        },
         tabBarStyle: baseTabBarStyle,
       }}>
 
@@ -165,10 +182,32 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} />
+            <TabBarIcon
+              name={focused ? 'person' : 'person-outline'}
+              color={color}
+              size={26}
+              style={{
+                alignSelf: 'center',
+                marginTop: -9,
+              }}
+            />
           ),
           tabBarLabel: ({ color }) => (
-            <Text style={{ color, fontSize: 12, fontWeight: '700', marginTop: 2, textAlign: 'center' }}>Profile</Text>
+            <Text
+              includeFontPadding={true}
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={{
+                color,
+                fontSize: 11,
+                fontWeight: '700',
+                textAlign: 'center',
+                marginTop: -4,
+                marginBottom: 0,
+              }}
+            >
+              Profile
+            </Text>
           ),
           headerRight: () => (
             <TabBarIcon
