@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Header
 from pathlib import Path
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, or_
 from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
@@ -165,7 +165,8 @@ def list_companies(
         query = query.filter(Company.area == area)
     if q:
         like = f"%{q}%"
-        query = query.filter(Company.name.ilike(like))
+        # Search by name OR code (case-insensitive)
+        query = query.filter(or_(Company.name.ilike(like), Company.code.ilike(like)))
     total = query.count()
     items = query.order_by(Company.code).offset(skip).limit(limit).all()
     return CompanyList(items=items, total=total)
@@ -327,6 +328,8 @@ def bill_payment_history(bill_id: int, db: Session = Depends(get_db)):
                 accountant_comment=payment.accountant_comment,
                 admin_comment=payment.admin_comment,
                 exec_location_verified=payment.exec_location_verified,
+                exec_lat=getattr(payment, 'exec_lat', None),
+                exec_lng=getattr(payment, 'exec_lng', None),
             )
         )
     return BillPaymentHistory(items=items, total=len(items))

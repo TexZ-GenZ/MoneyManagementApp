@@ -1,7 +1,9 @@
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { onPaymentUpdate } from '../../src/events/paymentEvents';
 import { StorageService } from '../../src/services/storageService';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
@@ -19,31 +21,32 @@ export default function AccountantDashboard() {
     { label: 'Upload', icon: 'add-circle-outline', route: '../(others)/Upload' },
   ];
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchPayments = async () => {
-      try {
-        const token = await StorageService.getToken();
-        setLoadingRecent(true);
-        const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=6`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token.access_token}`,
-          },
-        });
-        const json = await response.json();
-        const items = json?.items || [];
-        if (isMounted && response.ok && Array.isArray(items)) setRecentPayments(items);
-      } catch (err) {
-        console.error('Payments fetch error:', err);
-      } finally {
-        isMounted && setLoadingRecent(false);
-      }
-    };
-    fetchPayments();
-    return () => { isMounted = false; };
+  const fetchRecent = useCallback(async () => {
+    let cancelled = false;
+    setLoadingRecent(true);
+    try {
+      const token = await StorageService.getToken();
+      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=6&_t=${Date.now()}` , {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.access_token}` },
+      });
+      const json = await response.json();
+      const items = json?.items || [];
+      if (!cancelled && response.ok && Array.isArray(items)) setRecentPayments(items);
+    } catch (err) { console.error('Payments fetch error:', err); }
+    finally { if (!cancelled) setLoadingRecent(false); }
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    fetchRecent();
+    const id = setInterval(fetchRecent, 30000);
+    return () => clearInterval(id);
+  }, [fetchRecent]);
+
+  useFocusEffect(useCallback(() => { fetchRecent(); }, [fetchRecent]));
+
+  useEffect(() => { const off = onPaymentUpdate(() => fetchRecent()); return off; }, [fetchRecent]);
 
   return (
     <Screen title="Accountant" subtitle="Quick access & recent activity">

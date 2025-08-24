@@ -14,6 +14,17 @@ export default function CompanyListScreen() {
 
   useEffect(() => { loadCompanies(); }, []);
 
+  useEffect(() => {
+    // Remote filter when search text length >=2
+    const t = search.trim();
+    if (t.length >= 2) {
+      remoteSearch(t);
+    } else {
+      // fallback to local filtering of initial batch
+      handleSearch(t);
+    }
+  }, [search]);
+
   const loadCompanies = async () => {
     setLoading(true);
     try {
@@ -28,11 +39,24 @@ export default function CompanyListScreen() {
     } finally { setLoading(false); }
   };
 
+  const remoteSearch = async (text) => {
+    try {
+      const q = encodeURIComponent(text);
+      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies?q=${q}&skip=0&limit=500`, { method: 'GET', headers: { 'content-type': 'application/json' } });
+      if (!response.ok) throw new Error('Search failed');
+      const data = await response.json();
+      const items = data.items || [];
+      setFiltered(items);
+    } catch (e) {
+      // fallback to local
+      const lower = text.toLowerCase();
+      setFiltered(companies.filter(c => (c.name && c.name.toLowerCase().includes(lower)) || (c.code && c.code.toLowerCase().includes(lower))));
+    }
+  };
+
   const handleSearch = (text) => {
     setSearch(text);
-    if (!text.trim()) { setFiltered(companies); return; }
-    const lower = text.toLowerCase();
-    setFiltered(companies.filter(c => (c.name && c.name.toLowerCase().includes(lower)) || (c.code && c.code.toLowerCase().includes(lower))));
+    if (!text.trim()) { setFiltered(companies); }
   };
 
   const renderItem = ({ item }) => (
@@ -69,6 +93,9 @@ export default function CompanyListScreen() {
           value={search}
           onChangeText={handleSearch}
           placeholderTextColor={tokens.colors.textFaint}
+          autoCorrect={false}
+          autoCapitalize='none'
+          returnKeyType='search'
         />
       </View>
       {loading ? (

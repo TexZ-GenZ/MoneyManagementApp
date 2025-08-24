@@ -1,5 +1,5 @@
 import React from 'react';
-import { SafeAreaView, View, StyleSheet, ScrollView } from 'react-native';
+import { SafeAreaView, View, StyleSheet, ScrollView, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import GridBackground from '../../../app/(others)/GridBGComponent';
@@ -38,15 +38,27 @@ export default function Screen({
                     contentContainerStyle={scroll ? styles.scrollContent : undefined}
                     showsVerticalScrollIndicator={false}
                 >
-                    {header || (
-                        (title || subtitle) && (
-                            <View style={styles.headerBlock}>
-                                {title ? <View style={styles.titleWrapper}><HeaderText text={title} /></View> : null}
-                                {subtitle ? <View style={styles.subtitleWrapper}><SubtitleText text={subtitle} /></View> : null}
-                            </View>
-                        )
-                    )}
-                    {children}
+                    {header != null ? (
+                        typeof header === 'string' || typeof header === 'number'
+                            ? <TextStyled style={styles.inlineHeaderText}>{header}</TextStyled>
+                            : header
+                    ) : null}
+                    {!header && (title || subtitle) ? (
+                        <View style={styles.headerBlock}>
+                            {title ? <View style={styles.titleWrapper}><HeaderText text={title} /></View> : null}
+                            {subtitle ? <View style={styles.subtitleWrapper}><SubtitleText text={subtitle} /></View> : null}
+                        </View>
+                    ) : null}
+                    {React.Children.map(children, (child, idx) => {
+                        if (typeof child === 'string' || typeof child === 'number') {
+                            if (__DEV__) {
+                                // eslint-disable-next-line no-console
+                                console.warn('[Screen] Wrapped primitive child', { idx, value: child });
+                            }
+                            return <TextStyled key={idx} style={styles.inlineChildText}>{child}</TextStyled>;
+                        }
+                        return child;
+                    })}
                 </Container>
             </SafeAreaView>
         </LinearGradient>
@@ -66,8 +78,6 @@ const SubtitleText = ({ text }) => (
     </View>
 );
 
-// Lightweight wrapper to avoid importing Text multiple times here.
-import { Text } from 'react-native';
 const TextStyled = ({ children, style }) => <Text style={style}>{children}</Text>;
 
 const styles = StyleSheet.create({
@@ -80,4 +90,6 @@ const styles = StyleSheet.create({
     subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
     titleWrapper: {},
     subtitleWrapper: {},
+    inlineHeaderText: { fontSize: 20, fontWeight: '700', color: '#f9f9f9', marginBottom: 16 },
+    inlineChildText: { color: '#f9f9f9', fontSize: 14 },
 });

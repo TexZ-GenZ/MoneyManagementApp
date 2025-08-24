@@ -32,6 +32,8 @@ class PaymentOut(BaseModel):
     status: str
     next_promise_date: Optional[date] = None
     exec_location_verified: Optional[bool] = None
+    exec_lat: Optional[float] = None
+    exec_lng: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -51,6 +53,8 @@ class BillPaymentHistoryItem(BaseModel):
     accountant_comment: Optional[str] = None
     admin_comment: Optional[str] = None
     exec_location_verified: Optional[bool] = None
+    exec_lat: Optional[float] = None
+    exec_lng: Optional[float] = None
 
 
 class BillPaymentHistory(BaseModel):

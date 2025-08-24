@@ -36,12 +36,20 @@ export default function ExecutiveCompaniesScreen() {
     if (!isRefresh) setLoading(true); else setRefreshing(true);
     setError(null);
     try {
-      if (!execId) { setCompanies([]); return; }
       const header = await fetchAuthHeader();
-      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/executives/${execId}/companies`, { method: 'GET', headers: header });
+      let url;
+      if (execId) {
+        // Explicit exec id passed (e.g., from an executive list) use that endpoint
+        url = `${process.env.EXPO_PUBLIC_APP_URI}/executives/${execId}/companies`;
+      } else {
+        // Fallback: current logged-in executive's own companies
+        url = `${process.env.EXPO_PUBLIC_APP_URI}/me/companies`;
+      }
+      const response = await fetch(url, { method: 'GET', headers: header });
       if (!response.ok) throw new Error('Failed to load');
       const data = await response.json();
-      const items = Array.isArray(data.items) ? data.items : [];
+      // API may return { items: [...] } or a bare list
+      const items = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []);
       setCompanies(items);
     } catch (e) {
       setError(e.message || 'Error');

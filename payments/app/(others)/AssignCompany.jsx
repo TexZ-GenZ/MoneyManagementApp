@@ -44,7 +44,7 @@ export default function ExecutiveDetailsScreen() {
       if (!tok?.access_token) return;
       const parts = tok.access_token.split('.');
       if (parts.length < 2) return;
-      const payloadJson = JSON.parse(Buffer.from(parts[1].replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString('utf8'));
+      const payloadJson = JSON.parse(Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
       setRole(payloadJson.role || payloadJson.roles || payloadJson['https://role'] || null);
     } catch (e) {
       setRole(null);
@@ -233,53 +233,53 @@ export default function ExecutiveDetailsScreen() {
 
       {/* Assign Company Section (hidden for accountants) */}
       {role !== 'accountant' && (
-      <View style={styles.assignSection}>
-        <Text style={styles.sectionTitle}>Assign New Company</Text>
+        <View style={styles.assignSection}>
+          <Text style={styles.sectionTitle}>Assign New Company</Text>
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter company code"
-            value={companyCode}
-            onChangeText={setCompanyCode}
-            autoCapitalize="characters"
-          />
-          {fetchingCompany && (
-            <ActivityIndicator
-              style={styles.inputLoader}
-              size="small"
-              color="#666"
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter company code"
+              value={companyCode}
+              onChangeText={setCompanyCode}
+              autoCapitalize="characters"
             />
+            {fetchingCompany && (
+              <ActivityIndicator
+                style={styles.inputLoader}
+                size="small"
+                color="#666"
+              />
+            )}
+          </View>
+
+          {companyDetails && (
+            <View style={styles.companyPreview}>
+              <Text style={styles.previewLabel}>Company Found:</Text>
+              <Text style={styles.previewName}>{companyDetails.name || companyDetails.company_name}</Text>
+              <Text style={styles.previewCode}>{companyCode}</Text>
+
+              <TouchableOpacity
+                style={styles.assignButton}
+                onPress={handleAssign}
+                disabled={assigningCompany}
+              >
+                {assigningCompany ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.assignButtonText}>Assign Company</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {companyCode.trim().length > 0 && !fetchingCompany && !companyDetails && (
+            <View style={styles.notFoundBox}>
+              <Text style={styles.notFoundText}>Company not found</Text>
+            </View>
           )}
         </View>
-
-        {companyDetails && (
-          <View style={styles.companyPreview}>
-            <Text style={styles.previewLabel}>Company Found:</Text>
-            <Text style={styles.previewName}>{companyDetails.name || companyDetails.company_name}</Text>
-            <Text style={styles.previewCode}>{companyCode}</Text>
-
-            <TouchableOpacity
-              style={styles.assignButton}
-              onPress={handleAssign}
-              disabled={assigningCompany}
-            >
-              {assigningCompany ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.assignButtonText}>Assign Company</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {companyCode.trim().length > 0 && !fetchingCompany && !companyDetails && (
-          <View style={styles.notFoundBox}>
-            <Text style={styles.notFoundText}>Company not found</Text>
-          </View>
-        )}
-  </View>
-  )}
+      )}
 
       {/* Current Companies */}
       <View style={styles.companiesSection}>

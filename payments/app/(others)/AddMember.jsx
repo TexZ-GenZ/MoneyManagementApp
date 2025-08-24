@@ -79,7 +79,7 @@ export default function AddUserScreen() {
   };
 
   const getRoleIcon = (roleValue) => {
-    switch(roleValue) {
+    switch (roleValue) {
       case 'admin': return 'shield';
       case 'accountant': return 'calculator';
       case 'executive': return 'person';
@@ -88,7 +88,7 @@ export default function AddUserScreen() {
   };
 
   const getRoleColor = (roleValue) => {
-    switch(roleValue) {
+    switch (roleValue) {
       case 'admin': return '#ff6b6b';
       case 'accountant': return '#4ecdc4';
       case 'executive': return '#c8f14c';
@@ -100,74 +100,74 @@ export default function AddUserScreen() {
     <Screen title="Add User" subtitle="Create a new user account" scroll>
       <KeyboardAvoidingView behavior="padding">
         <Card style={styles.cardContainer}>
-            {/* Name Field */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Username</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="person-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter username"
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                  value={name}
-                  onChangeText={setName}
-                />
-              </View>
+          {/* Name Field */}
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Username</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="person-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter username"
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                value={name}
+                onChangeText={setName}
+              />
             </View>
+          </View>
 
-            {/* Contact Field */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Phone / Email</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="call-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter phone or email"
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                  keyboardType="phone-pad"
-                  value={contact}
-                  onChangeText={setContact}
-                />
-              </View>
+          {/* Contact Field */}
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Phone / Email</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="call-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter phone or email"
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                keyboardType="phone-pad"
+                value={contact}
+                onChangeText={setContact}
+              />
             </View>
+          </View>
 
-            {/* Password Field */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter password"
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
-                />
-              </View>
+          {/* Password Field */}
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="lock-closed-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter password"
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
             </View>
+          </View>
 
-            {/* Role Field */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.label}>Role</Text>
-              <View style={styles.roleSelector}>
-                <View style={styles.roleIconWrapper}>
-                  <Ionicons name={getRoleIcon(role)} size={20} color={getRoleColor(role)} />
-                </View>
-                <View style={styles.pickerWrapper}>
-                  <Picker
-                    selectedValue={role}
-                    onValueChange={(itemValue) => setRole(itemValue)}
-                    style={styles.picker}
-                    dropdownIconColor="rgba(255, 255, 255, 0.6)"
-                  >
-                    <Picker.Item label="Executive" value="executive" color="#fff" />
-                    <Picker.Item label="Accountant" value="accountant" color="#fff" />
-                    <Picker.Item label="Admin" value="admin" color="#fff" />
-                  </Picker>
-                </View>
+          {/* Role Field */}
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Role</Text>
+            <View style={styles.roleSelector}>
+              <View style={styles.roleIconWrapper}>
+                <Ionicons name={getRoleIcon(role)} size={20} color={getRoleColor(role)} />
+              </View>
+              <View style={styles.pickerWrapper}>
+                <Picker
+                  selectedValue={role}
+                  onValueChange={(itemValue) => setRole(itemValue)}
+                  style={styles.picker}
+                  dropdownIconColor="rgba(255, 255, 255, 0.6)"
+                >
+                  <Picker.Item label="Executive" value="executive" color="#fff" />
+                  <Picker.Item label="Accountant" value="accountant" color="#fff" />
+                  <Picker.Item label="Admin" value="admin" color="#fff" />
+                </Picker>
               </View>
             </View>
+          </View>
           {/* Submit Button */}
           <View style={styles.buttonContainer}>
             <TouchableOpacity
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   submitButton: {
-  backgroundColor: '#c8f14c', /* keep accent to match rest of design */
+    backgroundColor: '#c8f14c', /* keep accent to match rest of design */
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 16,

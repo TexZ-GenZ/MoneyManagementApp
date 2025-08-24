@@ -7,16 +7,7 @@ import { Card } from '../../src/ui/components/Card';
 import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 import { tokens } from '../../src/ui/tokens';
 import ApprovalItemCard from '../../src/ui/components/ApprovalItemCard';
-
-// Mock executiveId to name mapping - you might want to fetch this from API too
-const executiveNames = {
-    0: "Test Exec",
-    1: "Alice",
-    2: "Bob",
-    3: "Charlie",
-    4: "David",
-    5: "Emma"
-};
+import { onPaymentUpdate } from '../../src/events/paymentEvents';
 
 export default function AccountantNotifyScreen() {
     const [search, setSearch] = useState('');
@@ -32,12 +23,45 @@ export default function AccountantNotifyScreen() {
 
     const filteredItems = approvalItems.filter(item =>
         item.company_code.toLowerCase().includes(search.toLowerCase()) ||
-        (executiveNames[item.executive_id] || '').toLowerCase().includes(search.toLowerCase())
+        (item.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.company_area || '').toLowerCase().includes(search.toLowerCase())
     );
 
-    const fetchApprovalData = async () => { try { const t = await StorageService.getToken(); const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending`, { method: 'GET', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t.access_token}` } }); if (!r.ok) throw new Error('HTTP'); const data = await r.json(); setApprovalItems(data.items || []); } catch (e) { console.error(e); Alert.alert('Fetch Error', 'Failed to load approval items.'); } finally { setLoading(false); setRefreshing(false); } };
+    const fetchApprovalData = async () => {
+        try {
+            const t = await StorageService.getToken();
+            const baseHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t.access_token}` };
+            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending`, { method: 'GET', headers: baseHeaders });
+            if (!r.ok) throw new Error('HTTP');
+            const data = await r.json();
+            const items = data.items || [];
+            // Enrich with company name + area
+            const enriched = await Promise.all(items.map(async p => {
+                try {
+                    const cr = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies/${p.company_code}`, { headers: baseHeaders });
+                    if (cr.ok) {
+                        const c = await cr.json();
+                        return { ...p, company_name: c.name, company_area: c.area };
+                    }
+                } catch (_) { }
+                return { ...p };
+            }));
+            setApprovalItems(enriched);
+        } catch (e) {
+            console.error(e); Alert.alert('Fetch Error', 'Failed to load approval items.');
+        } finally { setLoading(false); setRefreshing(false); }
+    };
 
     useEffect(() => { fetchApprovalData(); }, []);
+
+    // Live update from detail screen actions
+    useEffect(() => {
+        const off = onPaymentUpdate(ev => {
+            if(!ev || !ev.id) return;
+            setApprovalItems(items => items.filter(i => i.id !== ev.id));
+        });
+        return off;
+    }, []);
 
     const onRefresh = () => { setRefreshing(true); fetchApprovalData(); };
 
@@ -50,7 +74,6 @@ export default function AccountantNotifyScreen() {
     const renderItem = ({ item }) => (
         <ApprovalItemCard
             item={item}
-            execName={executiveNames[item.executive_id] || `Executive ${item.executive_id}`}
             onApprove={handleApprove}
             onReject={handleReject}
             actionLoadingId={actionSubmittingId}

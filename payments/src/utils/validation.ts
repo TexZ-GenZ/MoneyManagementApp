@@ -51,7 +51,7 @@ export const validateField = (value: any, rules: ValidationRule): ValidationResu
 export const VALIDATION_RULES = {
   username: {
     required: true,
-    minLength: 3,
+    minLength: 2,
     maxLength: 50,
     // Allow both username and email formats
     custom: (value: string) => {
@@ -62,7 +62,7 @@ export const VALIDATION_RULES = {
   },
   password: {
     required: true,
-    minLength: 3,
+    minLength: 2,
     maxLength: 50
   },
   email: {

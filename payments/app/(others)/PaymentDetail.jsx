@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl, ScrollView, Linking } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { StorageService } from '../../src/services/storageService';
 import { useAppSelector } from '../../src/store/hooks';
@@ -65,8 +65,8 @@ export default function PaymentDetails() {
             const r = await fetch(`${API_BASE_URL}/bills/${bill_id}/payments`, { method: 'GET', headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok.access_token}` } : {}) } });
             if (!r.ok) { if (r.status === 401) { Alert.alert('Error', 'Unauthorized.'); return; } throw new Error('HTTP'); }
             const data = await r.json();
-        const payments = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
-        setPaymentHistory(payments);
+            const payments = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
+            setPaymentHistory(payments);
         } catch (e) { console.error(e); Alert.alert('Error', 'Failed to fetch payments.'); }
         finally { setLoading(false); setRefreshing(false); }
     };
@@ -115,7 +115,7 @@ export default function PaymentDetails() {
 
     // removed previous totalPaid calc (now derived with filteredPayments)
 
-    const renderPaymentItem = ({ item, index }) => {
+        const renderPaymentItem = ({ item, index }) => {
         return (
             <Card style={styles.paymentCard}>
                 <View style={styles.cardTopRow}>
@@ -125,7 +125,16 @@ export default function PaymentDetails() {
                 <View style={styles.metaRow}>
                     <Meta label="Collected" value={formatDateTime(item.collected_at)} />
                     <Meta label="Method" value={item.method || '—'} />
-                    <Meta label="Verified" value={item.exec_location_verified ? 'Yes' : 'No'} />
+                                        { (item.exec_lat && item.exec_lng) ? (
+                                            <TouchableOpacity onPress={() => {
+                                                const url = `https://www.google.com/maps/search/?api=1&query=${item.exec_lat},${item.exec_lng}`;
+                                                Linking.openURL(url).catch(()=>Alert.alert('Error','Cannot open maps'));
+                                            }}>
+                                                <Text style={styles.mapLink}>View Map</Text>
+                                            </TouchableOpacity>
+                                        ) : (
+                                            <Meta label="Location" value={item.exec_location_verified ? 'Captured' : '—'} />
+                                        ) }
                 </View>
                 <TouchableOpacity style={styles.commentsToggle} onPress={() => toggleExpand(index)} activeOpacity={0.7}>
                     <Text style={styles.commentsToggleText}>Details</Text>
@@ -146,10 +155,10 @@ export default function PaymentDetails() {
     );
 
     return (
-        <Screen title={company?.name || name || code} subtitle={`Bill ${bill?.bill_number || bill_number}`}>            
+        <Screen title={company?.name || name || code} subtitle={`Bill ${bill?.bill_number || bill_number}`}>
             {/* Totals Card (ONLY Outstanding + Paid) */}
             <Card style={styles.totalsCard}>
-                <View style={styles.totalsRow}>                    
+                <View style={styles.totalsRow}>
                     <View style={styles.totalBox}>
                         <Text style={styles.totalLabel}>Outstanding</Text>
                         <Text style={[styles.totalValue, { color: tokens.colors.danger }]}>{formatCurrency(outstandingNum)}</Text>
@@ -217,12 +226,14 @@ export default function PaymentDetails() {
 function Row({ label, value, valueColor }) { return (<View style={styles.rowLine}><Text style={styles.rowLabel}>{label}</Text><Text style={[styles.rowValue, valueColor && { color: valueColor }]}>{value}</Text></View>); }
 function Meta({ label, value }) { return (<View style={styles.metaItem}><Text style={styles.metaLabel}>{label}</Text><Text style={styles.metaValue} numberOfLines={1}>{value}</Text></View>); }
 function Comment({ label, value, valueColor }) { return (<View style={styles.commentRow}><Text style={styles.commentLabel}>{label}</Text><Text style={[styles.commentValue, valueColor && { color: valueColor }]}>{value || 'No comment'}</Text></View>); }
-function InfoRow({ label, value, accent, danger }) { return (
-    <View style={styles.infoRow}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={[styles.infoValue, accent && { color: tokens.colors.accent }, danger && { color: tokens.colors.danger }]}>{value}</Text>
-    </View>
-); }
+function InfoRow({ label, value, accent, danger }) {
+    return (
+        <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={[styles.infoValue, accent && { color: tokens.colors.accent }, danger && { color: tokens.colors.danger }]}>{value}</Text>
+        </View>
+    );
+}
 
 const styles = StyleSheet.create({
     totalsCard: { marginBottom: 14, padding: 16 },
@@ -243,6 +254,7 @@ const styles = StyleSheet.create({
     metaItem: { width: '33%', marginBottom: 10 },
     metaLabel: { fontSize: 10, color: tokens.colors.textDim, marginBottom: 2 },
     metaValue: { fontSize: 11, color: tokens.colors.text, fontWeight: '600' },
+    mapLink: { fontSize: 11, color: tokens.colors.accent, fontWeight: '700', paddingVertical: 4, paddingRight: 10 },
     commentsToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: tokens.colors.cardAlt, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginTop: 4, borderWidth: 1, borderColor: tokens.colors.border },
     commentsToggleText: { color: tokens.colors.text, fontSize: 13, fontWeight: '600' },
     dropdownIcon: { color: tokens.colors.textDim, fontSize: 10, fontWeight: '700' },

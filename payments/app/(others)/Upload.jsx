@@ -24,9 +24,9 @@ export default function UploadScreen() {
 
   const formatFileSize = (bytes = 0) => {
     if (!bytes) return '0 B';
-    const k = 1024; const sizes = ['B','KB','MB','GB'];
-    const i = Math.floor(Math.log(bytes)/Math.log(k));
-    return `${(bytes/Math.pow(k,i)).toFixed(2)} ${sizes[i]}`;
+    const k = 1024; const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
   };
 
   const pickFile = async (type) => {
@@ -34,11 +34,11 @@ export default function UploadScreen() {
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
       if (result.canceled || !result.assets?.length) return;
       const file = result.assets[0];
-  if (!file.name.toLowerCase().endsWith('.dbf')) { Alert.alert('Invalid File','Select a .dbf file.'); return; }
-  if (file.size > 15*1024*1024) { Alert.alert('Too Large','Max 15MB.'); return; }
+      if (!file.name.toLowerCase().endsWith('.dbf')) { Alert.alert('Invalid File', 'Select a .dbf file.'); return; }
+      if (file.size > 15 * 1024 * 1024) { Alert.alert('Too Large', 'Max 15MB.'); return; }
       if (type === 'master') { setMasterFile(file); setMasterSuccess(false); setMasterProgress(0); }
       else { setTransactionsFile(file); setTransactionsSuccess(false); setTransactionsProgress(0); }
-    } catch (e) { console.error(e); Alert.alert('Error','File pick failed.'); }
+    } catch (e) { console.error(e); Alert.alert('Error', 'File pick failed.'); }
   };
 
   const removeFile = (type) => {
@@ -54,7 +54,7 @@ export default function UploadScreen() {
     else { setTransactionsUploading(true); setTransactionsProgress(0); }
     try {
       const tok = await StorageService.getToken();
-      if (!tok?.access_token) { Alert.alert('Auth','Login required'); return; }
+      if (!tok?.access_token) { Alert.alert('Auth', 'Login required'); return; }
       // Simulated progress
       const interval = setInterval(() => {
         if (type === 'master') setMasterProgress(p => Math.min(p + 7, 85));
@@ -67,7 +67,7 @@ export default function UploadScreen() {
         body: formData,
       });
       clearInterval(interval);
-      if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.message||'Upload failed'); }
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Upload failed'); }
       if (type === 'master') { setMasterProgress(100); setMasterSuccess(true); }
       else { setTransactionsProgress(100); setTransactionsSuccess(true); }
       Alert.alert('Success', `${type === 'master' ? 'Master' : 'Transactions'} file uploaded.`);
@@ -84,7 +84,7 @@ export default function UploadScreen() {
     <Card style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.iconWrap}><Ionicons name="document-text-outline" size={18} color={tokens.colors.accent} /></View>
-        <View style={{ flex:1 }}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle}>{title}</Text>
           {subtitle && <Text style={styles.cardSubtitle}>{subtitle}</Text>}
         </View>
@@ -101,7 +101,7 @@ export default function UploadScreen() {
         <View style={styles.fileBlock}>
           <View style={styles.fileRow}>
             <View style={styles.fileBadge}><Ionicons name="document" size={18} color={tokens.colors.accent} /></View>
-            <View style={{flex:1}}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
               <Text style={styles.fileMeta}>{formatFileSize(file.size)}</Text>
             </View>
@@ -113,8 +113,8 @@ export default function UploadScreen() {
           </View>
           {(uploading || success) && (
             <View style={styles.progressWrap}>
-              <View style={styles.progressBarOuter}><View style={[styles.progressBarFill,{width:`${progress}%`}]} /></View>
-              <Text style={styles.progressText}>{success? 'Done' : `Uploading ${progress}%`}</Text>
+              <View style={styles.progressBarOuter}><View style={[styles.progressBarFill, { width: `${progress}%` }]} /></View>
+              <Text style={styles.progressText}>{success ? 'Done' : `Uploading ${progress}%`}</Text>
             </View>
           )}
           {!uploading && !success && (
@@ -143,7 +143,7 @@ export default function UploadScreen() {
       )}
       <Card style={styles.infoCard}>
         <View style={styles.infoHeader}><Ionicons name="information-circle-outline" size={18} color={tokens.colors.accent} /><Text style={styles.infoTitle}>Guidelines</Text></View>
-  <Text style={styles.tip}>• Only .dbf files (max 15MB)</Text>
+        <Text style={styles.tip}>• Only .dbf files (max 15MB)</Text>
         <Text style={styles.tip}>• Master: company & account metadata</Text>
         <Text style={styles.tip}>• Transactions: billing & payments</Text>
         <Text style={styles.tip}>• Upload again to overwrite latest data</Text>
@@ -153,35 +153,35 @@ export default function UploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom:16, padding:16 },
-  cardHeader: { flexDirection:'row', alignItems:'center', marginBottom:14 },
-  iconWrap: { width:36, height:36, borderRadius:12, backgroundColor:tokens.colors.cardAlt, alignItems:'center', justifyContent:'center', marginRight:12 },
-  cardTitle: { color:tokens.colors.text, fontSize:15, fontWeight:'700' },
-  cardSubtitle: { color:tokens.colors.textDim, fontSize:11, marginTop:2 },
-  pickZone: { borderWidth:1, borderColor:tokens.colors.border, borderStyle:'dashed', paddingVertical:30, borderRadius:14, alignItems:'center', backgroundColor:tokens.colors.cardAlt },
-  pickZoneText: { color:tokens.colors.text, fontSize:13, fontWeight:'600', marginTop:10 },
-  pickZoneHint: { color:tokens.colors.textDim, fontSize:11, marginTop:2 },
-  fileBlock: { backgroundColor:tokens.colors.cardAlt, borderRadius:12, padding:12 },
-  fileRow: { flexDirection:'row', alignItems:'center', marginBottom:10 },
-  fileBadge: { width:36, height:36, borderRadius:10, backgroundColor:tokens.colors.card, alignItems:'center', justifyContent:'center', marginRight:10 },
-  fileName: { color:tokens.colors.text, fontSize:14, fontWeight:'600' },
-  fileMeta: { color:tokens.colors.textDim, fontSize:11, marginTop:2 },
-  iconBtn: { padding:4 },
-  progressWrap: { marginTop:4 },
-  progressBarOuter: { height:6, backgroundColor:tokens.colors.border, borderRadius:4, overflow:'hidden', marginBottom:4 },
-  progressBarFill: { height:'100%', backgroundColor:tokens.colors.accent },
-  progressText: { color:tokens.colors.textDim, fontSize:11 },
-  actionsRow: { flexDirection:'row', marginTop:6 },
-  primaryBtn: { flex:1, backgroundColor:tokens.colors.accent, paddingVertical:12, borderRadius:12, alignItems:'center', marginRight:8 },
-  primaryBtnText: { color:'#000', fontWeight:'700', fontSize:13 },
-  secondaryBtn: { paddingVertical:12, paddingHorizontal:18, borderRadius:12, borderWidth:1, borderColor:tokens.colors.border, alignItems:'center', justifyContent:'center' },
-  secondaryBtnText: { color:tokens.colors.textDim, fontWeight:'600', fontSize:13 },
-  successLine: { marginTop:8, color:tokens.colors.success, fontSize:12, fontWeight:'600' },
-  bannerCard: { marginBottom:16, padding:14, borderLeftWidth:4, borderLeftColor:tokens.colors.success },
-  bannerRow: { flexDirection:'row', alignItems:'center' },
-  bannerText: { color:tokens.colors.success, fontWeight:'700', marginLeft:8, fontSize:13 },
-  infoCard: { padding:16 },
-  infoHeader: { flexDirection:'row', alignItems:'center', marginBottom:10 },
-  infoTitle: { color:tokens.colors.text, fontSize:13, fontWeight:'700', marginLeft:8 },
-  tip: { color:tokens.colors.textDim, fontSize:12, marginBottom:4 },
+  card: { marginBottom: 16, padding: 16 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  iconWrap: { width: 36, height: 36, borderRadius: 12, backgroundColor: tokens.colors.cardAlt, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  cardTitle: { color: tokens.colors.text, fontSize: 15, fontWeight: '700' },
+  cardSubtitle: { color: tokens.colors.textDim, fontSize: 11, marginTop: 2 },
+  pickZone: { borderWidth: 1, borderColor: tokens.colors.border, borderStyle: 'dashed', paddingVertical: 30, borderRadius: 14, alignItems: 'center', backgroundColor: tokens.colors.cardAlt },
+  pickZoneText: { color: tokens.colors.text, fontSize: 13, fontWeight: '600', marginTop: 10 },
+  pickZoneHint: { color: tokens.colors.textDim, fontSize: 11, marginTop: 2 },
+  fileBlock: { backgroundColor: tokens.colors.cardAlt, borderRadius: 12, padding: 12 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  fileBadge: { width: 36, height: 36, borderRadius: 10, backgroundColor: tokens.colors.card, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  fileName: { color: tokens.colors.text, fontSize: 14, fontWeight: '600' },
+  fileMeta: { color: tokens.colors.textDim, fontSize: 11, marginTop: 2 },
+  iconBtn: { padding: 4 },
+  progressWrap: { marginTop: 4 },
+  progressBarOuter: { height: 6, backgroundColor: tokens.colors.border, borderRadius: 4, overflow: 'hidden', marginBottom: 4 },
+  progressBarFill: { height: '100%', backgroundColor: tokens.colors.accent },
+  progressText: { color: tokens.colors.textDim, fontSize: 11 },
+  actionsRow: { flexDirection: 'row', marginTop: 6 },
+  primaryBtn: { flex: 1, backgroundColor: tokens.colors.accent, paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginRight: 8 },
+  primaryBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
+  secondaryBtn: { paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border, alignItems: 'center', justifyContent: 'center' },
+  secondaryBtnText: { color: tokens.colors.textDim, fontWeight: '600', fontSize: 13 },
+  successLine: { marginTop: 8, color: tokens.colors.success, fontSize: 12, fontWeight: '600' },
+  bannerCard: { marginBottom: 16, padding: 14, borderLeftWidth: 4, borderLeftColor: tokens.colors.success },
+  bannerRow: { flexDirection: 'row', alignItems: 'center' },
+  bannerText: { color: tokens.colors.success, fontWeight: '700', marginLeft: 8, fontSize: 13 },
+  infoCard: { padding: 16 },
+  infoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  infoTitle: { color: tokens.colors.text, fontSize: 13, fontWeight: '700', marginLeft: 8 },
+  tip: { color: tokens.colors.textDim, fontSize: 12, marginBottom: 4 },
 });

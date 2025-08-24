@@ -17,7 +17,7 @@ type MeResponse = {
   mobile?: string;
 };
 
-type DecodedToken = { exp?: number; iat?: number; [k: string]: any };
+type DecodedToken = { exp?: number; iat?: number;[k: string]: any };
 
 
 function decodeJwt(token?: string): DecodedToken | null {
@@ -84,9 +84,9 @@ export default function ProfileScreen() {
 
 
   return (
-  <Screen title="My Profile" subtitle="" contentStyle={undefined}>
+    <Screen title="My Profile" subtitle="" contentStyle={undefined}>
       {loading && (
-        <View style={styles.center}> 
+        <View style={styles.center}>
           <ActivityIndicator color={tokens.colors.accent} />
           <Text style={styles.muted}>Loading profile...</Text>
         </View>
@@ -159,7 +159,7 @@ function RoleBadge({ role }: { role: string }) {
   };
   const bg = colorMap[role] || tokens.colors.accentAlt;
   return (
-    <View style={[styles.roleBadge, { backgroundColor: bg }]}> 
+    <View style={[styles.roleBadge, { backgroundColor: bg }]}>
       <Text style={styles.roleBadgeText}>{role}</Text>
     </View>
   );

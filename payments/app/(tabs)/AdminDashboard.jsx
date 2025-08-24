@@ -1,7 +1,9 @@
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { onPaymentUpdate } from '../../src/events/paymentEvents';
 import { StorageService } from '../../src/services/storageService';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
@@ -15,44 +17,59 @@ export default function AdminDashboard() {
   const navItems = [
     { label: 'Approve', icon: 'checkmark', route: '../(others)/NotifyAdmin' },
     { label: 'Companies', icon: 'business-outline', route: '../CompanyList/AllCompanies' },
-    { label: 'User Mgmt', icon: 'person-circle-outline', route: '../(others)/ManageUsers' },
-    { label: 'Assignments', icon: 'git-branch-outline', route: '../(others)/CompanyAssignments' },
     { label: 'Executives', icon: 'people-outline', route: '../(others)/ExecutiveList' },
+    { label: 'Assignments', icon: 'git-branch-outline', route: '../(others)/CompanyAssignments' },
+    { label: 'User Mgmt', icon: 'person-circle-outline', route: '../(others)/ManageUsers' },
     { label: 'Settings', icon: 'settings-outline', route: '../(others)/GlobalSettings' },
   ];
 
   const onPressItem = (item) => router.push(item.route);
 
-  // Fetch recent payments
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoadingRecent(true);
-      try {
-        const token = await StorageService.getToken();
-        const resp = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/pending?skip=0&limit=6`, {
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.access_token}` }
-        });
-        const json = await resp.json();
-        if (!resp.ok) { console.log('recent payments error', json); return; }
-        const items = json.items || [];
-        const codes = Array.from(new Set(items.map(i => i.company_code).filter(Boolean)));
-        const tokenVal = token.access_token;
-        const companyMap = {};
-        await Promise.all(codes.map(async code => {
-          try {
-            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies/${code}`, { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenVal}` } });
-            if (!r.ok) return; const cd = await r.json();
-            companyMap[code] = cd?.account_n || cd?.companyName || cd?.name || code;
-          } catch (_) { }
-        }));
-        if (!mounted) return;
-        setRecentPayments(items.map(it => ({ ...it, companyName: companyMap[it.company_code] || it.company_code || 'Unknown' })));
-      } catch (err) { console.log('recent fetch err', err); }
-      finally { mounted && setLoadingRecent(false); }
-    })();
-    return () => { mounted = false; };
+  const fetchRecent = useCallback(async () => {
+    let cancelled = false;
+    setLoadingRecent(true);
+    try {
+      const token = await StorageService.getToken();
+      const resp = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/pending?skip=0&limit=6&_t=${Date.now()}` , {
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.access_token}` }
+      });
+      const json = await resp.json();
+      if (!resp.ok) { console.log('recent payments error', json); return; }
+      const items = json.items || [];
+      const codes = Array.from(new Set(items.map(i => i.company_code).filter(Boolean)));
+      const tokenVal = token.access_token;
+      const companyMap = {};
+      await Promise.all(codes.map(async code => {
+        try {
+          const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/companies/${code}`, { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenVal}` } });
+          if (!r.ok) return; const cd = await r.json();
+          companyMap[code] = cd?.account_n || cd?.companyName || cd?.name || code;
+        } catch (_) { }
+      }));
+      if (cancelled) return;
+      setRecentPayments(items.map(it => ({ ...it, companyName: companyMap[it.company_code] || it.company_code || 'Unknown' })));
+    } catch (err) { console.log('recent fetch err', err); }
+    finally { if (!cancelled) setLoadingRecent(false); }
+    return () => { cancelled = true; };
   }, []);
+
+  // Initial + interval refresh
+  useEffect(() => {
+    fetchRecent();
+    const id = setInterval(fetchRecent, 30000); // 30s
+    return () => clearInterval(id);
+  }, [fetchRecent]);
+
+  // Refresh when screen regains focus
+  useFocusEffect(useCallback(() => {
+    fetchRecent();
+  }, [fetchRecent]));
+
+  // Event-driven refresh after approve/decline
+  useEffect(() => {
+    const off = onPaymentUpdate(() => { fetchRecent(); });
+    return off;
+  }, [fetchRecent]);
 
 
   const gridColumns = 3;
@@ -104,7 +121,7 @@ export default function AdminDashboard() {
           scrollEnabled={false}
         />
       </Card>
-  <View style={styles.sectionSpacer} />
+      <View style={styles.sectionSpacer} />
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>Recent Payments</Text>
         <TouchableOpacity onPress={() => router.push('../(others)/NotifyAdmin')}><Text style={styles.sectionLink}>View All</Text></TouchableOpacity>

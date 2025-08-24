@@ -23,8 +23,8 @@ export default function AdminExecutiveList() {
     try {
       let header = await StorageService.getAuthHeader();
 
-      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`,{
-       headers: header
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`, {
+        headers: header
       });
 
       const data = await res.json();
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   },
   execTouchable: { marginBottom: 14 },
   execCard: { paddingVertical: 14, paddingHorizontal: 14 },
-  executiveItem: { },
+  executiveItem: {},
   executiveInfo: {
     flexDirection: 'row',
     alignItems: 'center',

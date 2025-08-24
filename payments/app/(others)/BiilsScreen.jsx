@@ -115,11 +115,11 @@ export default function CompanyBillsList() {
             </Card>
             <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{bills.length}</Text></View>
             <View style={styles.billLabelsRow}>
-                <Text style={[styles.billLabelCol, {flex:1.4}]}>Bill #</Text>
-                <Text style={[styles.billLabelCol, {flex:1}]}>Bill Date</Text>
-                <Text style={[styles.billLabelCol, {flex:1}]}>Due</Text>
-                <Text style={[styles.billLabelCol, {flex:1}]}>Amount</Text>
-                <Text style={[styles.billLabelCol, {flex:0.9}]}>Paid</Text>
+                <Text style={[styles.billLabelCol, { flex: 1.4 }]}>Bill #</Text>
+                <Text style={[styles.billLabelCol, { flex: 1 }]}>Bill Date</Text>
+                <Text style={[styles.billLabelCol, { flex: 1 }]}>Due</Text>
+                <Text style={[styles.billLabelCol, { flex: 1 }]}>Amount</Text>
+                <Text style={[styles.billLabelCol, { flex: 0.9 }]}>Paid</Text>
             </View>
             {loading ? (
                 <View style={{ marginTop: 10 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     retryButton: { backgroundColor: tokens.colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
     retryText: { color: '#000', fontSize: 14, fontWeight: '600' },
     filtersCard: { marginBottom: 14, paddingVertical: 10, paddingHorizontal: 12 },
-    filterChipsWrapper: { },
+    filterChipsWrapper: {},
     chipsRow: { paddingRight: 4, alignItems: 'center' },
     chip: { backgroundColor: 'rgba(255,255,255,0.08)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
     chipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
