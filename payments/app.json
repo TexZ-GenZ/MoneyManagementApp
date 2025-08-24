@@ -17,6 +17,10 @@
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       },
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#ffffff"
+      },
       "edgeToEdgeEnabled": true,
       "package": "com.skywalker421.payments",
       "googleServicesFile": "./google-services.json"
