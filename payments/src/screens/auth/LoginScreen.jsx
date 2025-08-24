@@ -29,6 +29,117 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { COLORS } from '../../utils/constants';
 import { validateForm, VALIDATION_RULES } from '../../utils/validation';
+//import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import { StorageService } from '@/src/services/storageService';
+
+// Configure notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
+// Register for push notifications and return the Expo push token (do NOT send to backend here)
+export async function registerForPushNotifications() {
+  try {
+    // Request permissions
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('Permission not granted for push notifications');
+      return null;
+    }
+
+    // Try to get the Expo push token. For some Android setups (dev clients / standalone builds)
+    // Firebase may not be initialized which throws a helpful error. We try with the projectId
+    // if available and fall back to a call without it. If it still fails, surface a user-friendly
+    // alert linking to Expo's FCM setup guide.
+    const projectId = process.env.EXPO_PUBLIC_PROJECT_ID || undefined;
+
+    try {
+      const token = projectId
+        ? await Notifications.getExpoPushTokenAsync({ projectId })
+        : await Notifications.getExpoPushTokenAsync();
+      console.log('Expo push token:', token?.data);
+      return token?.data ?? null;
+    } catch (innerErr) {
+      // If Firebase isn't initialized on Android, try again without projectId (some setups work that way)
+      const msg = String(innerErr?.message || innerErr);
+      console.warn('First attempt to get Expo push token failed:', msg);
+      if (projectId) {
+        try {
+          const token2 = await Notifications.getExpoPushTokenAsync();
+          console.log('Expo push token (retry without projectId):', token2?.data);
+          return token2?.data ?? null;
+        } catch (retryErr) {
+          console.error('Retry to get push token failed:', retryErr);
+          // Specific guidance for Android/Firebase misconfiguration
+          if (msg.includes('Default FirebaseApp is not initialized') || msg.includes('complete the guide')) {
+            if (Platform.OS === 'android') {
+              Alert.alert(
+                'Push Notifications Not Configured',
+                'Android push notifications require configuring Firebase/FCM for your app.\n\nPlease follow: https://docs.expo.dev/push-notifications/fcm-credentials/'
+              );
+            }
+          }
+          return null;
+        }
+      }
+      // No projectId and already failed
+      console.error('Unable to obtain Expo push token:', innerErr);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error getting push token:', error);
+    return null;
+  }
+}
+
+// Send push token to backend (using auth token)
+async function sendPushTokenToBackend(token) {
+  try {
+    const { access_token } = await StorageService.getToken();
+    console.log("acess", access_token)
+
+    if (!access_token) {
+      console.error('No access token available');
+      return;
+    }
+
+    const response = await fetch(`${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/push-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${access_token}`
+      },
+      body: JSON.stringify({
+        token,
+        platform: Platform.OS
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Failed to send push token:', error);
+      return;
+    }
+
+    const result = await response.json();
+    console.log('Push token sent successfully:', result);
+  } catch (error) {
+    console.error('Error sending push token:', error);
+  }
+}
 
 const LoginScreen = () => {
   const router = useRouter();
@@ -122,7 +233,15 @@ const LoginScreen = () => {
       }));
 
       if (loginUser.fulfilled.match(result)) {
+
+        // Now the user is authenticated. Register for push notifications and send token once.
+        const expoPushToken = await registerForPushNotifications();
+        if (expoPushToken) {
+          await sendPushTokenToBackend(expoPushToken);
+        }
+
         router.replace('/(tabs)');
+
       } else {
         Alert.alert('Login Failed', result.payload || 'Please check your credentials and try again.');
       }

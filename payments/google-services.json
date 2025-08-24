@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "267743556152",
+    "project_id": "payments-5c6bd",
+    "storage_bucket": "payments-5c6bd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:267743556152:android:b9da4f0c55e82f7347eccd",
+        "android_client_info": {
+          "package_name": "com.skywalker421.payments"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA6sJH9DzziUSt6EC3S6K4OSkZmaDhijC4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

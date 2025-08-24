@@ -26,3 +26,15 @@ class UserOut(BaseModel):
 class UserList(BaseModel):
     items: List[UserOut]
     total: int
+
+
+class PushTokenIn(BaseModel):
+    token: str
+    platform: Optional[str] = None
+
+
+class SendPushIn(BaseModel):
+    user_id: Optional[int] = None
+    token: Optional[str] = None
+    title: Optional[str] = None
+    message: str

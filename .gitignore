@@ -39,7 +39,6 @@ expo-env.d.ts
 .metro-health-check*
 
 # Environment variables
-.env
 .env*.local
 
 # TypeScript
@@ -50,3 +49,4 @@ expo-env.d.ts
 .vscode
 *.sublime-project
 *.sublime-workspace
+

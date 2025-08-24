@@ -29,7 +29,7 @@ from app.schemas.payment import (
     PaymentAllocationDetail,
 )
 from app.schemas.settings import SettingsOut, SettingsUpdate
-from app.schemas.user import UserCreate, UserOut, UserList
+from app.schemas.user import UserCreate, UserOut, UserList, PushTokenIn, SendPushIn
 from app.services.auth import (
     create_access_token,
     get_user_by_username,
@@ -65,6 +65,7 @@ from app.models.models import (
     Notification,
     NotificationType,
     NotificationStatus,
+    PushToken,
 )
 
 router = APIRouter()
@@ -988,6 +989,131 @@ def accountant_decline(
     db.commit()
     db.refresh(p)
     return p
+
+
+# Push token management - client sends FCM token on login
+@router.post("/auth/push-token")
+def upsert_push_token(body: PushTokenIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Client should POST {"token": "<fcm_token>", "platform": "android|ios"} while authenticated.
+    This will insert or update the push token for the current user.
+    """
+    token = body.token
+    platform = body.platform
+    if not token:
+        raise HTTPException(status_code=400, detail="Missing token")
+
+    existing = db.query(PushToken).filter(PushToken.user_id == user.id).first()
+    if existing:
+        existing.token = token
+        existing.platform = platform
+        existing.updated_at = datetime.utcnow()
+        db.add(existing)
+    else:
+        db.add(PushToken(user_id=user.id, token=token, platform=platform))
+    db.commit()
+    return {"ok": True}
+
+
+# Admin endpoint: send push to a user (simple wrapper around FCM HTTP v1 or legacy API)
+@router.post("/send-push")
+def send_push(payload: SendPushIn, db: Session = Depends(get_db)):
+    """Send a push notification to a user by user_id with {"user_id": int, "message": str}.
+    Note: This implementation uses FCM HTTP v1 or legacy API depending on FCM_SERVER_KEY env.
+    For production use, prefer service-account based HTTP v1 flow.
+    """
+    import os
+    import requests
+
+    user_id = payload.user_id
+    message = payload.message
+    token_override = payload.token
+    title = payload.title or "App Notification"
+    if not user_id or not message:
+        raise HTTPException(status_code=400, detail="user_id and message required")
+
+    # Resolve token: prefer explicit token, else look up user
+    target_token = token_override
+    if not target_token and user_id:
+        pt = db.query(PushToken).filter(PushToken.user_id == user_id).first()
+        if pt:
+            target_token = pt.token
+
+    if not target_token:
+        # No token to send to; return success with note so callers aren't blocked
+        return {"ok": False, "reason": "no_token"}
+
+    # Use FCM HTTP v1. Acquire an OAuth2 access token in one of these ways:
+    # 1. Provide FCM_ACCESS_TOKEN in env (short-lived token)
+    # 2. Provide a service account JSON in SERVICE_ACCOUNT_JSON (string) or path in SERVICE_ACCOUNT_FILE
+    #    and have `google-auth` installed; we'll try to use it to mint an access token.
+    project_id = None
+    access_token = os.environ.get("FCM_ACCESS_TOKEN")
+    svc_json = os.environ.get("SERVICE_ACCOUNT_JSON")
+    svc_file = os.environ.get("SERVICE_ACCOUNT_FILE")
+
+    # Try service account if no direct token
+    if not access_token and (svc_json or svc_file):
+        try:
+            # Prefer google-auth if available
+            from google.oauth2 import service_account
+            from google.auth.transport.requests import Request as GoogleRequest
+
+            if svc_json:
+                info = __import__("json").loads(svc_json)
+                creds = service_account.Credentials.from_service_account_info(
+                    info, scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+                )
+                project_id = info.get("project_id")
+            else:
+                creds = service_account.Credentials.from_service_account_file(
+                    svc_file, scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+                )
+                # attempt to read project_id from file
+                try:
+                    import json
+
+                    with open(svc_file, "r", encoding="utf-8") as f:
+                        info = json.load(f)
+                        project_id = info.get("project_id")
+                except Exception:
+                    project_id = None
+
+            # Refresh to populate token
+            req = GoogleRequest()
+            creds.refresh(req)
+            access_token = creds.token
+            if not project_id:
+                project_id = getattr(creds, "project_id", None)
+        except Exception as e:
+            return {"ok": False, "reason": "service_account_error", "error": str(e)}
+
+    # If still no access token, return informative response
+    if not access_token:
+        return {"ok": False, "reason": "no_access_token"}
+
+    # project id may be specified by env as fallback
+    if not project_id:
+        project_id = os.environ.get("FCM_PROJECT_ID")
+
+    if not project_id:
+        return {"ok": False, "reason": "no_project_id"}
+
+    # Expo push: send to Expo push service (no FCM keys/service account required for expo tokens)
+    # Expo expects messages in the shape { to, title, body, data }
+    expo_url = "https://exp.host/--/api/v2/push/send"
+    expo_message = {"to": target_token, "title": title, "body": message, "data": {"message": message}}
+
+    try:
+        resp = requests.post(expo_url, json=expo_message, headers={"Accept": "application/json", "Content-Type": "application/json"}, timeout=10)
+        try:
+            resp_json = resp.json()
+        except Exception:
+            resp_json = {"status": resp.status_code, "text": resp.text}
+        if resp.status_code not in (200, 201):
+            return {"ok": False, "expo_status": resp.status_code, "expo_response": resp_json}
+        return {"ok": True, "expo_response": resp_json}
+    except Exception as e:
+        return {"ok": False, "reason": "request_failed", "error": str(e)}
 
 
 @router.get(
