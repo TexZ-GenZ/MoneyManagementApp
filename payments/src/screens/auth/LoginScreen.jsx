@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,14 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+  interpolate,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -34,6 +42,48 @@ const LoginScreen = () => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [accepted, setAccepted] = useState(true);
+
+  // Animated decorative background circles (gentle float + scale)
+  const p1 = useSharedValue(0);
+  const p2 = useSharedValue(0);
+  const p3 = useSharedValue(0);
+
+  useEffect(() => {
+    p1.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.inOut(Easing.quad) }), -1, true);
+    // small start delays for variety
+    const t2 = setTimeout(() => {
+      p2.value = withRepeat(withTiming(1, { duration: 11000, easing: Easing.inOut(Easing.quad) }), -1, true);
+    }, 600);
+    const t3 = setTimeout(() => {
+      p3.value = withRepeat(withTiming(1, { duration: 10000, easing: Easing.inOut(Easing.quad) }), -1, true);
+    }, 1200);
+    return () => { clearTimeout(t2); clearTimeout(t3); };
+  }, []);
+
+  const animLargeStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(p1.value, [0, 1], [0, -28]) },
+      { translateX: interpolate(p1.value, [0, 1], [0, 16]) },
+      { scale: interpolate(p1.value, [0, 1], [1, 1.06]) },
+    ],
+    opacity: interpolate(p1.value, [0, 1], [0.55, 0.48]),
+  }));
+  const animSmallStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(p2.value, [0, 1], [0, -22]) },
+      { translateX: interpolate(p2.value, [0, 1], [0, -14]) },
+      { scale: interpolate(p2.value, [0, 1], [1, 1.08]) },
+    ],
+    opacity: interpolate(p2.value, [0, 1], [0.5, 0.44]),
+  }));
+  const animMediumStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(p3.value, [0, 1], [0, 26]) },
+      { translateX: interpolate(p3.value, [0, 1], [0, 18]) },
+      { scale: interpolate(p3.value, [0, 1], [1, 1.05]) },
+    ],
+    opacity: interpolate(p3.value, [0, 1], [0.45, 0.40]),
+  }));
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -93,9 +143,9 @@ const LoginScreen = () => {
       {/* Simple light blue gradient filling whole screen */}
       <LinearGradient colors={['#ffffff', '#e8f9ff', '#d0f3ff', '#a9e7ff', '#8fdfff']} locations={[0, 0.3, 0.55, 0.8, 1]} style={StyleSheet.absoluteFill} />
       {/* Decorative soft circles */}
-      <View style={styles.decorCircleLarge} pointerEvents="none" />
-      <View style={styles.decorCircleSmall} pointerEvents="none" />
-      <View style={styles.decorCircleMedium} pointerEvents="none" />
+      <Animated.View style={[styles.decorCircleLarge, animLargeStyle]} pointerEvents="none" />
+      <Animated.View style={[styles.decorCircleSmall, animSmallStyle]} pointerEvents="none" />
+      <Animated.View style={[styles.decorCircleMedium, animMediumStyle]} pointerEvents="none" />
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
 
         {/* Logo */}
@@ -174,8 +224,8 @@ const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  // Single container definition (previous duplicate overwrote the first) with fallback blue
+  container: { flex: 1, backgroundColor: '#8fdfff' },
   scrollContainer: { flexGrow: 1, padding: 24, paddingBottom: 120, justifyContent: 'center' },
   topRow: { alignItems: 'center', justifyContent: 'center', marginBottom: 28, paddingTop: 24 },
   logo: { width: 160, height: 70 },
@@ -216,7 +266,7 @@ const styles = StyleSheet.create({
     borderLeftColor: '#f44336',
   },
   errorText: { color: '#f44336', fontSize: 14, textAlign: 'center' },
-  footerFixed: { position: 'absolute', bottom: 10, left: 0, right: 0, alignItems: 'center', zIndex: 20 },
+  footerFixed: { position: 'absolute', bottom: 32, left: 0, right: 0, alignItems: 'center', zIndex: 20 },
   footerText: { fontSize: 12, color: '#fff', fontWeight: '600', letterSpacing: 0.7, opacity: 0.95 },
   bottomAccent: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 260, backgroundColor: '#00aee6', borderTopLeftRadius: 140, borderTopRightRadius: 0, transform: [{ skewY: '-2deg' }], },
 });
