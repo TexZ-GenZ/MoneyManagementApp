@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -89,98 +90,106 @@ const LoginScreen = () => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Simple light blue gradient filling whole screen */}
+      <LinearGradient colors={['#ffffff', '#e8f9ff', '#d0f3ff', '#a9e7ff', '#8fdfff']} locations={[0, 0.3, 0.55, 0.8, 1]} style={StyleSheet.absoluteFill} />
+      {/* Decorative soft circles */}
+      <View style={styles.decorCircleLarge} pointerEvents="none" />
+      <View style={styles.decorCircleSmall} pointerEvents="none" />
+      <View style={styles.decorCircleMedium} pointerEvents="none" />
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
 
-        {/* Top logo row */}
+        {/* Logo */}
         <View style={styles.topRow}>
           <Image source={require('../../../assets/images/paytm_logo.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.brandText}>Money</Text>
-        </View>
-        <View style={styles.divider} />
-
-        {/* Page title */}
-        <View style={styles.pageTitleRow}>
-          <Text style={styles.pageTitle}>Login</Text>
         </View>
 
-        {/* Inputs */}
-        <View style={styles.form}>
-          <Input
-            label="Email or Mobile"
-            value={formData.username}
-            onChangeText={(value) => handleInputChange('username', value)}
-            error={errors.username?.[0]}
-            placeholder="Enter your email or mobile"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-          />
+        {/* Auth Card */}
+        <View style={styles.card}>
+          {/* Tabs */}
+          <View style={styles.tabRow}>
+            <View style={styles.tabActiveWrap}>
+              <Text style={styles.tabActive}>LOGIN</Text>
+              <View style={styles.tabUnderline} />
+            </View>
+            <View style={styles.tabDivider} />
+            <Text style={styles.tabDisabled}>SIGN UP</Text>
+          </View>
 
+          {/* Inputs */}
           <View style={styles.form}>
             <Input
-              label="Password"
-              value={formData.password}
-              onChangeText={(value) => handleInputChange('password', value)}
-              error={errors.password?.[0]}
-              placeholder="Enter your password"
-              secureTextEntry={!showPassword}
+              label="Email or Mobile"
+              value={formData.username}
+              onChangeText={(value) => handleInputChange('username', value)}
+              error={errors.username?.[0]}
+              placeholder="Enter your email or mobile"
               autoCapitalize="none"
               autoCorrect={false}
+              keyboardType="email-address"
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={22} color="#999" />
-            </TouchableOpacity>
-          </View>
 
-
-          {/* Terms Checkbox */}
-          <View style={styles.checkboxRow}>
-            <TouchableOpacity onPress={() => setAccepted(!accepted)} style={styles.checkbox}>
-              {accepted && <Ionicons name="checkmark" size={16} color="#00BFFF" />}
-            </TouchableOpacity>
-            <Text style={styles.termsText}>
-              I accept the <Text style={styles.link}>Terms and Conditions</Text> and <Text style={styles.link}>Privacy Policy</Text>
-            </Text>
-          </View>
-
-          {error && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
+            <View style={styles.form}>
+              <Input
+                label="Password"
+                value={formData.password}
+                onChangeText={(value) => handleInputChange('password', value)}
+                error={errors.password?.[0]}
+                placeholder="Enter your password"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={22} color="#999" />
+              </TouchableOpacity>
             </View>
-          )}
 
-          {/* Sign In */}
-          <Button title="SIGN IN" onPress={handleLogin} loading={isLoading} style={styles.loginButton} />
+            {/* Terms (kept for compliance) */}
+            <View style={styles.checkboxRow}>
+              <TouchableOpacity onPress={() => setAccepted(!accepted)} style={styles.checkbox}>
+                {accepted && <Ionicons name="checkmark" size={16} color="#00BFFF" />}
+              </TouchableOpacity>
+              <Text style={styles.termsText}>
+                I accept the <Text style={styles.link}>Terms & Conditions</Text> and <Text style={styles.link}>Privacy Policy</Text>
+              </Text>
+            </View>
 
-          {/* Sign Up */}
-          <View style={styles.signupRow}>
-            <Text style={styles.signupText}>Don’t have account? </Text>
-            <TouchableOpacity>
-              <Text style={styles.link}>Sign Up</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            {error && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            <Button title="Login" onPress={handleLogin} loading={isLoading} style={styles.loginButton} />
+          </View>{/* end form */}
+        </View>{/* end card */}
 
         {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Build v1.0-2.0.2102</Text>
-        </View>
       </ScrollView>
+      <View style={styles.footerFixed}>
+        <Text style={styles.footerText}>Build v1.0-2.0.2102</Text>
+      </View>
     </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', marginTop:8 },
-  scrollContainer: { flexGrow: 1, justifyContent: 'flex-start', padding: 20,
-    
-   },
-  topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, justifyContent:"flex-start", paddingTop:10 },
-  logo: { width: 120, height: 60, marginRight: -20 },
-  brandText: { fontSize: 18, fontWeight: '700', color: '#333' },
-  divider: { height: 1, backgroundColor: 'rgba(0,0,0,0.08)', marginTop: 1, marginBottom:18 },
-  pageTitleRow: { alignItems: 'flex-start', marginBottom: 45 },
-  pageTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
+  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  scrollContainer: { flexGrow: 1, padding: 24, paddingBottom: 120, justifyContent: 'center' },
+  topRow: { alignItems: 'center', justifyContent: 'center', marginBottom: 28, paddingTop: 24 },
+  logo: { width: 160, height: 70 },
+  glow: { display: 'none' },
+  card: { backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 26, padding: 26, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)', marginBottom: 32 },
+  decorCircleLarge: { position: 'absolute', top: -80, left: -70, width: 300, height: 300, borderRadius: 150, backgroundColor: '#d9f6ff', opacity: 0.55 },
+  decorCircleSmall: { position: 'absolute', top: 120, right: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: '#b3ecff', opacity: 0.50 },
+  decorCircleMedium: { position: 'absolute', bottom: 140, left: -40, width: 200, height: 200, borderRadius: 100, backgroundColor: '#c2f1ff', opacity: 0.45 },
+  tabRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
+  tabActiveWrap: { alignItems: 'center' },
+  tabActive: { fontSize: 16, fontWeight: '700', color: '#0099cc', letterSpacing: 0.5 },
+  tabUnderline: { height: 3, backgroundColor: '#0099cc', alignSelf: 'stretch', width: 68, marginTop: 6, borderRadius: 2 },
+  tabDivider: { width: 1, backgroundColor: 'rgba(0,0,0,0.3)', height: 24, marginHorizontal: 24 },
+  tabDisabled: { fontSize: 16, fontWeight: '600', color: '#999', letterSpacing: 0.5 },
   form: { marginTop: 12 },
   passwordContainer: { position: 'relative', justifyContent: 'center' },
   eyeIcon: { position: 'absolute', right: 12, bottom: 25 },
@@ -196,8 +205,8 @@ const styles = StyleSheet.create({
   termsText: { fontSize: 13, color: '#444', flex: 1, flexWrap: 'wrap' },
   link: { color: '#00BFFF' },
   loginButton: { marginTop: 20 },
-  signupRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
-  signupText: { fontSize: 14, color: '#666' },
+  signupRow: { display: 'none' },
+  signupText: { display: 'none' },
   errorContainer: {
     backgroundColor: '#FFEBEE',
     borderRadius: 8,
@@ -207,8 +216,9 @@ const styles = StyleSheet.create({
     borderLeftColor: '#f44336',
   },
   errorText: { color: '#f44336', fontSize: 14, textAlign: 'center' },
-  footer: { alignItems: 'center', marginTop: 'auto' },
-  footerText: { fontSize: 12, color: '#999' },
+  footerFixed: { position: 'absolute', bottom: 10, left: 0, right: 0, alignItems: 'center', zIndex: 20 },
+  footerText: { fontSize: 12, color: '#fff', fontWeight: '600', letterSpacing: 0.7, opacity: 0.95 },
+  bottomAccent: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 260, backgroundColor: '#00aee6', borderTopLeftRadius: 140, borderTopRightRadius: 0, transform: [{ skewY: '-2deg' }], },
 });
 
 export default LoginScreen;
