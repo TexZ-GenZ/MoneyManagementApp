@@ -328,8 +328,8 @@ def bill_payment_history(bill_id: int, db: Session = Depends(get_db)):
                 accountant_comment=payment.accountant_comment,
                 admin_comment=payment.admin_comment,
                 exec_location_verified=payment.exec_location_verified,
-                exec_lat=getattr(payment, 'exec_lat', None),
-                exec_lng=getattr(payment, 'exec_lng', None),
+                exec_lat=getattr(payment, "exec_lat", None),
+                exec_lng=getattr(payment, "exec_lng", None),
             )
         )
     return BillPaymentHistory(items=items, total=len(items))

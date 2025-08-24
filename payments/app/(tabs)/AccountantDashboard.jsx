@@ -26,7 +26,7 @@ export default function AccountantDashboard() {
     setLoadingRecent(true);
     try {
       const token = await StorageService.getToken();
-      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=6&_t=${Date.now()}` , {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=6&_t=${Date.now()}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.access_token}` },
       });

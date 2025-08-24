@@ -61,8 +61,8 @@ export default function ExecutiveDashboard() {
     const promise = parseDate(c.promise_date);
     const due = promise || credit; // prefer promise, fallback credit
     if (!due) return { bucket: 'none', due };
-    const todayMid = new Date(); todayMid.setHours(0,0,0,0);
-    const dueMid = new Date(due); dueMid.setHours(0,0,0,0);
+    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+    const dueMid = new Date(due); dueMid.setHours(0, 0, 0, 0);
     const diffDays = (dueMid - todayMid) / 86400000;
     if (diffDays < 0) return { bucket: 'overdue', due: dueMid };
     if (diffDays === 0) return { bucket: 'today', due: dueMid };
@@ -71,9 +71,9 @@ export default function ExecutiveDashboard() {
   }, []);
 
   const enriched = useMemo(() => companies.map(c => ({ ...c, __cls: classify(c) })), [companies, classify]);
-  const overdueCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'overdue').sort((a,b)=> (parseFloat(b.outbal)||0) - (parseFloat(a.outbal)||0)), [enriched]);
-  const todayCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'today').sort((a,b)=> (parseFloat(b.outbal)||0) - (parseFloat(a.outbal)||0)), [enriched]);
-  const upcomingCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'upcoming').sort((a,b)=> (c.__cls.due - b.__cls.due)), [enriched]);
+  const overdueCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'overdue').sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0)), [enriched]);
+  const todayCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'today').sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0)), [enriched]);
+  const upcomingCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'upcoming').sort((a, b) => (c.__cls.due - b.__cls.due)), [enriched]);
 
   const activeList = viewMode === 'today' ? todayCompanies : viewMode === 'upcoming' ? upcomingCompanies : overdueCompanies;
   const previewList = activeList.slice(0, 8);

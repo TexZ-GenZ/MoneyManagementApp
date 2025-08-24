@@ -115,7 +115,7 @@ export default function PaymentDetails() {
 
     // removed previous totalPaid calc (now derived with filteredPayments)
 
-        const renderPaymentItem = ({ item, index }) => {
+    const renderPaymentItem = ({ item, index }) => {
         return (
             <Card style={styles.paymentCard}>
                 <View style={styles.cardTopRow}>
@@ -125,16 +125,16 @@ export default function PaymentDetails() {
                 <View style={styles.metaRow}>
                     <Meta label="Collected" value={formatDateTime(item.collected_at)} />
                     <Meta label="Method" value={item.method || '—'} />
-                                        { (item.exec_lat && item.exec_lng) ? (
-                                            <TouchableOpacity onPress={() => {
-                                                const url = `https://www.google.com/maps/search/?api=1&query=${item.exec_lat},${item.exec_lng}`;
-                                                Linking.openURL(url).catch(()=>Alert.alert('Error','Cannot open maps'));
-                                            }}>
-                                                <Text style={styles.mapLink}>View Map</Text>
-                                            </TouchableOpacity>
-                                        ) : (
-                                            <Meta label="Location" value={item.exec_location_verified ? 'Captured' : '—'} />
-                                        ) }
+                    {(item.exec_lat && item.exec_lng) ? (
+                        <TouchableOpacity onPress={() => {
+                            const url = `https://www.google.com/maps/search/?api=1&query=${item.exec_lat},${item.exec_lng}`;
+                            Linking.openURL(url).catch(() => Alert.alert('Error', 'Cannot open maps'));
+                        }}>
+                            <Text style={styles.mapLink}>View Map</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <Meta label="Location" value={item.exec_location_verified ? 'Captured' : '—'} />
+                    )}
                 </View>
                 <TouchableOpacity style={styles.commentsToggle} onPress={() => toggleExpand(index)} activeOpacity={0.7}>
                     <Text style={styles.commentsToggleText}>Details</Text>

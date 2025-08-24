@@ -159,7 +159,7 @@ export default function CollectPaymentScreen() {
   const submitPayment = async () => {
     if (!validateInputs()) return;
 
-  // Location no longer required; optional capture only.
+    // Location no longer required; optional capture only.
 
     setSubmitting(true);
 
@@ -173,7 +173,7 @@ export default function CollectPaymentScreen() {
         amount_collected: Number(amountCollected),
         method: paymentMethod.toLowerCase(),
         comments: comments.trim() || undefined,
-  // No explicit verification flag now; coords captured separately.
+        // No explicit verification flag now; coords captured separately.
         next_promise_date: nextPromiseDate ? nextPromiseDate.toISOString().split("T")[0] : undefined,
         bill_allocations: billAllocations.map(b => ({
           bill_id: b.bill_id,
@@ -198,7 +198,7 @@ export default function CollectPaymentScreen() {
       });
 
       if (!response.ok) {
-  const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
@@ -217,7 +217,7 @@ export default function CollectPaymentScreen() {
         ]
       );
 
-  } catch (error) {
+    } catch (error) {
       Alert.alert(
         "Submission Failed",
         error.message || "Failed to submit payment. Please check your connection and try again.",
@@ -242,13 +242,13 @@ export default function CollectPaymentScreen() {
     });
   };
 
-  const totalAllocated = useMemo(() => billAllocations.reduce((s,a)=> s + (parseFloat(a.amount)||0),0), [billAllocations]);
+  const totalAllocated = useMemo(() => billAllocations.reduce((s, a) => s + (parseFloat(a.amount) || 0), 0), [billAllocations]);
 
   return (
     <Screen title="Collect Payment" subtitle={company_code || ''}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex:1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-          { (company_code || bill_number) && (
+          {(company_code || bill_number) && (
             <Card style={styles.cardSection}>
               {company_code && <InfoRow label="Company" value={company_code} />}
               {bill_number && <InfoRow label="Bill" value={bill_number} />}
@@ -295,33 +295,33 @@ export default function CollectPaymentScreen() {
             <DateTimePickerModal isVisible={isNextPromiseDatePickerVisible} mode="date" minimumDate={new Date()} onConfirm={handleConfirmNextPromiseDate} onCancel={hideNextPromiseDatePicker} />
           </Card>
 
-            <Card style={styles.cardSection}>
-              <SectionHeader title="Allocations" right={
-                <Text style={styles.allocTotal}>Total: {totalAllocated.toFixed(2)}</Text>
-              } />
-              {billAllocations.map((alloc, idx) => (
-                <View key={idx} style={styles.allocRow}>
-                  <View style={styles.allocBadge}><Text style={styles.allocBadgeText}>#{alloc.bill_id}</Text></View>
-                  <TextInput
-                    style={[styles.textInput, styles.allocInput]}
-                    placeholder="Amount"
-                    placeholderTextColor={tokens.colors.textFaint}
-                    keyboardType="numeric"
-                    value={alloc.amount.toString()}
-                    onChangeText={(val)=>updateBillAllocation(idx,'amount',val)}
-                    editable={!submitting}
-                  />
-                  {billAllocations.length > 1 && (
-                    <TouchableOpacity onPress={()=>removeBillAllocation(idx)} style={styles.removeAllocBtn} disabled={submitting}>
-                      <Text style={styles.removeAllocBtnText}>×</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
-              <TouchableOpacity style={styles.addAllocBtn} onPress={addAnotherAllocation} disabled={submitting}>
-                <Text style={styles.addAllocBtnText}>+ Add Allocation</Text>
-              </TouchableOpacity>
-            </Card>
+          <Card style={styles.cardSection}>
+            <SectionHeader title="Allocations" right={
+              <Text style={styles.allocTotal}>Total: {totalAllocated.toFixed(2)}</Text>
+            } />
+            {billAllocations.map((alloc, idx) => (
+              <View key={idx} style={styles.allocRow}>
+                <View style={styles.allocBadge}><Text style={styles.allocBadgeText}>#{alloc.bill_id}</Text></View>
+                <TextInput
+                  style={[styles.textInput, styles.allocInput]}
+                  placeholder="Amount"
+                  placeholderTextColor={tokens.colors.textFaint}
+                  keyboardType="numeric"
+                  value={alloc.amount.toString()}
+                  onChangeText={(val) => updateBillAllocation(idx, 'amount', val)}
+                  editable={!submitting}
+                />
+                {billAllocations.length > 1 && (
+                  <TouchableOpacity onPress={() => removeBillAllocation(idx)} style={styles.removeAllocBtn} disabled={submitting}>
+                    <Text style={styles.removeAllocBtnText}>×</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            <TouchableOpacity style={styles.addAllocBtn} onPress={addAnotherAllocation} disabled={submitting}>
+              <Text style={styles.addAllocBtnText}>+ Add Allocation</Text>
+            </TouchableOpacity>
+          </Card>
 
           <Card style={styles.cardSection}>
             <SectionHeader title="Comments" />
@@ -406,9 +406,11 @@ function SectionHeader({ title, right }) {
 }
 
 function FieldLabel({ label }) { return <Text style={styles.fieldLabel}>{label}</Text>; }
-function InfoRow({ label, value }) { return (
-  <View style={styles.infoRow}>
-    <Text style={styles.infoLabel}>{label}</Text>
-    <Text style={styles.infoValue}>{value}</Text>
-  </View>
-); }
+function InfoRow({ label, value }) {
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+}

@@ -57,7 +57,7 @@ export default function AccountantNotifyScreen() {
     // Live update from detail screen actions
     useEffect(() => {
         const off = onPaymentUpdate(ev => {
-            if(!ev || !ev.id) return;
+            if (!ev || !ev.id) return;
             setApprovalItems(items => items.filter(i => i.id !== ev.id));
         });
         return off;

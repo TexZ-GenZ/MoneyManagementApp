@@ -3,4 +3,4 @@
 const listeners = new Set();
 
 export function onPaymentUpdate(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-export function emitPaymentUpdate(payload) { for (const fn of Array.from(listeners)) { try { fn(payload); } catch(e){ /* noop */ } } }
+export function emitPaymentUpdate(payload) { for (const fn of Array.from(listeners)) { try { fn(payload); } catch (e) { /* noop */ } } }

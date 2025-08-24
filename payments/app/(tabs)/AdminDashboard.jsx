@@ -30,7 +30,7 @@ export default function AdminDashboard() {
     setLoadingRecent(true);
     try {
       const token = await StorageService.getToken();
-      const resp = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/pending?skip=0&limit=6&_t=${Date.now()}` , {
+      const resp = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/pending?skip=0&limit=6&_t=${Date.now()}`, {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.access_token}` }
       });
       const json = await resp.json();
