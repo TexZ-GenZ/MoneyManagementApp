@@ -203,9 +203,17 @@ def _send_role_pending_pushes(db: Session):
     """
     now = datetime.utcnow()
     # Gather counts
-    accountant_cnt = db.query(Payment).filter(Payment.status == PaymentStatus.submitted).count()
-    admin_cnt = db.query(Payment).filter(Payment.status == PaymentStatus.accountant_approved).count()
-    log.debug("Aggregated push counts accountant=%s admin=%s", accountant_cnt, admin_cnt)
+    accountant_cnt = (
+        db.query(Payment).filter(Payment.status == PaymentStatus.submitted).count()
+    )
+    admin_cnt = (
+        db.query(Payment)
+        .filter(Payment.status == PaymentStatus.accountant_approved)
+        .count()
+    )
+    log.debug(
+        "Aggregated push counts accountant=%s admin=%s", accountant_cnt, admin_cnt
+    )
     if accountant_cnt == 0 and admin_cnt == 0:
         return
 
@@ -217,7 +225,11 @@ def _send_role_pending_pushes(db: Session):
         if not users:
             return
         # Collect tokens
-        tokens = db.query(PushToken).filter(PushToken.user_id.in_([u.id for u in users])).all()
+        tokens = (
+            db.query(PushToken)
+            .filter(PushToken.user_id.in_([u.id for u in users]))
+            .all()
+        )
         log.debug("Role=%s users=%s tokens=%s", role, len(users), len(tokens))
         if not tokens:
             return
