@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "payments",
+    "owner": "greenpig69",
     "slug": "payments",
     "version": "1.0.0",
     "orientation": "portrait",

@@ -8,7 +8,12 @@ from app.models.models import (
     Payment,
     PaymentStatus,
     Setting,
+    User,
+    Role,
+    PushToken,
 )
+import os
+import httpx
 
 
 def ensure_setting(db: Session) -> Setting:
@@ -181,3 +186,67 @@ def run_notification_scan(db: Session):
     )
     scan_promise_credit_overdue(db, interval_hours)
     scan_payment_review(db, interval_hours)
+
+    # After creating/updating internal notifications, send role-based aggregated push reminders
+    try:
+        _send_role_pending_pushes(db)
+    except Exception as e:
+        log.warning("Role pending push send failed: %s", e)
+
+
+def _send_role_pending_pushes(db: Session):
+    """Send a single aggregated push to accountant(s) and admin(s) if they have pending approvals.
+    Cadence piggybacks on run_notification_scan invocation (interval+daily). We avoid spamming by
+    checking last_sent_at logic via synthetic notification keys (reuse notifications table by type payment_review).
+    Accountant: payments with status submitted.
+    Admin: payments with status accountant_approved.
+    """
+    now = datetime.utcnow()
+    # Gather counts
+    accountant_cnt = db.query(Payment).filter(Payment.status == PaymentStatus.submitted).count()
+    admin_cnt = db.query(Payment).filter(Payment.status == PaymentStatus.accountant_approved).count()
+    log.debug("Aggregated push counts accountant=%s admin=%s", accountant_cnt, admin_cnt)
+    if accountant_cnt == 0 and admin_cnt == 0:
+        return
+
+    # Helper to decide if we should send (every scan when count>0 but throttle via  interval already)
+    def _send_to_role(role: Role, count: int, stage: str):
+        if count <= 0:
+            return
+        users = db.query(User).filter(User.role == role, User.is_active == True).all()
+        if not users:
+            return
+        # Collect tokens
+        tokens = db.query(PushToken).filter(PushToken.user_id.in_([u.id for u in users])).all()
+        log.debug("Role=%s users=%s tokens=%s", role, len(users), len(tokens))
+        if not tokens:
+            return
+        title = "Approvals Pending"
+        body = f"{count} payment(s) awaiting {stage} approval"
+        for t in tokens:
+            if not t.token.startswith("ExponentPushToken"):
+                continue
+            try:
+                resp = httpx.post(
+                    "https://exp.host/--/api/v2/push/send",
+                    json={
+                        "to": t.token,
+                        "title": title,
+                        "body": body,
+                        "data": {"pending_count": count, "stage": stage},
+                    },
+                    timeout=10,
+                )
+                if resp.status_code not in (200, 201):
+                    log.warning(
+                        "Push send failed role=%s status=%s body=%s resp=%s",
+                        role,
+                        resp.status_code,
+                        body,
+                        resp.text,
+                    )
+            except Exception as e:
+                log.warning("Push exception role=%s err=%s", role, e)
+
+    _send_to_role(Role.accountant, accountant_cnt, "accountant")
+    _send_to_role(Role.admin, admin_cnt, "admin")

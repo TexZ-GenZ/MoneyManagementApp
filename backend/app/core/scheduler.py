@@ -1,4 +1,5 @@
 import logging
+import os
 from app.core.logging_config import get_logger
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -53,6 +54,7 @@ def _configure_jobs():
         replace_existing=True,
         misfire_grace_time=300,
     )
+    log.info("Notification scheduler using hours interval=%s", interval_hours)
     scheduler.add_job(
         _scan_job,
         CronTrigger(hour=daily_hour, minute=0),

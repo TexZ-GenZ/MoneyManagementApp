@@ -11,7 +11,7 @@ class ApiService {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = config.api.baseURL;
+    this.baseURL = config.api.baseURL ?? "";
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
