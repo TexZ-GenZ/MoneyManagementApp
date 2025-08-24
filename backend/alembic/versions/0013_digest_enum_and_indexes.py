@@ -11,14 +11,14 @@ def upgrade():
     # Add new enum value for notificationtype
     op.execute("ALTER TYPE notificationtype ADD VALUE IF NOT EXISTS 'promise_digest'")
     # Helpful index for sending prepared digests quickly
-    # Note: When adding a new enum value, PostgreSQL requires a commit before the new value
-    # can be used as a typed literal. To avoid the "unsafe use of new value" error during
-    # transactional migrations, compare the enum column by casting to text instead.
+    # Create a general composite index used by digest queries.
+    # We avoid a partial index on the new enum value to prevent immutability/commit issues
+    # during transactional migrations on PostgreSQL.
     op.create_index(
         "ix_notifications_digest_due",
         "notifications",
         ["type", "status", "next_send_at"],
-        postgresql_where=sa.text("type::text = 'promise_digest'"),
+        unique=False,
     )
 
 
