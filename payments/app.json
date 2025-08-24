@@ -18,8 +18,8 @@
         "backgroundColor": "#ffffff"
       },
       "notification": {
-        "icon": "./assets/images/notification-icon.png",
-        "color": "#ffffff"
+        "icon": "./assets/images/drawable-xxxhdpi/ic_stat_payments.png",
+        "color": "#2E86AB"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.skywalker421.payments",
