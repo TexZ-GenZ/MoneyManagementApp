@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Header
 from pathlib import Path
 from sqlalchemy.orm import Session
-from sqlalchemy import text, or_
+from sqlalchemy import text, or_, func
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from app.db.session import get_db
@@ -27,6 +27,8 @@ from app.schemas.payment import (
     BillPaymentHistoryItem,
     PaymentDetailOut,
     PaymentAllocationDetail,
+    PaymentActivityItem,
+    PaymentActivityList,
 )
 from app.schemas.settings import SettingsOut, SettingsUpdate
 from app.schemas.user import UserCreate, UserOut, UserList, PushTokenIn, SendPushIn
@@ -119,7 +121,8 @@ def get_settings(db: Session = Depends(get_db)):
     return SettingsOut(
         credit_extension_days=s.credit_extension_days,
         notif_every_hours=s.notif_every_hours,
-        payment_notif_daily_hour=s.payment_notif_daily_hour,
+        exec_window_start_hour=s.exec_window_start_hour,
+        exec_window_end_hour=s.exec_window_end_hour,
     )
 
 
@@ -134,8 +137,10 @@ def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
         s.credit_extension_days = body.credit_extension_days
     if body.notif_every_hours is not None:
         s.notif_every_hours = body.notif_every_hours
-    if body.payment_notif_daily_hour is not None:
-        s.payment_notif_daily_hour = body.payment_notif_daily_hour
+    if body.exec_window_start_hour is not None:
+        s.exec_window_start_hour = body.exec_window_start_hour
+    if body.exec_window_end_hour is not None:
+        s.exec_window_end_hour = body.exec_window_end_hour
     db.add(s)
     db.commit()
     db.refresh(s)
@@ -148,7 +153,8 @@ def update_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     return SettingsOut(
         credit_extension_days=s.credit_extension_days,
         notif_every_hours=s.notif_every_hours,
-        payment_notif_daily_hour=s.payment_notif_daily_hour,
+        exec_window_start_hour=s.exec_window_start_hour,
+        exec_window_end_hour=s.exec_window_end_hour,
     )
 
 
@@ -160,17 +166,94 @@ def list_companies(
     q: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
+    exec_username: Optional[str] = Query(
+        None,
+        description="Filter by a single executive username (case-insensitive / deprecated in favor of exec_usernames)",
+    ),
+    exec_usernames: Optional[List[str]] = Query(
+        None, description="Filter by multiple executive usernames (repeat param)"
+    ),
+    balance: Optional[str] = Query(
+        None,
+        pattern="^(positive|zero)$",
+        description="positive: outbal>0, zero: outbal=0",
+    ),
+    sort: Optional[str] = Query(
+        None,
+        description="name_asc|code_asc|outbal_desc|outbal_asc|amount_desc|amount_asc",
+    ),
 ):
-    query = db.query(Company).filter(Company.is_archived == False)
+    base = db.query(Company).filter(Company.is_archived == False)
     if area:
-        query = query.filter(Company.area == area)
+        base = base.filter(Company.area == area)
     if q:
         like = f"%{q}%"
-        # Search by name OR code (case-insensitive)
-        query = query.filter(or_(Company.name.ilike(like), Company.code.ilike(like)))
-    total = query.count()
-    items = query.order_by(Company.code).offset(skip).limit(limit).all()
-    return CompanyList(items=items, total=total)
+        base = base.filter(or_(Company.name.ilike(like), Company.code.ilike(like)))
+    # Executive filters (multi or single)
+    if exec_usernames and len(exec_usernames) > 0:
+        lowered = [u.lower() for u in exec_usernames if u]
+        if lowered:
+            base = (
+                base.join(ExecAssignment, ExecAssignment.company_code == Company.code)
+                .join(User, User.id == ExecAssignment.executive_id)
+                .filter(func.lower(User.username).in_(lowered))
+            )
+    elif exec_username:
+        base = (
+            base.join(ExecAssignment, ExecAssignment.company_code == Company.code)
+            .join(User, User.id == ExecAssignment.executive_id)
+            .filter(User.username.ilike(exec_username.lower()))
+        )
+    if balance == "positive":
+        base = base.filter(Company.outbal > 0)
+    elif balance == "zero":
+        base = base.filter(Company.outbal == 0)
+
+    total = base.count()
+
+    # Sorting
+    if sort == "code_asc":
+        base = base.order_by(Company.code.asc())
+    elif sort == "outbal_desc":
+        base = base.order_by(Company.outbal.desc())
+    elif sort == "outbal_asc":
+        base = base.order_by(Company.outbal.asc())
+    elif sort == "amount_desc":
+        base = base.order_by(Company.amount.desc())
+    elif sort == "amount_asc":
+        base = base.order_by(Company.amount.asc())
+    else:
+        base = base.order_by(Company.name.asc(), Company.code.asc())
+
+    if limit != -1:
+        base = base.offset(skip).limit(limit)
+    else:
+        base = base.offset(skip)
+
+    rows = base.all()
+
+    # Enrich via separate lightweight query (avoids duplicates / distinct complexity)
+    code_list = [c.code for c in rows]
+    if code_list:
+        assignments = (
+            db.query(ExecAssignment, User)
+            .join(User, User.id == ExecAssignment.executive_id)
+            .filter(ExecAssignment.company_code.in_(code_list))
+            .all()
+        )
+        by_code = {a.company_code: u for a, u in assignments}
+        for c in rows:
+            u = by_code.get(c.code)
+            if u:
+                setattr(c, "assigned_executive_id", u.id)
+                setattr(c, "assigned_executive_username", u.username)
+                setattr(c, "assigned_executive_active", u.is_active)
+            else:
+                setattr(c, "assigned_executive_id", None)
+                setattr(c, "assigned_executive_username", None)
+                setattr(c, "assigned_executive_active", None)
+
+    return CompanyList(items=rows, total=total)
 
 
 @router.get("/companies/{code}", response_model=CompanyBase)
@@ -186,6 +269,8 @@ def company_dashboard(code: str, db: Session = Depends(get_db)):
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
     pending = (
         db.query(Bill)
         .filter(
@@ -208,6 +293,24 @@ def company_dashboard(code: str, db: Session = Depends(get_db)):
         .limit(100)
         .all()
     )
+
+    def map_bill(b: Bill):
+        dynamic_due = (
+            (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
+        )
+        return BillOut(
+            id=b.id,
+            bill_number=b.bill_number,
+            company_code=b.company_code,
+            bill_date=b.bill_date,
+            due_date=dynamic_due,
+            amount=b.amount,
+            amount_paid=b.amount_paid,
+            status=b.status.value if hasattr(b.status, "value") else str(b.status),
+        )
+
+    pending_out = [map_bill(b) for b in pending]
+    paid_out = [map_bill(b) for b in paid]
     return CompanyDashboard(
         code=c.code,
         name=c.name or c.code,
@@ -216,8 +319,8 @@ def company_dashboard(code: str, db: Session = Depends(get_db)):
         promise_date=c.promise_date,
         outbal=c.outbal,
         amount=c.amount,
-        pending_bills=pending,
-        paid_bills=paid,
+        pending_bills=pending_out,
+        paid_bills=paid_out,
     )
 
 
@@ -293,7 +396,26 @@ def list_company_bills(
     elif sort == "recent":
         q = q.order_by(Bill.bill_date.desc())
     total = q.count()
-    items = q.offset(skip).limit(limit).all()
+    raw_items = q.offset(skip).limit(limit).all()
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
+    items = []
+    for b in raw_items:
+        dynamic_due = (
+            (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
+        )
+        items.append(
+            BillOut(
+                id=b.id,
+                bill_number=b.bill_number,
+                company_code=b.company_code,
+                bill_date=b.bill_date,
+                due_date=dynamic_due,
+                amount=b.amount,
+                amount_paid=b.amount_paid,
+                status=b.status.value if hasattr(b.status, "value") else str(b.status),
+            )
+        )
     return BillList(items=items, total=total)
 
 
@@ -302,7 +424,21 @@ def get_bill(bill_id: int, db: Session = Depends(get_db)):
     b = db.get(Bill, bill_id)
     if not b:
         raise HTTPException(status_code=404, detail="Bill not found")
-    return b
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
+    dynamic_due = (
+        (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
+    )
+    return BillOut(
+        id=b.id,
+        bill_number=b.bill_number,
+        company_code=b.company_code,
+        bill_date=b.bill_date,
+        due_date=dynamic_due,
+        amount=b.amount,
+        amount_paid=b.amount_paid,
+        status=b.status.value if hasattr(b.status, "value") else str(b.status),
+    )
 
 
 @router.get("/bills/{bill_id}/payments", response_model=BillPaymentHistory)
@@ -326,6 +462,7 @@ def bill_payment_history(bill_id: int, db: Session = Depends(get_db)):
                 ),
                 collected_at=payment.collected_at,
                 method=payment.method,
+                comments=getattr(payment, "comments", None),
                 accountant_comment=payment.accountant_comment,
                 admin_comment=payment.admin_comment,
                 exec_location_verified=payment.exec_location_verified,
@@ -462,6 +599,137 @@ def list_company_payments(
     return PaymentList(items=items, total=total)
 
 
+@router.get(
+    "/payments/activity",
+    dependencies=[Depends(require_roles("admin", "accountant", "executive"))],
+)
+def payments_activity(
+    search: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        # Base query: for execs, restrict to their companies
+        q = db.query(Payment)
+        if user.role == Role.executive:
+            codes = [
+                r.company_code
+                for r in db.query(ExecAssignment)
+                .filter(ExecAssignment.executive_id == user.id)
+                .all()
+            ]
+            if codes:
+                q = q.filter(Payment.company_code.in_(codes))
+            else:
+                return {"items": [], "total": 0}
+
+        # Search by company code/name, executive username/name, or area
+        if search:
+            s = f"%{search.lower()}%"
+            q = (
+                q.join(Company, Company.code == Payment.company_code)
+                .join(User, User.id == Payment.executive_id)
+                .filter(
+                    or_(
+                        func.lower(Company.code).like(s),
+                        func.lower(Company.name).like(s),
+                        func.lower(func.coalesce(Company.area, "")).like(s),
+                        func.lower(User.username).like(s),
+                        func.lower(func.coalesce(User.area, "")).like(s),
+                    )
+                )
+            )
+
+        total = q.count()
+
+        # Simple ordering by collected_at for now to avoid SQL issues
+        rows = (
+            q.order_by(Payment.collected_at.desc())
+            .offset(max(0, skip))
+            .limit(max(0, limit))
+            .all()
+        )
+
+        items = []
+        for p in rows:
+            try:
+                # Determine last activity type/time/comment based on actual timestamps
+                candidates = [
+                    (p.collected_at, "submitted", getattr(p, "comments", None)),
+                ]
+                if hasattr(p, "accountant_review_at") and p.accountant_review_at:
+                    candidates.append(
+                        (
+                            p.accountant_review_at,
+                            "accountant_review",
+                            getattr(p, "accountant_comment", None),
+                        )
+                    )
+                if hasattr(p, "admin_review_at") and p.admin_review_at:
+                    candidates.append(
+                        (
+                            p.admin_review_at,
+                            "admin_review",
+                            getattr(p, "admin_comment", None),
+                        )
+                    )
+
+                last_time, last_type, last_comment = max(candidates, key=lambda x: x[0])
+
+                # Lookup display fields
+                company = db.get(Company, p.company_code)
+                exec_user = db.get(User, p.executive_id)
+
+                # Ensure status is string
+                status_str = (
+                    p.status.value if hasattr(p.status, "value") else str(p.status)
+                )
+
+                # Ensure amount is properly converted
+                amount_val = p.amount_collected
+                if amount_val is None:
+                    amount_val = 0
+                else:
+                    amount_val = float(amount_val)
+
+                item_dict = {
+                    "payment_id": p.id,
+                    "company_code": p.company_code,
+                    "company_name": getattr(company, "name", None) if company else None,
+                    "company_area": getattr(company, "area", None) if company else None,
+                    "executive_id": p.executive_id,
+                    "executive_username": (
+                        getattr(exec_user, "username", None) if exec_user else None
+                    ),
+                    "executive_name": (
+                        getattr(exec_user, "full_name", None)
+                        if exec_user and hasattr(exec_user, "full_name")
+                        else None
+                    ),
+                    "amount_collected": amount_val,
+                    "method": str(p.method or ""),
+                    "status": status_str,
+                    "last_activity_at": last_time.isoformat() if last_time else None,
+                    "last_activity_type": last_type,
+                    "last_comment": last_comment,
+                }
+                items.append(item_dict)
+            except Exception as e:
+                print(f"Error processing payment {p.id}: {e}")
+                continue
+
+        return {"items": items, "total": total}
+
+    except Exception as e:
+        print(f"Error in payments_activity: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+# (duplicate payments_activity removed; single definition exists above before /payments/{payment_id})
+
+
 @router.get("/payments/{payment_id}", response_model=PaymentDetailOut)
 def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
     p = db.get(Payment, payment_id)
@@ -493,6 +761,7 @@ def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
         amount_collected=p.amount_collected,
         method=p.method,
         status=p.status,
+        comments=getattr(p, "comments", None),
         next_promise_date=p.next_promise_date,
         exec_location_verified=p.exec_location_verified,
         exec_lat=getattr(p, "exec_lat", None),
@@ -527,6 +796,37 @@ def accountant_approve(
         p.accountant_comment = comment
     db.commit()
     db.refresh(p)
+    # Immediate push to admins for next approval stage
+    try:
+        admin_users = (
+            db.query(User).filter(User.role == Role.admin, User.is_active == True).all()
+        )
+        if admin_users:
+            tokens = (
+                db.query(PushToken)
+                .filter(PushToken.user_id.in_([u.id for u in admin_users]))
+                .all()
+            )
+            for t in tokens:
+                if not t.token.startswith("ExponentPushToken"):
+                    continue
+                try:
+                    import httpx
+
+                    httpx.post(
+                        "https://exp.host/--/api/v2/push/send",
+                        json={
+                            "to": t.token,
+                            "title": "Payment Ready",
+                            "body": f"Payment {p.id} awaiting admin approval",
+                            "data": {"payment_id": p.id, "stage": "admin"},
+                        },
+                        timeout=8,
+                    )
+                except Exception:
+                    continue
+    except Exception:
+        pass
     return p
 
 

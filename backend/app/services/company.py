@@ -24,7 +24,8 @@ def ensure_settings_row(db: Session) -> Setting:
             id=1,
             credit_extension_days=cfg.CREDIT_EXTENSION_DAYS,
             notif_every_hours=cfg.NOTIF_EVERY_HOURS,
-            payment_notif_daily_hour=cfg.PAYMENT_NOTIF_DAILY_HOUR,
+            exec_window_start_hour=6,
+            exec_window_end_hour=22,
         )
         db.add(s)
         db.commit()

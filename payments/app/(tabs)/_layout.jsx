@@ -5,10 +5,12 @@ import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { initializeAuth, logoutUser } from '../../src/store/authSlice';
 import { useAppDispatch, useAppSelector } from '../../src/store/hooks';
 import { Platform, Alert, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const insets = useSafeAreaInsets();
 
   const { user, isAuthenticated, isLoading } = useAppSelector(
     (state) => state.auth
@@ -54,43 +56,45 @@ export default function TabLayout() {
   // Get user role for conditional tab rendering
   const userRole = user?.role || 'accountant';
 
+  const baseTabBarStyle = Platform.select({
+    ios: {
+      backgroundColor: '#27323d',
+      borderTopColor: '#364350',
+      // Give extra inner space for the home indicator
+      height: 60 + insets.bottom + 10,
+      paddingTop: 8,
+      paddingBottom: insets.bottom + 14,
+    },
+    default: {
+      backgroundColor: '#27323d',
+      borderTopColor: '#364350',
+      elevation: 20,
+      // Ensure enough space for gesture nav/back areas
+      height: 58 + Math.max(insets.bottom, 14),
+      paddingTop: 8,
+      paddingBottom: 12 + Math.max(insets.bottom, 14),
+      shadowColor: '#000',
+      shadowOpacity: 0.3,
+      shadowOffset: { width: 0, height: -2 },
+      shadowRadius: 10,
+    },
+  });
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#c8f14c',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.6)',
+        tabBarActiveTintColor: '#9fdf56',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.55)',
         headerShown: false,
-        headerStyle: {
-          backgroundColor: '#f8f9fa',
-        },
+        headerStyle: { backgroundColor: '#1f2933' },
         headerTitleStyle: {
           fontWeight: '600',
+          color: '#ffffff'
         },
-        tabBarItemStyle: { paddingVertical: 12, justifyContent: 'center', alignItems: 'center' },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginTop: 4 },
-        tabBarIconStyle: { marginTop: 0 },
-        tabBarStyle: Platform.select({
-          ios: {
-            position: 'absolute',
-            backgroundColor: '#000',
-            borderTopColor: 'transparent',
-            height: 82,
-            paddingTop: 10,
-            paddingBottom: 18,
-          },
-          default: {
-            backgroundColor: '#000',
-            borderTopColor: 'transparent',
-            elevation: 20,
-            height: 78,
-            paddingTop: 10,
-            paddingBottom: 18,
-            shadowColor: '#000',
-            shadowOpacity: 0.4,
-            shadowOffset: { width: 0, height: -2 },
-            shadowRadius: 12,
-          },
-        }),
+        tabBarItemStyle: { paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+        tabBarIconStyle: { marginTop: 0, alignItems: 'center', justifyContent: 'center' },
+        tabBarStyle: baseTabBarStyle,
       }}>
 
       <Tabs.Screen name="index" options={{ href: null }} />
@@ -102,13 +106,26 @@ export default function TabLayout() {
           title: 'Admin Dashboard',
           href: userRole === 'admin' ? '/AdminDashboard' : null,
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} color={color} style={{ transform: [{ translateY: -6 }] }} />
+            <TabBarIcon name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} color={color} />
           ),
           tabBarLabel: ({ color }) => (
-            <Text style={{ color, fontSize: 12, fontWeight: '600', marginTop: 0, transform: [{ translateY: -4 }] }}>Admin Dashboard</Text>
+            <Text style={{ color, fontSize: 12, fontWeight: '700', marginTop: 2, textAlign: 'center' }}>Admin Dashboard</Text>
           ),
         }}
       />
+
+      {/* History tab for admin - positioned before settings */}
+      <Tabs.Screen
+        name="UnifiedHistory"
+        options={{
+          title: 'History',
+          href: userRole === 'admin' ? '/(tabs)/UnifiedHistory' : null,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'time' : 'time-outline'} color={color} />
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="executiveDashboard"
         options={{
@@ -130,16 +147,28 @@ export default function TabLayout() {
         }}
       />
 
+      {/* History tab for accountant and executive - positioned last */}
+      <Tabs.Screen
+        name="History"
+        options={{
+          title: 'History',
+          href: (userRole === 'accountant' || userRole === 'executive') ? '/(tabs)/UnifiedHistory' : null,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon name={focused ? 'time' : 'time-outline'} color={color} />
+          ),
+        }}
+      />
+
       {/* Profile/Settings - Available to all roles */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} style={{ transform: [{ translateY: -18 }] }} />
+            <TabBarIcon name={focused ? 'person' : 'person-outline'} color={color} />
           ),
           tabBarLabel: ({ color }) => (
-            <Text style={{ color, fontSize: 12, fontWeight: '600', marginTop: 0, transform: [{ translateY: -16 }] }}>Profile</Text>
+            <Text style={{ color, fontSize: 12, fontWeight: '700', marginTop: 2, textAlign: 'center' }}>Profile</Text>
           ),
           headerRight: () => (
             <TabBarIcon

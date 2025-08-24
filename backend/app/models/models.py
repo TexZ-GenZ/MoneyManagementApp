@@ -106,6 +106,10 @@ class Payment(Base):
     exec_location_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     accountant_comment: Mapped[str | None] = mapped_column(Text)
     admin_comment: Mapped[str | None] = mapped_column(Text)
+    accountant_review_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    admin_review_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True)
 
 
@@ -124,6 +128,7 @@ class PaymentAllocation(Base):
 class NotificationType(str, enum.Enum):
     promise_crossed = "promise_crossed"
     payment_review = "payment_review"
+    promise_digest = "promise_digest"  # daily executive summary
 
 
 class NotificationStatus(str, enum.Enum):
@@ -156,7 +161,12 @@ class Setting(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     credit_extension_days: Mapped[int] = mapped_column(Integer, default=0)
     notif_every_hours: Mapped[int] = mapped_column(Integer, default=2)
-    payment_notif_daily_hour: Mapped[int] = mapped_column(Integer, default=9)
+    exec_window_start_hour: Mapped[int] = mapped_column(
+        Integer, default=6
+    )  # local (IST) start hour for exec pushes
+    exec_window_end_hour: Mapped[int] = mapped_column(
+        Integer, default=22
+    )  # local (IST) end hour (exclusive)
 
 
 class ImportType(str, enum.Enum):

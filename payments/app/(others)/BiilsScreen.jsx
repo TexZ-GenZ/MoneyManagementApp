@@ -71,24 +71,38 @@ export default function CompanyBillsList() {
 
     // old accordion filter removed
 
-    const renderBillItem = ({ item }) => (
-        <TouchableOpacity style={styles.billTouchable} activeOpacity={0.7} onPress={() => router.push({ pathname: './PaymentDetail', params: { name, code, amount, outbal, bill_number: item.bill_number, bill_date: item.bill_date, due_date: item.due_date, status: item.status, amount_paid: item.amount_paid, bill_amount: item.amount, bill_id: item.id } })}>
-            <Card style={styles.billCard}>
-                <View style={styles.billRowTop}>
-                    <Text style={styles.billNumber}>{item.bill_number}</Text>
-                    <StatusBadge status={item.status} />
-                </View>
-                <View style={styles.billMetaRow}>
-                    <Text style={styles.billMeta}>Bill: {formatDate(item.bill_date)}</Text>
-                    <Text style={styles.billMeta}>Due: {formatDate(item.due_date)}</Text>
-                </View>
-                <View style={styles.billAmounts}>
-                    <Text style={styles.amountMain}>{formatCurrency(item.amount)}</Text>
-                    <Text style={styles.amountPaidLabel}>Paid <Text style={styles.amountPaid}>{formatCurrency(item.amount_paid)}</Text></Text>
-                </View>
-            </Card>
-        </TouchableOpacity>
-    );
+    const renderBillItem = ({ item }) => {
+        // Determine overdue: due_date exists and is strictly before today (local) and not fully paid (optional)
+        let overdue = false;
+        if (item?.due_date) {
+            try {
+                const due = new Date(item.due_date);
+                const today = new Date();
+                // Normalize to date-only comparison
+                due.setHours(0, 0, 0, 0);
+                today.setHours(0, 0, 0, 0);
+                if (due < today) overdue = true;
+            } catch (_) { /* ignore parse issues */ }
+        }
+        return (
+            <TouchableOpacity style={styles.billTouchable} activeOpacity={0.7} onPress={() => router.push({ pathname: './PaymentDetail', params: { name, code, amount, outbal, bill_number: item.bill_number, bill_date: item.bill_date, promise_date: item.due_date, status: item.status, amount_paid: item.amount_paid, bill_amount: item.amount, bill_id: item.id } })}>
+                <Card style={styles.billCard}>
+                    <View style={styles.billRowTop}>
+                        <Text style={styles.billNumber}>{item.bill_number}</Text>
+                        <StatusBadge status={item.status} />
+                    </View>
+                    <View style={styles.billMetaRow}>
+                        <Text style={styles.billMeta}>Bill: {formatDate(item.bill_date)}</Text>
+                        <Text style={[styles.billMeta, overdue && styles.billMetaOverdue]}>Promise: {formatDate(item.due_date)}</Text>
+                    </View>
+                    <View style={styles.billAmounts}>
+                        <Text style={styles.amountMain}>{formatCurrency(item.amount)}</Text>
+                        <Text style={styles.amountPaidLabel}>Paid <Text style={styles.amountPaid}>{formatCurrency(item.amount_paid)}</Text></Text>
+                    </View>
+                </Card>
+            </TouchableOpacity>
+        );
+    };
     // footer removed (no pagination)
     const renderEmptyComponent = () => (
         <View style={styles.emptyContainer}>
@@ -96,8 +110,8 @@ export default function CompanyBillsList() {
             <TouchableOpacity style={styles.retryButton} onPress={fetchBills}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
         </View>
     );
-    return (
-        <Screen title={name} subtitle={`Code ${code}`}>
+    const renderHeader = () => (
+        <View>
             <Card style={styles.companyCard}>
                 <View style={styles.statsRow}>
                     <View style={styles.statBox}>
@@ -114,26 +128,25 @@ export default function CompanyBillsList() {
                 {renderFilters()}
             </Card>
             <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{bills.length}</Text></View>
-            <View style={styles.billLabelsRow}>
-                <Text style={[styles.billLabelCol, { flex: 1.4 }]}>Bill #</Text>
-                <Text style={[styles.billLabelCol, { flex: 1 }]}>Bill Date</Text>
-                <Text style={[styles.billLabelCol, { flex: 1 }]}>Due</Text>
-                <Text style={[styles.billLabelCol, { flex: 1 }]}>Amount</Text>
-                <Text style={[styles.billLabelCol, { flex: 0.9 }]}>Paid</Text>
-            </View>
-            {loading ? (
+
+            {loading && (
                 <View style={{ marginTop: 10 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
-            ) : (
-                <FlatList
-                    data={bills}
-                    keyExtractor={item => (item.id ? item.id.toString() : item.bill_number)}
-                    renderItem={renderBillItem}
-                    ListEmptyComponent={renderEmptyComponent}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 80 }}
-                />
             )}
+        </View>
+    );
+
+    return (
+        <Screen title={name} subtitle={`Code ${code}`}>
+            <FlatList
+                data={loading ? [] : bills}
+                keyExtractor={item => (item?.id ? item.id.toString() : item.bill_number)}
+                renderItem={renderBillItem}
+                ListHeaderComponent={renderHeader}
+                ListEmptyComponent={!loading ? renderEmptyComponent : null}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 100 }}
+            />
         </Screen>
     );
 }
@@ -155,6 +168,7 @@ const styles = StyleSheet.create({
     billNumber: { fontSize: 15, fontWeight: '700', color: tokens.colors.text, flex: 1 },
     billMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
     billMeta: { fontSize: 12, color: tokens.colors.textDim },
+    billMetaOverdue: { color: tokens.colors.danger, fontWeight: '600' },
     billAmounts: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
     amountMain: { fontSize: 16, fontWeight: '700', color: tokens.colors.accent },
     amountPaidLabel: { fontSize: 12, color: tokens.colors.textDim },

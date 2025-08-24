@@ -15,7 +15,7 @@ import { formatCurrency, formatDateTime } from '../../src/ui/format';
 const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
 
 export default function PaymentApprovalDetail() {
-    const { payment_id } = useLocalSearchParams();
+    const { payment_id, read_only } = useLocalSearchParams();
     const [payment, setPayment] = useState(null);
     const [company, setCompany] = useState(null);
     const [executive, setExecutive] = useState(null);
@@ -112,26 +112,53 @@ export default function PaymentApprovalDetail() {
         } finally { setDeclining(false); }
     };
 
+    const isReadOnly = String(read_only || '') === '1';
+    const isAdminStage = payment && payment.status === 'accountant_approved';
+    const isAccountantStage = payment && payment.status === 'submitted';
+    const canAdminAct = currentUser?.role === 'admin' && isAdminStage;
+    const canAccountantAct = currentUser?.role === 'accountant' && isAccountantStage;
+    const canAct = !isReadOnly && (canAdminAct || canAccountantAct);
+
     return (
-        <Screen title={payment ? payment.company_code : 'Payment'} subtitle={payment ? `ID ${payment.id}` : ''}>
+        <Screen title={company?.name || (payment ? payment.company_code : 'Payment')}>
             {loading ? <ActivityIndicator color={tokens.colors.accent} style={{ marginTop: 40 }} /> : (
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80 }} scrollEnabled={outerScrollEnabled}>
-                    <Card style={styles.card}>
-                        <View style={styles.topRow}>
-                            <Text style={styles.amount}>{formatCurrency(payment.amount_collected)}</Text>
-                            <StatusBadge status={payment.status} />
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={outerScrollEnabled}>
+                    <Card style={[styles.card, styles.headerCard]}>
+                        <View style={styles.headerTopLine}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.companyName} numberOfLines={2}>{company?.name || payment?.company_code || 'Payment'}</Text>
+                                <View style={styles.companyMetaRow}>
+                                    {payment?.company_code && <Text style={styles.companyCode}>{payment.company_code}</Text>}
+                                    {company?.area && <Text style={styles.companyArea}> • {company.area}</Text>}
+                                </View>
+                                {(executive?.username || executive?.full_name || executive?.name) && (
+                                    <View style={styles.execBlock} accessibilityRole="text" accessibilityLabel={`Executive ${executive?.full_name || executive?.name || executive?.username}`}>
+                                        <Text style={styles.execLabel}>EXECUTIVE</Text>
+                                        <Text style={styles.execNameBig} numberOfLines={1}>{executive?.full_name || executive?.name || executive?.username}</Text>
+                                    </View>
+                                )}
+                                {payment?.allocations?.length ? (
+                                    <Text style={styles.bigLine} numberOfLines={1}>
+                                        Bill {payment.allocations.filter(a => a.bill_number).length > 1 ? 'IDs' : 'ID'}: {payment.allocations.filter(a => a.bill_number).map(a => a.bill_number).slice(0, 4).join(', ')}{payment.allocations.filter(a => a.bill_number).length > 4 ? ` +${payment.allocations.filter(a => a.bill_number).length - 4}` : ''}
+                                    </Text>
+                                ) : null}
+                                {payment.next_promise_date && (
+                                    <Text style={styles.bigLine} numberOfLines={1}>Next Promise: {payment.next_promise_date}</Text>
+                                )}
+                            </View>
+                            <View style={styles.amountStatusCol}>
+                                <Text style={styles.amount}>{formatCurrency(payment.amount_collected)}</Text>
+                                <StatusBadge status={payment.status} />
+                            </View>
                         </View>
-                        <Info label="Collected At" value={formatDateTime(payment.collected_at)} />
-                        <Info label="Method" value={payment.method} />
-                        {payment.next_promise_date && <Info label="Next Promise" value={payment.next_promise_date} />}
-                        <Info label="Executive ID" value={String(payment.executive_id)} />
-                        {executive?.username && <Info label="Executive User" value={executive.username} />}
-                        {company?.name && <Info label="Company" value={company.name} />}
-                        {company?.area && <Info label="Executive Area" value={company.area} />}
+                        <View style={styles.metaGrid}>
+                            <Meta label="Collected" value={formatDateTime(payment.collected_at)} />
+                            <Meta label="Method" value={payment.method} />
+                        </View>
                         {payment.exec_lat && payment.exec_lng && (
-                            <View style={{ marginTop: 16 }}>
+                            <View style={{ marginTop: 14 }}>
                                 <View style={styles.locationHeaderRow}>
-                                    <Text style={styles.sectionTitle}>Location</Text>
+                                    <Text style={styles.subSectionTitle}>Location</Text>
                                     <TouchableOpacity onPress={() => setShowMap(s => !s)}>
                                         <Text style={styles.toggleLink}>{showMap ? 'Hide' : 'Show'}</Text>
                                     </TouchableOpacity>
@@ -151,10 +178,9 @@ export default function PaymentApprovalDetail() {
                                                 uri: (() => {
                                                     const lat = payment.exec_lat;
                                                     const lng = payment.exec_lng;
-                                                    const zoom = 17; // desired zoom
-                                                    const d = 0.0008; // tight bbox for zoomed-in view
+                                                    const zoom = 17;
+                                                    const d = 0.0008;
                                                     const bbox = `${(lng - d).toFixed(6)},${(lat - d).toFixed(6)},${(lng + d).toFixed(6)},${(lat + d).toFixed(6)}`;
-                                                    // OSM embed honors #map=ZOOM/LAT/LON fragment for initial zoom; commas should remain unencoded
                                                     return `https://www.openstreetmap.org/export/embed.html?layer=mapnik&bbox=${bbox}&marker=${lat},${lng}#map=${zoom}/${lat}/${lng}`;
                                                 })()
                                             }}
@@ -167,38 +193,40 @@ export default function PaymentApprovalDetail() {
                             </View>
                         )}
                     </Card>
-                    <Card style={[styles.card, styles.actionsCard]}>
-                        <Text style={styles.sectionTitle}>{(payment.status === 'accountant_approved' && currentUser?.role === 'admin') ? 'Admin Action' : 'Accountant Action'}</Text>
-                        <TextInput
-                            style={styles.approveInput}
-                            placeholder={(payment.status === 'accountant_approved' && currentUser?.role === 'admin') ? 'Add admin approval comment (optional)' : 'Add accountant approval comment (optional)'}
-                            placeholderTextColor={tokens.colors.textSubtle}
-                            value={approveComment}
-                            onChangeText={setApproveComment}
-                            editable={!approving && !declining}
-                        />
-                        <View style={styles.actionsRow}>
-                            <TouchableOpacity
-                                style={[styles.actionBtn, styles.approveBtn, (approving || declining) && styles.disabledBtn]}
-                                onPress={handleApprove}
-                                disabled={approving || declining}
-                            >
-                                {approving ? <ActivityIndicator color="#000" /> : <Text style={styles.actionText}>Approve</Text>}
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.actionBtn, styles.declineBtn, (approving || declining) && styles.disabledBtn]}
-                                onPress={handleDecline}
-                                disabled={approving || declining}
-                            >
-                                <Text style={styles.actionText}>Decline</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <Text style={styles.actionHint}>
-                            {(payment.status === 'accountant_approved' && currentUser?.role === 'admin')
-                                ? 'Admin approves or declines payments already reviewed by accountant.'
-                                : 'Accountant initial review stage.'}
-                        </Text>
-                    </Card>
+                    {canAct ? (
+                        <Card style={[styles.card, styles.actionsCard]}>
+                            <Text style={styles.sectionTitle}>{canAdminAct ? 'Admin Action' : 'Accountant Action'}</Text>
+                            <TextInput
+                                style={styles.approveInput}
+                                placeholder={canAdminAct ? 'Add admin approval comment (optional)' : 'Add accountant approval comment (optional)'}
+                                placeholderTextColor={tokens.colors.textSubtle}
+                                value={approveComment}
+                                onChangeText={setApproveComment}
+                                editable={!approving && !declining}
+                            />
+                            <View style={styles.actionsRow}>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, styles.approveBtn, (approving || declining) && styles.disabledBtn]}
+                                    onPress={handleApprove}
+                                    disabled={approving || declining}
+                                >
+                                    {approving ? <ActivityIndicator color="#000" /> : <Text style={styles.actionText}>Approve</Text>}
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, styles.declineBtn, (approving || declining) && styles.disabledBtn]}
+                                    onPress={handleDecline}
+                                    disabled={approving || declining}
+                                >
+                                    <Text style={styles.actionText}>Decline</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.actionHint}>
+                                {canAdminAct
+                                    ? 'Admin approves or declines payments already reviewed by accountant.'
+                                    : 'Accountant initial review stage.'}
+                            </Text>
+                        </Card>
+                    ) : null}
                     <Card style={styles.card}>
                         <View style={styles.allocHeaderRow}>
                             <Text style={[styles.sectionTitle, { flex: 1 }]}>Allocations</Text>
@@ -218,6 +246,7 @@ export default function PaymentApprovalDetail() {
                     </Card>
                     <Card style={styles.card}>
                         <Text style={styles.sectionTitle}>Review Trail</Text>
+                        <Info label="Executive Message" value={payment.comments || payment.executive_comment || payment.exec_comment || '—'} />
                         <Info label="Accountant Comment" value={payment.accountant_comment || '—'} />
                         <Info label="Admin Comment" value={payment.admin_comment || '—'} />
                     </Card>
@@ -257,12 +286,44 @@ export default function PaymentApprovalDetail() {
 
 function Info({ label, value }) {
     return (
-        <View style={styles.infoRow}> <Text style={styles.infoLabel}>{label}</Text><Text style={styles.infoValue}>{String(value)}</Text></View>
+        <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={styles.infoValue}>{String(value)}</Text>
+        </View>
+    );
+}
+
+function Meta({ label, value }) {
+    return (
+        <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>{label}</Text>
+            <Text style={styles.metaValue} numberOfLines={1}>{String(value)}</Text>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     card: { marginBottom: 16, padding: 16 },
+    headerCard: { marginBottom: 12, paddingBottom: 14 },
+    companyName: { fontSize: 18, fontWeight: '700', color: tokens.colors.text },
+    companyCode: { fontSize: 14, fontWeight: '700', color: tokens.colors.textSubtle, textTransform: 'uppercase', letterSpacing: 0.5 },
+    companyArea: { fontSize: 12, fontWeight: '600', color: tokens.colors.textDim },
+    execPrimary: { marginTop: 8, fontSize: 16, fontWeight: '700', color: tokens.colors.text }, // legacy (unused after redesign)
+    execBlock: { marginTop: 10, marginBottom: 2 },
+    execLabel: { fontSize: 10, fontWeight: '700', color: tokens.colors.textSubtle, letterSpacing: 0.6 },
+    execNameBig: { marginTop: 2, fontSize: 17, fontWeight: '700', color: tokens.colors.text },
+    execName: { marginTop: 6, fontSize: 13, fontWeight: '600', color: tokens.colors.text },
+    billList: { marginTop: 6, fontSize: 12, fontWeight: '500', color: tokens.colors.textDim },
+    bigLine: { marginTop: 6, fontSize: 14, fontWeight: '600', color: tokens.colors.text },
+    paymentMeta: { marginTop: 4, fontSize: 11, fontWeight: '600', color: tokens.colors.textSubtle, letterSpacing: 0.5 },
+    headerTopLine: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+    companyMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap' },
+    amountStatusCol: { alignItems: 'flex-end', marginLeft: 12 },
+    metaGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
+    metaItem: { width: '50%', paddingRight: 10, marginTop: 6 },
+    metaLabel: { fontSize: 10, fontWeight: '700', color: tokens.colors.textSubtle, letterSpacing: 0.5, textTransform: 'uppercase' },
+    metaValue: { fontSize: 12, fontWeight: '600', color: tokens.colors.text },
+    subSectionTitle: { fontSize: 12, fontWeight: '700', color: tokens.colors.textSubtle, letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' },
     topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     amount: { flex: 1, fontSize: 22, fontWeight: '700', color: tokens.colors.accent },
     infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },

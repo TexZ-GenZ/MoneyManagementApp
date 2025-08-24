@@ -12,8 +12,8 @@ from app.models.models import (
     Role,
     PushToken,
 )
-import os
 import httpx
+import os
 
 
 def ensure_setting(db: Session) -> Setting:
@@ -174,10 +174,12 @@ def scan_payment_review(db: Session, interval_hours: int | None = None):
 
 
 def run_notification_scan(db: Session):
+    """Entry point invoked every notif_every_hours. Performs:
+    1. Promise / credit overdue scan
+    2. Payment review scan
+    3. Aggregated role approval pushes (accountant/admin)
+    4. Repeating executive pending bills push (per window)
     """
-    Run all notification scans (promise/credit overdue, payment review).
-    """
-    # Determine interval from settings (notif_every_hours) with fallback
     s = db.get(Setting, 1)
     interval_hours = (
         s.notif_every_hours
@@ -186,12 +188,18 @@ def run_notification_scan(db: Session):
     )
     scan_promise_credit_overdue(db, interval_hours)
     scan_payment_review(db, interval_hours)
-
-    # After creating/updating internal notifications, send role-based aggregated push reminders
+    try:
+        _send_executive_overdue_push(db)
+    except Exception as e:
+        log.warning("Exec overdue push failed: %s", e)
     try:
         _send_role_pending_pushes(db)
     except Exception as e:
         log.warning("Role pending push send failed: %s", e)
+    try:
+        _send_exec_pending_pushes(db)
+    except Exception as e:
+        log.warning("Exec pending push failed: %s", e)
 
 
 def _send_role_pending_pushes(db: Session):
@@ -217,14 +225,12 @@ def _send_role_pending_pushes(db: Session):
     if accountant_cnt == 0 and admin_cnt == 0:
         return
 
-    # Helper to decide if we should send (every scan when count>0 but throttle via  interval already)
     def _send_to_role(role: Role, count: int, stage: str):
         if count <= 0:
             return
         users = db.query(User).filter(User.role == role, User.is_active == True).all()
         if not users:
             return
-        # Collect tokens
         tokens = (
             db.query(PushToken)
             .filter(PushToken.user_id.in_([u.id for u in users]))
@@ -262,3 +268,79 @@ def _send_role_pending_pushes(db: Session):
 
     _send_to_role(Role.accountant, accountant_cnt, "accountant")
     _send_to_role(Role.admin, admin_cnt, "admin")
+
+
+def _send_exec_pending_pushes(db: Session):
+    """Send a repeating aggregated push to each executive listing pending bills in their assignments within window hours.
+    Uses exec_window_start_hour / exec_window_end_hour (IST) converted to UTC.
+    """
+    now = datetime.utcnow()
+    s = db.get(Setting, 1)
+    if not s:
+        return
+    start_h = s.exec_window_start_hour or 6
+    end_h = s.exec_window_end_hour or 22
+
+    def ist_to_utc(h: int) -> int:
+        return int((h - 5.5) % 24)
+
+    utc_start = ist_to_utc(start_h)
+    utc_end = ist_to_utc(end_h)
+    if utc_start < utc_end:
+        in_window = utc_start <= now.hour < utc_end
+    else:
+        in_window = now.hour >= utc_start or now.hour < utc_end
+    if not in_window:
+        return
+    # Pending bills per executive based on assignments (bills.status = pending)
+    rows = db.execute(
+        """
+        SELECT ea.executive_id, COUNT(b.id) AS bills, COUNT(DISTINCT b.company_code) AS companies
+        FROM bills b
+        JOIN exec_assignments ea ON ea.company_code = b.company_code
+        JOIN users u ON u.id = ea.executive_id AND u.is_active = TRUE
+        WHERE b.status = 'pending'
+        GROUP BY ea.executive_id
+        """
+    ).fetchall()
+    if not rows:
+        return
+    exec_ids = [r.executive_id for r in rows]
+    tokens = db.query(PushToken).filter(PushToken.user_id.in_(exec_ids)).all()
+    tok_map = {}
+    for t in tokens:
+        if t.token.startswith("ExponentPushToken"):
+            tok_map.setdefault(t.user_id, []).append(t.token)
+    for r in rows:
+        bills = r.bills
+        if bills <= 0:
+            continue
+        companies = r.companies
+        msg = f"{bills} pending bill(s) across {companies} company(s)"
+        for tk in tok_map.get(r.executive_id, []):
+            try:
+                httpx.post(
+                    "https://exp.host/--/api/v2/push/send",
+                    json={"to": tk, "title": "Pending Bills", "body": msg},
+                    timeout=8,
+                )
+            except Exception as e:
+                log.warning("Exec pending push err=%s", e)
+
+
+def _send_executive_overdue_push(db: Session):
+    # Deprecated: retained for backward compatibility; no-op now.
+    return
+
+
+def _send_push_token(token: str, title: str, body: str):
+    """Fire-and-forget push via hypothetical external service; silent on failure."""
+    push_url = os.getenv("PUSH_SERVICE_URL")
+    if not push_url:
+        return
+    try:
+        httpx.post(
+            push_url, json={"token": token, "title": title, "body": body}, timeout=3.0
+        )
+    except Exception:
+        pass

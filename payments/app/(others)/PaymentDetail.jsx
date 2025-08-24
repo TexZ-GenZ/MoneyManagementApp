@@ -15,7 +15,8 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
 
 export default function PaymentDetails() {
     // Params (may be partial / stale, we'll refetch authoritative data)
-    const { name, code, amount, outbal, bill_number, bill_id, bill_date, due_date, status, amount_paid } = useLocalSearchParams();
+    const { name, code, amount, outbal, bill_number, bill_id, bill_date, due_date, promise_date, status, amount_paid } = useLocalSearchParams();
+    const resolvedPromiseDateParam = promise_date || due_date; // backward compatibility
     const [paymentHistory, setPaymentHistory] = useState([]); // raw items from API
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -142,6 +143,7 @@ export default function PaymentDetails() {
                 </TouchableOpacity>
                 {expandedIdx === index && (
                     <View style={styles.commentsBox}>
+                        <Comment label="Executive Message" value={item.comments || item.executive_comment || item.exec_comment} />
                         <Comment label="Accountant Comment" value={item.accountant_comment} />
                         <Comment label="Admin Comment" value={item.admin_comment} />
                     </View>
@@ -154,9 +156,8 @@ export default function PaymentDetails() {
         <View style={styles.emptyWrap}><Text style={styles.emptyText}>No payments found.</Text><TouchableOpacity style={styles.retryBtn} onPress={fetchPaymentHistory}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View>
     );
 
-    return (
-        <Screen title={company?.name || name || code} subtitle={`Bill ${bill?.bill_number || bill_number}`}>
-            {/* Totals Card (ONLY Outstanding + Paid) */}
+    const renderListHeader = () => (
+        <View>
             <Card style={styles.totalsCard}>
                 <View style={styles.totalsRow}>
                     <View style={styles.totalBox}>
@@ -169,13 +170,11 @@ export default function PaymentDetails() {
                     </View>
                 </View>
             </Card>
-
-            {/* Bill Details */}
             <Card style={styles.infoCard}>
                 <View style={styles.billHeadlineRow}>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.billHeadline}>{bill?.bill_number || bill_number}</Text>
-                        <Text style={styles.billDates}>{formatDate(bill?.bill_date || bill_date)}  •  Due {formatDate(bill?.due_date || due_date)}</Text>
+                        <Text style={styles.billDates}>{formatDate(bill?.bill_date || bill_date)}  •  Promise {formatDate(bill?.due_date || resolvedPromiseDateParam)}</Text>
                     </View>
                     <StatusBadge status={(bill?.status || status || 'pending')} />
                 </View>
@@ -184,7 +183,7 @@ export default function PaymentDetails() {
                 <InfoRow label="Paid" value={formatCurrency(totalPaid)} />
                 <InfoRow label="Outstanding" value={formatCurrency(outstandingNum)} danger />
                 <InfoRow label="Bill Date" value={bill?.bill_date ? formatDate(bill.bill_date) : (bill_date ? formatDate(bill_date) : '—')} />
-                <InfoRow label="Due Date" value={bill?.due_date ? formatDate(bill.due_date) : (due_date ? formatDate(due_date) : '—')} />
+                <InfoRow label="Promise Date" value={bill?.due_date ? formatDate(bill.due_date) : (resolvedPromiseDateParam ? formatDate(resolvedPromiseDateParam) : '—')} />
                 <View style={styles.divider} />
                 <InfoRow label="Company Code" value={company?.code || code} />
                 <InfoRow label="Company Name" value={company?.name || name} />
@@ -201,19 +200,21 @@ export default function PaymentDetails() {
                 <Text style={styles.sectionTitle}>Payment History</Text>
                 <Text style={styles.count}>{filteredPayments.length}</Text>
             </View>
-            {loading ? (
-                <View><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
-            ) : (
-                <FlatList
-                    data={filteredPayments}
-                    keyExtractor={(item, idx) => item.id ? item.id.toString() : idx.toString()}
-                    renderItem={renderPaymentItem}
-                    ListEmptyComponent={renderEmpty}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                    contentContainerStyle={{ paddingBottom: 100 }}
-                    showsVerticalScrollIndicator={false}
-                />
-            )}
+        </View>
+    );
+
+    return (
+        <Screen title={company?.name || name || code} subtitle={`Bill ${bill?.bill_number || bill_number}`}>
+            <FlatList
+                data={filteredPayments}
+                keyExtractor={(item, idx) => item?.id ? item.id.toString() : idx.toString()}
+                renderItem={renderPaymentItem}
+                ListHeaderComponent={renderListHeader}
+                ListEmptyComponent={loading ? () => (<View><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>) : renderEmpty}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                contentContainerStyle={{ paddingBottom: 140 }}
+                showsVerticalScrollIndicator={false}
+            />
             {userRole === 'executive' && (
                 <TouchableOpacity style={styles.fab} onPress={() => router.push({ pathname: './PaymentScreen', params: { company_code: code, bill_id, bill_number, bill_amount: amount } })}>
                     <Text style={styles.fabText}>Add Payment</Text>

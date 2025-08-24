@@ -1,26 +1,27 @@
 // Central design tokens for unified dark theme
 export const tokens = {
     colors: {
-        bg: '#000',
-        bgAlt: '#070707',
-        card: '#0d0d0d',
-        cardAlt: '#141414',
-        border: 'rgba(255,255,255,0.08)',
-        divider: 'rgba(255,255,255,0.15)',
-        text: '#FFFFFF',
-        textDim: 'rgba(255,255,255,0.6)',
-        textSubtle: 'rgba(255,255,255,0.45)',
-        textFaint: 'rgba(255,255,255,0.4)',
-        accent: '#c8f14c',
-        accentAlt: '#b2d739',
-        danger: '#ff4d4f',
-        warning: '#ffb020',
-        success: '#4cc38a',
-        info: '#3b82f6',
+        // Grey 800 inspired palette for improved comfort & readability
+        bg: '#1f2933',        // primary background
+        bgAlt: '#323f4b',     // alternate section background
+        card: '#27323d',      // card surface
+        cardAlt: '#364350',   // elevated card surface
+        border: 'rgba(255,255,255,0.07)',
+        divider: 'rgba(255,255,255,0.18)',
+        text: '#ffffff',
+        textDim: 'rgba(255,255,255,0.72)',
+        textSubtle: 'rgba(255,255,255,0.55)',
+        textFaint: 'rgba(255,255,255,0.42)',
+        accent: '#9fdf56',      // softened accent for dark bg
+        accentAlt: '#89c84a',
+        danger: '#ef5350',
+        warning: '#ffca28',
+        success: '#66bb6a',
+        info: '#42a5f5',
     },
     space: { xxs: 4, xs: 8, sm: 12, md: 16, lg: 24, xl: 32 },
     radius: { sm: 6, md: 12, lg: 20, pill: 999 },
-    fontSize: { xs: 12, sm: 14, md: 16, lg: 20, xl: 24 },
+    fontSize: { xs: 14, sm: 16, md: 18, lg: 22, xl: 28 },
     shadow: {
         card: {
             shadowColor: '#000',

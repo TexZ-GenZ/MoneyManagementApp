@@ -29,6 +29,7 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { COLORS } from '../../utils/constants';
 import { getApiUrl } from '../../utils/config';
+import { getErrorMessage } from '../../utils/helpers';
 import { validateForm, VALIDATION_RULES } from '../../utils/validation';
 //import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -245,10 +246,10 @@ const LoginScreen = () => {
         router.replace('/(tabs)');
 
       } else {
-        Alert.alert('Login Failed', result.payload || 'Please check your credentials and try again.');
+        Alert.alert('Login Failed', getErrorMessage(result.payload) || 'Please check your credentials and try again.');
       }
     } catch (error) {
-      Alert.alert('Login Failed', error.message || 'Please check your credentials and try again.');
+      Alert.alert('Login Failed', getErrorMessage(error) || 'Please check your credentials and try again.');
     }
   };
 

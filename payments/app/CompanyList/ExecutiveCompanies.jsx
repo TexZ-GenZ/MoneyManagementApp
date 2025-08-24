@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StorageService } from '../../src/services/storageService';
 import Screen from '../../src/ui/components/Screen';
@@ -24,8 +25,8 @@ export default function ExecutiveCompaniesScreen() {
 
   // UI state
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // all | overdue | zero | active
-  // Removed sorting state per updated UX (simpler filter-only view)
+  const [filter, setFilter] = useState('all'); // all | active | zero
+  const [sortMode, setSortMode] = useState('outbal_desc'); // outbal_desc | outbal_asc
 
   const fetchAuthHeader = async () => {
     const header = await StorageService.getAuthHeader();
@@ -50,6 +51,7 @@ export default function ExecutiveCompaniesScreen() {
       const data = await response.json();
       // API may return { items: [...] } or a bare list
       const items = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []);
+      // Directly set companies (no pending bills enrichment to avoid heavy extra requests)
       setCompanies(items);
     } catch (e) {
       setError(e.message || 'Error');
@@ -61,13 +63,7 @@ export default function ExecutiveCompaniesScreen() {
 
   useEffect(() => { loadCompanies(); }, [loadCompanies]);
 
-  const today = useMemo(() => new Date(), []);
-  const parseDate = (d) => { try { return d ? new Date(d) : null; } catch { return null; } };
-  const isPast = (d) => d && d < new Date(today.toDateString());
-  const formatDate = (d) => {
-    const dt = parseDate(d); if (!dt) return '—';
-    return dt.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
-  };
+  // Date fields (credit/promise) removed per request.
   const money = (v) => {
     if (v === null || v === undefined || v === '') return '—';
     const num = typeof v === 'number' ? v : parseFloat(v);
@@ -77,65 +73,72 @@ export default function ExecutiveCompaniesScreen() {
 
   const filtered = useMemo(() => {
     const lower = search.trim().toLowerCase();
-    const list = companies.filter(c => {
+    let list = companies.filter(c => {
       if (!lower) return true;
       return (
         (c.name && c.name.toLowerCase().includes(lower)) ||
         (c.code && c.code.toLowerCase().includes(lower))
       );
     }).filter(c => {
-      const credit = parseDate(c.credit_date);
-      const promise = parseDate(c.promise_date);
-      const overdue = isPast(credit) || isPast(promise);
       const outbalNum = parseFloat(c.outbal);
       switch (filter) {
-        case 'overdue': return overdue;
         case 'zero': return !outbalNum;
         case 'active': return outbalNum > 0;
         default: return true;
       }
     });
-    // Default ordering: highest outbal first for prioritization
-    return list.sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0));
-  }, [companies, search, filter]);
+    // Sorting
+    const safeNum = (v) => {
+      const n = parseFloat(v); return isNaN(n) ? 0 : n;
+    };
+    list.sort((a, b) => {
+      switch (sortMode) {
+        case 'outbal_asc':
+          return safeNum(a.outbal) - safeNum(b.outbal);
+        case 'outbal_desc':
+        default:
+          return safeNum(b.outbal) - safeNum(a.outbal);
+      }
+    });
+    return list;
+  }, [companies, search, filter, sortMode]);
 
   // Removed aggregate totals per user request
 
   const onRefresh = () => loadCompanies(true);
 
-  const renderTag = (label, type) => (
-    <View style={[styles.statusTag, type === 'overdue' && styles.tagOverdue]}>
-      <Text style={styles.statusTagText}>{label}</Text>
-    </View>
-  );
+  // Pending bills display removed to avoid per-company heavy requests
 
   const renderItem = ({ item }) => {
-    const creditPast = isPast(parseDate(item.credit_date));
-    const promisePast = isPast(parseDate(item.promise_date));
-    const overdue = creditPast || promisePast;
+    // Backend does not return an executive name on company objects; assignment is separate.
+    // User clarified that 'area' is effectively the executive identifier, so we display it as Executive.
+    const executiveName = item.area || execUsername || '-';
     return (
       <TouchableOpacity
         style={styles.cardTouchable}
-        activeOpacity={0.75}
+        activeOpacity={0.82}
         onPress={() => router.push({ pathname: '../(others)/BiilsScreen', params: { name: item.name, code: item.code, outbal: item.outbal } })}
       >
         <Card style={styles.card}>
-          <View style={styles.cardHeader}>
+          <View style={styles.headerRow}>
             <Text style={styles.name} numberOfLines={1}>{item.name || '—'}</Text>
-            <Text style={styles.code}>{item.code}</Text>
+            <Ionicons name="chevron-forward" size={22} color={tokens.colors.textDim} style={styles.arrowIcon} />
           </View>
-          {(item.area || item.location) && (
-            <Text style={styles.area}>{item.area || item.location}</Text>
-          )}
+          <View style={styles.metaRowTop}>
+            <Text style={styles.metaLabel}>Executive:</Text>
+            <Text style={styles.metaValue}>{executiveName}</Text>
+          </View>
           <View style={styles.metaRow}>
-            <Text style={styles.meta}><Text style={styles.metaLabel}>Credit </Text>{formatDate(item.credit_date)}</Text>
-            <Text style={styles.meta}><Text style={styles.metaLabel}>Promise </Text>{formatDate(item.promise_date)}</Text>
+            <Text style={styles.metaLabel}>Code:</Text>
+            <Text style={styles.metaValue}>{item.code}</Text>
           </View>
-          <View style={styles.singleOutbalRow}>
-            <Text style={styles.outbal}>Outstanding Balance: <Text style={styles.outbalValue}>{money(item.outbal)}</Text></Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Outstanding:</Text>
+            <Text style={styles.outbalValue}>{money(item.outbal)}</Text>
           </View>
-          <View style={styles.tagsRow}>
-            {overdue ? renderTag('Overdue', 'overdue') : renderTag('Clear', 'ok')}
+          <View style={styles.tapHintRow}>
+            <Ionicons name="document-text-outline" size={14} color={tokens.colors.accent} />
+            <Text style={styles.tapHint}>View bills</Text>
           </View>
         </Card>
       </TouchableOpacity>
@@ -148,10 +151,19 @@ export default function ExecutiveCompaniesScreen() {
     </TouchableOpacity>
   );
 
-  // Removed sort chips per request
+  const sortChips = [
+    { value: 'outbal_desc', label: 'Outbal High' },
+    { value: 'outbal_asc', label: 'Outbal Low' },
+  ];
 
-  return (
-    <Screen title={execUsername ? execUsername : 'Executive'} subtitle="Assigned Companies">
+  const SortChip = ({ value, label }) => (
+    <TouchableOpacity onPress={() => setSortMode(value)} activeOpacity={0.7} style={[styles.sortChip, sortMode === value && styles.sortChipActive]}>
+      <Text style={[styles.sortChipText, sortMode === value && styles.sortChipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  const Header = () => (
+    <View>
       <View style={styles.searchWrapper}>
         <TextInput
           style={styles.searchInput}
@@ -164,14 +176,24 @@ export default function ExecutiveCompaniesScreen() {
           autoCapitalize="none"
         />
       </View>
-      <View style={styles.filterWrap}>
-        <FilterChip value="all" label="All" />
-        <FilterChip value="overdue" label="Overdue" />
-        <FilterChip value="active" label=">0 Outbal" />
-        <FilterChip value="zero" label="Zero" />
-      </View>
+      <Card style={styles.filtersContainer}>
+        <Text style={styles.filtersHeading}>Filter</Text>
+        <View style={styles.filterWrap}>
+          <FilterChip value="all" label="All" />
+          <FilterChip value="active" label=">0 Outbal" />
+          <FilterChip value="zero" label="Zero" />
+        </View>
+        <View style={styles.dividerLine} />
+        <Text style={styles.filtersHeading}>Sort</Text>
+        <View style={styles.sortWrap}>{sortChips.map(s => <SortChip key={s.value} value={s.value} label={s.label} />)}</View>
+      </Card>
+    </View>
+  );
+
+  return (
+    <Screen title={execUsername ? execUsername : 'Executive'} subtitle="Assigned Companies">
       {loading ? (
-        <ActivityIndicator size="large" color={tokens.colors.accent} style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={tokens.colors.accent} style={{ marginTop: 40 }} />
       ) : error ? (
         <Card style={styles.errorCard}><Text style={styles.errorText}>Failed to load companies. Pull to retry.</Text></Card>
       ) : (
@@ -179,8 +201,9 @@ export default function ExecutiveCompaniesScreen() {
           data={filtered}
           keyExtractor={(item) => item.code}
           renderItem={renderItem}
+          ListHeaderComponent={Header}
           ListEmptyComponent={<Text style={styles.empty}>No companies match.</Text>}
-          contentContainerStyle={{ paddingBottom: 60 }}
+          contentContainerStyle={{ paddingBottom: 80 }}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tokens.colors.accent} />}
         />
@@ -201,31 +224,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
   },
-  filterWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  chip: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 22, paddingVertical: 6, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  filtersContainer: { padding: 14, marginBottom: 16 },
+  filtersHeading: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  filterWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
+  sortWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  dividerLine: { height: 1, backgroundColor: tokens.colors.divider, marginVertical: 12 },
+  chip: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 24, paddingVertical: 8, paddingHorizontal: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   chipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
-  chipText: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 },
+  chipText: { color: tokens.colors.textDim, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
   chipTextActive: { color: '#000' },
-  sortChip: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 22, paddingVertical: 6, paddingHorizontal: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  sortChip: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 24, paddingVertical: 8, paddingHorizontal: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   sortChipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
-  sortChipText: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 },
+  sortChipText: { color: tokens.colors.textDim, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
   sortChipTextActive: { color: '#000' },
-  cardTouchable: { marginBottom: 14 },
-  card: { paddingVertical: 16, paddingHorizontal: 16 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  name: { fontSize: 15, fontWeight: '600', color: tokens.colors.text, flex: 1, paddingRight: 8 },
-  code: { fontSize: 13, color: tokens.colors.textDim, fontWeight: '500' },
-  area: { fontSize: 11, color: tokens.colors.textDim, marginBottom: 6 },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  meta: { fontSize: 12, color: tokens.colors.textDim },
-  metaLabel: { color: tokens.colors.text, fontWeight: '600' },
-  singleOutbalRow: { marginTop: 2 },
-  outbal: { fontSize: 12, color: tokens.colors.textDim },
-  outbalValue: { color: tokens.colors.danger, fontWeight: '700' },
-  tagsRow: { flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' },
-  statusTag: { backgroundColor: 'rgba(255,255,255,0.10)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 14 },
-  tagOverdue: { backgroundColor: tokens.colors.danger },
-  statusTagText: { fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.6 },
+  cardTouchable: { marginBottom: 20 },
+  card: { paddingVertical: 20, paddingHorizontal: 20 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  name: { fontSize: 18, fontWeight: '700', color: tokens.colors.text, flex: 1, paddingRight: 12, letterSpacing: 0.3 },
+  arrowIcon: { marginLeft: 6 },
+  metaRowTop: { flexDirection: 'row', marginBottom: 4 },
+  metaRow: { flexDirection: 'row', marginBottom: 4 },
+  metaLabel: { width: 90, fontSize: 12, fontWeight: '600', color: tokens.colors.textSubtle },
+  metaValue: { flex: 1, fontSize: 13, fontWeight: '600', color: tokens.colors.text },
+  outbalValue: { fontSize: 13, fontWeight: '700', color: tokens.colors.danger },
+  tapHintRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
+  tapHint: { fontSize: 11, fontWeight: '600', color: tokens.colors.accent, letterSpacing: 0.5, textTransform: 'uppercase' },
+  // pending bills styles removed
   empty: { color: tokens.colors.textDim, textAlign: 'center', fontSize: 14, padding: 24 },
   errorCard: { padding: 16, marginTop: 24 },
   errorText: { color: tokens.colors.danger, fontSize: 14, textAlign: 'center' }

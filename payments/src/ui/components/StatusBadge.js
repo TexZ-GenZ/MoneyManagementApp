@@ -5,7 +5,7 @@ import { tokens } from '../tokens';
 const palette = {
     success: { bg: 'rgba(76,195,138,0.18)', fg: tokens.colors.success },
     danger: { bg: 'rgba(255,77,79,0.18)', fg: tokens.colors.danger },
-    warning: { bg: 'rgba(255,176,32,0.20)', fg: tokens.colors.warning },
+    warning: { bg: 'rgba(255,213,79,0.18)', fg: tokens.colors.warning || '#e5c558' },
     info: { bg: 'rgba(59,130,246,0.20)', fg: tokens.colors.info },
     neutral: { bg: 'rgba(255,255,255,0.15)', fg: tokens.colors.textDim },
 };
@@ -22,9 +22,11 @@ export function StatusBadge({ status, children, variant }) {
 
 function paletteKey(status) {
     const s = (status || '').toLowerCase();
+    // Treat domain-specific statuses
+    if (['admin_approved'].includes(s)) return 'success';
+    if (['declined_by_admin', 'declined_by_accountant', 'declined'].includes(s)) return 'danger';
+    if (['submitted', 'accountant_approved', 'pending'].includes(s)) return 'warning';
     if (['success', 'paid', 'completed'].includes(s)) return 'success';
-    if (['failed', 'rejected', 'declined'].includes(s)) return 'danger';
-    if (['pending'].includes(s)) return 'warning';
     if (['processing'].includes(s)) return 'info';
     return 'neutral';
 }

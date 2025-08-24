@@ -1,76 +1,65 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { Card } from './Card';
 import StatusBadge from './StatusBadge';
 import { tokens } from '../tokens';
 import { formatCurrency, formatDateTime } from '../format';
 
-export default function ApprovalItemCard({ item, onApprove, onReject, actionLoadingId, submitting }) {
-    const loadingThis = actionLoadingId === item.id || submitting;
+// Rich info card (company + payment meta). Approval happens in detail screen.
+export default function ApprovalItemCard({ item }) {
     const router = useRouter();
     const hasCoords = item.exec_lat && item.exec_lng;
     const navigateDetail = () => router.push({ pathname: '../(others)/PaymentApprovalDetail', params: { payment_id: item.id } });
     return (
         <Card style={styles.card}>
-            <TouchableOpacity activeOpacity={0.75} onPress={navigateDetail}>
+            <TouchableOpacity activeOpacity={0.8} onPress={navigateDetail}>
                 <View style={styles.headerRow}>
-                    <Text style={styles.company}>{item.company_code}</Text>
-                    <Text style={styles.amount}>{formatCurrency(item.amount_collected)}</Text>
-                    <StatusBadge status={item.status} style={{ marginLeft: 8 }} />
+                    <View style={{ flex: 1, paddingRight: 12 }}>
+                        <Text style={styles.companyName} numberOfLines={1}>{item.company_name || '—'}</Text>
+                        <View style={styles.subRow}>
+                            <Text style={styles.companyCode}>{item.company_code}</Text>
+                            {item.company_area ? <Text style={styles.areaBadge} numberOfLines={1}>{item.company_area}</Text> : null}
+                        </View>
+                    </View>
+                    <View style={styles.topRight}>
+                        <Text style={styles.amount}>{formatCurrency(item.amount_collected)}</Text>
+                        <StatusBadge status={item.status} style={{ marginTop: 6 }} />
+                    </View>
                 </View>
-                <View style={styles.infoRow}>
-                    <Text style={styles.exec} numberOfLines={1}>{item.company_name || item.company_code}</Text>
-                    <Text style={styles.method} numberOfLines={1}>{item.company_area || '—'}</Text>
-                </View>
-                <View style={styles.metaGrid}>
+                <View style={styles.metaList}>
                     <Meta label="Collected" value={formatDateTime(item.collected_at)} />
                     {item.next_promise_date ? <Meta label="Next Promise" value={formatDateTime(item.next_promise_date, true)} /> : null}
                     <Meta label="Method" value={item.method?.charAt(0).toUpperCase() + item.method?.slice(1)} />
                     <Meta label="Location" value={hasCoords ? 'Captured' : '—'} valueColor={hasCoords ? tokens.colors.success : tokens.colors.textDim} />
                 </View>
-                <Text style={styles.expandHint}>Tap for full details</Text>
+                <Text style={styles.expandHint}>Tap to review & approve / decline</Text>
             </TouchableOpacity>
-            <View style={styles.actions}>
-                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn, loadingThis && styles.disabled]} onPress={() => onReject(item)} disabled={loadingThis}>
-                    <Ionicons name="close" size={18} color="#fff" />
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtn, styles.approveBtn, loadingThis && styles.disabled]} onPress={() => onApprove(item)} disabled={loadingThis}>
-                    <Ionicons name="checkmark" size={18} color="#fff" />
-                </TouchableOpacity>
-            </View>
         </Card>
     );
 }
 
-function Meta({ label, value, valueColor, }) {
+function Meta({ label, value, valueColor }) {
     return (
-        <View style={styles.metaItem}>
+        <View style={styles.metaRow}>
             <Text style={styles.metaLabel}>{label}</Text>
-            <Text style={[styles.metaValue, valueColor && { color: valueColor }]} numberOfLines={1}>{value || '—'}</Text>
+            <Text style={[styles.metaValue, valueColor && { color: valueColor }]} numberOfLines={2}>{value || '—'}</Text>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     card: { marginBottom: 16, padding: 16 },
-    headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-    company: { fontSize: 15, fontWeight: '700', color: tokens.colors.text, flex: 1 },
-    amount: { fontSize: 14, fontWeight: '600', color: tokens.colors.accent },
-    infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    exec: { fontSize: 13, fontWeight: '600', color: tokens.colors.textDim },
-    method: { fontSize: 12, fontWeight: '700', color: tokens.colors.accent },
-    metaGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
-    metaItem: { width: '33%', marginTop: 10 },
-    metaLabel: { fontSize: 11, color: tokens.colors.textSubtle, marginBottom: 2 },
-    metaValue: { fontSize: 12, fontWeight: '600', color: tokens.colors.text },
-    actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
-    actionBtn: { width: 46, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
-    approveBtn: { backgroundColor: tokens.colors.success },
-    rejectBtn: { backgroundColor: tokens.colors.danger },
-    disabled: { opacity: 0.5 },
-    mapPill: { backgroundColor: tokens.colors.accent, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 10 },
-    mapPillText: { color: '#000', fontSize: 11, fontWeight: '700' },
-    expandHint: { marginTop: 10, fontSize: 10, color: tokens.colors.textSubtle, textAlign: 'center' },
+    headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+    companyName: { fontSize: 16, fontWeight: '700', color: tokens.colors.text },
+    subRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 10 },
+    companyCode: { fontSize: 12, fontWeight: '600', color: tokens.colors.textSubtle, letterSpacing: 0.4 },
+    areaBadge: { fontSize: 11, fontWeight: '600', color: tokens.colors.accent, backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
+    topRight: { alignItems: 'flex-end', marginLeft: 10 },
+    amount: { fontSize: 16, fontWeight: '700', color: tokens.colors.accent },
+    metaList: { marginTop: 4 },
+    metaRow: { flexDirection: 'row', paddingVertical: 4, borderBottomWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+    metaLabel: { width: 110, fontSize: 11, fontWeight: '600', color: tokens.colors.textSubtle, letterSpacing: 0.5 },
+    metaValue: { flex: 1, fontSize: 12, fontWeight: '600', color: tokens.colors.text },
+    expandHint: { marginTop: 10, fontSize: 12, color: tokens.colors.textSubtle, textAlign: 'center' },
 });

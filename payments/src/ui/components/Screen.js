@@ -1,9 +1,10 @@
 import React from 'react';
-import { SafeAreaView, View, StyleSheet, ScrollView, Text } from 'react-native';
+import { SafeAreaView, View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import GridBackground from '../../../app/(others)/GridBGComponent';
 import { tokens } from '../tokens';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from 'expo-router';
 
 /**
  * Unified screen wrapper replicating Admin Dashboard dark style.
@@ -21,18 +22,45 @@ export default function Screen({
     title,
     subtitle,
     contentStyle,
+    hideTopBar = false,
+    showTopBarTitle = false,
+    topBarTitle = undefined,
+    hideBackButton = false,
 }) {
     const insets = useSafeAreaInsets();
     const Container = scroll ? ScrollView : View;
+    const navigation = useNavigation();
+    let canGoBack = false;
+    try { canGoBack = navigation?.canGoBack?.() || false; } catch (_) { }
     return (
         <LinearGradient
-            colors={[tokens.colors.bg, tokens.colors.bg]}
+            colors={[tokens.colors.bg, tokens.colors.bg]} // solid background for higher readability
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.gradient}
         >
-            <GridBackground />
-            <SafeAreaView style={[styles.safe, { paddingBottom: Math.max(16, insets.bottom) }]}>
+            <SafeAreaView style={[styles.safe, { paddingBottom: 0, paddingTop: hideTopBar ? 20 : 10 }]}>
+                {!hideTopBar && (
+                    <View style={[styles.topBar, { paddingTop: Math.max(4, insets.top) }]}>
+                        {canGoBack && !hideBackButton ? (
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Back"
+                                onPress={() => navigation.goBack()}
+                                style={styles.backBtn}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="chevron-back" size={22} color={tokens.colors.text} />
+                                <Text style={styles.backText}>Back</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <View style={styles.backPlaceholder} />
+                        )}
+                        <Text style={styles.topBarTitle} numberOfLines={1}>{showTopBarTitle ? (topBarTitle || title || (typeof header === 'string' ? header : '')) : ' '}</Text>
+                        <View style={styles.rightActionsPlaceholder} />
+                    </View>
+                )}
                 <Container
                     style={[styles.content, contentStyle]}
                     contentContainerStyle={scroll ? styles.scrollContent : undefined}
@@ -81,15 +109,21 @@ const SubtitleText = ({ text }) => (
 const TextStyled = ({ children, style }) => <Text style={style}>{children}</Text>;
 
 const styles = StyleSheet.create({
-    gradient: { flex: 1 },
-    safe: { flex: 1, paddingHorizontal: 20, paddingTop: 30 },
+    gradient: { flex: 1, backgroundColor: '#0d1117' },
+    safe: { flex: 1, paddingHorizontal: 24, paddingTop: 28 },
+    topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+    backBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: tokens.colors.cardAlt, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: tokens.colors.border },
+    backText: { color: tokens.colors.text, fontSize: 15, fontWeight: '600', marginLeft: 4 },
+    backPlaceholder: { width: 72, height: 32 },
+    rightActionsPlaceholder: { width: 72, height: 32 },
+    topBarTitle: { flex: 1, textAlign: 'center', color: tokens.colors.text, fontSize: 20, fontWeight: '800', paddingHorizontal: 8, letterSpacing: 0.5 },
     content: { flex: 1 },
-    scrollContent: { paddingBottom: 40 },
-    headerBlock: { marginBottom: 20 },
-    title: { fontSize: 22, fontWeight: '700', color: '#f9f9f9' },
-    subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
+    scrollContent: { paddingBottom: 8 },
+    headerBlock: { marginBottom: 12 },
+    title: { fontSize: 30, fontWeight: '800', color: '#ffffff', letterSpacing: 0.6 },
+    subtitle: { fontSize: 18, color: 'rgba(255,255,255,0.75)', marginTop: 8 },
     titleWrapper: {},
     subtitleWrapper: {},
-    inlineHeaderText: { fontSize: 20, fontWeight: '700', color: '#f9f9f9', marginBottom: 16 },
-    inlineChildText: { color: '#f9f9f9', fontSize: 14 },
+    inlineHeaderText: { fontSize: 24, fontWeight: '700', color: '#ffffff', marginBottom: 20 },
+    inlineChildText: { color: '#ffffff', fontSize: 18, lineHeight: 26 },
 });

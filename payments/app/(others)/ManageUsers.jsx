@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, Switch, ScrollView } from 'react-native';
+import { getErrorMessage } from '../../src/utils/helpers';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { StorageService } from '../../src/services/storageService';
+import { useRouter } from 'expo-router';
 
 // Lightweight pill badge
 function StatusBadge({ active }) {
@@ -17,6 +19,7 @@ function StatusBadge({ active }) {
 }
 
 export default function ManageUsers() {
+    const router = useRouter();
     const currentUser = useSelector(state => state.auth?.user);
     const [rawUsers, setRawUsers] = useState([]); // full list
     const [filtered, setFiltered] = useState([]);
@@ -42,6 +45,8 @@ export default function ManageUsers() {
     const [savingEdits, setSavingEdits] = useState(false);
     const [editIsActive, setEditIsActive] = useState(true);
     const [deletingId, setDeletingId] = useState(null);
+    const [pendingAction, setPendingAction] = useState(null); // 'create' | 'save' | 'delete'
+    const [pendingPaymentsMsg, setPendingPaymentsMsg] = useState(null); // { pendingSubmitted, pendingAdmin }
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);
@@ -54,7 +59,7 @@ export default function ManageUsers() {
             setRawUsers(list.sort((a, b) => a.username.localeCompare(b.username)));
         } catch (e) {
             console.error(e);
-            Alert.alert('Load Failed', 'Cannot load users.');
+            Alert.alert('Load Failed', getErrorMessage(e));
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -87,10 +92,10 @@ export default function ManageUsers() {
             const body = { username: createUsername.trim(), password: createPassword.trim(), mobile: createMobile.trim() || undefined, role: createRole, area: '' };
             const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
             if (!r.ok) throw new Error('HTTP');
-            const created = await r.json();
-            setRawUsers(prev => [...prev, created].sort((a, b) => a.username.localeCompare(b.username)));
+            setCreateModalVisible(false); // close modal immediately
             setCreateUsername(''); setCreateMobile(''); setCreatePassword(''); setCreateRole('executive');
-        } catch (e) { console.error(e); Alert.alert('Create Failed', 'Could not create user.'); }
+            await fetchUsers(); // refresh list
+        } catch (e) { console.error(e); Alert.alert('Create Failed', getErrorMessage(e)); }
         finally { setCreating(false); }
     };
 
@@ -121,38 +126,156 @@ export default function ManageUsers() {
             // refetch single user by reloading all to keep code simple
             await fetchUsers();
             setEditModalVisible(false);
-        } catch (e) { console.error(e); Alert.alert('Save Failed', 'Could not save changes.'); }
+        } catch (e) { console.error(e); Alert.alert('Save Failed', getErrorMessage(e)); }
         finally { setSavingEdits(false); }
     };
 
     const confirmDelete = (u) => {
-        Alert.alert('Delete User', `Permanently delete ${u.username}?`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => hardDelete(u) }]);
+        // Run a pre-check for assignments and pending payments before attempting delete
+        (async () => {
+            const blocks = await checkUserDeletionBlocks(u.id);
+            const hasAssignments = (blocks?.assignments || 0) > 0;
+            const pendingSubmitted = blocks?.pendingSubmitted || 0;
+            const pendingAdmin = blocks?.pendingAdmin || 0;
+            const hasPending = pendingSubmitted + pendingAdmin > 0;
+            if (hasAssignments) {
+                Alert.alert(
+                    'Cannot Delete — Assignments Found',
+                    `${u.username} has ${blocks.assignments} assigned compan${blocks.assignments === 1 ? 'y' : 'ies'}.\n\nUnassign or reassign them before deleting.`,
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                            text: 'Manage Assignments',
+                            onPress: () => router.push({ pathname: '/(others)/CompanyAssignments', params: { execId: String(u.id), preselectAll: '1' } }),
+                        },
+                    ]
+                );
+                return;
+            }
+            if (hasPending) {
+                // Show an inline warning in the edit modal instead of navigating away
+                if (!editModalVisible) setEditModalVisible(true);
+                setPendingPaymentsMsg({ pendingSubmitted, pendingAdmin });
+                return;
+            }
+            // No blocks — proceed with hard delete confirmation
+            Alert.alert('Delete User', `Permanently delete ${u.username}?`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => hardDelete(u) },
+            ]);
+        })();
+    };
+    // Helper: deactivate via API
+    const safeDeactivate = async (u) => {
+        try {
+            const h = await StorageService.getAuthHeader();
+            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${u.id}/deactivate`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...h } });
+            if (r.ok) await fetchUsers();
+        } catch (e) { }
+    };
+    // Helper: pre-check user constraints for deletion
+    const checkUserDeletionBlocks = async (userId) => {
+        try {
+            const h = await StorageService.getAuthHeader();
+            // 1) assignments for executive (admin can call this)
+            const aResp = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/executives/${userId}/companies`, { headers: { 'Content-Type': 'application/json', ...h } });
+            let assignments = 0;
+            if (aResp.ok) {
+                const aj = await aResp.json();
+                assignments = (aj?.items || []).length;
+            }
+            // 2) pending payments for this executive
+            let pendingSubmitted = 0, pendingAdmin = 0;
+            const p1 = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/accountant/payments/pending?skip=0&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
+            if (p1.ok) {
+                const pj = await p1.json();
+                const items = pj?.items || [];
+                pendingSubmitted = items.filter(it => String(it.executive_id) === String(userId)).length;
+            }
+            const p2 = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/pending?skip=0&limit=500`, { headers: { 'Content-Type': 'application/json', ...h } });
+            if (p2.ok) {
+                const pj = await p2.json();
+                const items = pj?.items || [];
+                pendingAdmin = items.filter(it => String(it.executive_id) === String(userId)).length;
+            }
+            return { assignments, pendingSubmitted, pendingAdmin };
+        } catch (e) {
+            return { assignments: 0, pendingSubmitted: 0, pendingAdmin: 0 };
+        }
     };
     const hardDelete = async (u) => {
         setDeletingId(u.id);
         try {
             const h = await StorageService.getAuthHeader();
             const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${u.id}/hard-delete`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } });
-            if (!r.ok) throw new Error('HTTP');
-            setRawUsers(prev => prev.filter(x => x.id !== u.id));
-        } catch (e) { console.error(e); Alert.alert('Delete Failed', 'Could not delete user.'); }
+            if (r.status === 400) {
+                // Try to get error detail
+                let detail = 'Cannot delete user.';
+                let hasAssignmentIssue = false;
+                try {
+                    const err = await r.json();
+                    if (err.detail && String(err.detail).toLowerCase().includes('assign')) {
+                        detail = err.detail;
+                        hasAssignmentIssue = true;
+                    } else {
+                        detail = err.detail || detail;
+                    }
+                } catch { }
+                if (hasAssignmentIssue) {
+                    setEditModalVisible(false);
+                    Alert.alert(
+                        'Cannot Delete Executive',
+                        detail + '\n\nDo you want to unassign/reassign their companies now?',
+                        [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                                text: 'Unassign/Reassign', style: 'default', onPress: () => {
+                                    router.push({ pathname: '/(others)/CompanyAssignments', params: { execId: String(u.id), preselectAll: '1' } });
+                                }
+                            }
+                        ]
+                    );
+                    return;
+                }
+                Alert.alert('Delete Failed', getErrorMessage(detail));
+                return;
+            }
+            if (!r.ok) throw new Error('Delete failed');
+            setEditModalVisible(false); // close modal if open
+            await fetchUsers(); // refresh list
+        } catch (e) { console.error(e); Alert.alert('Delete Failed', getErrorMessage(e)); }
         finally { setDeletingId(null); }
     };
+    useEffect(() => { if (!createModalVisible && !editModalVisible) setPendingAction(null); }, [createModalVisible, editModalVisible]);
 
     const renderItem = ({ item }) => (
         <Card style={styles.userCard} padded={false}>
-            <TouchableOpacity activeOpacity={0.75} onPress={() => openEdit(item)} style={styles.compactRow}>
-                <View style={styles.avatar}><Ionicons name="person-outline" size={18} color={tokens.colors.accent} /></View>
-                <View style={styles.compactMain}>
-                    <View style={styles.compactTitleLine}>
-                        <Text style={styles.username}>{item.username}</Text>
-                        <Text style={styles.roleTag}>{item.role}</Text>
-                        <View style={styles.statusDotWrap}><View style={[styles.statusDot, { backgroundColor: item.is_active ? tokens.colors.success : tokens.colors.danger }]} /></View>
+            <View style={styles.compactRow}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${item.username}`} activeOpacity={0.75} onPress={() => openEdit(item)} style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
+                    <View style={styles.avatar}><Ionicons name="person-outline" size={18} color={tokens.colors.accent} /></View>
+                    <View style={styles.compactMain}>
+                        <View style={styles.compactTitleLine}>
+                            <Text style={styles.username}>{item.username}</Text>
+                            <Text style={styles.roleTag}>{item.role}</Text>
+                            <View style={styles.statusDotWrap}><View style={[styles.statusDot, { backgroundColor: item.is_active ? tokens.colors.success : tokens.colors.danger }]} /></View>
+                        </View>
+                        <Text style={styles.metaText}>{item.mobile || '—'}{item.area ? `  •  ${item.area}` : ''}</Text>
                     </View>
-                    <Text style={styles.metaText}>{item.mobile || '—'}{item.area ? `  •  ${item.area}` : ''}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={tokens.colors.textFaint} />
-            </TouchableOpacity>
+                </TouchableOpacity>
+                {item.role === 'executive' && (
+                    <TouchableOpacity
+                        style={styles.assignCompaniesBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Go assign companies to ${item.username}`}
+                        onPress={() => router.push({ pathname: '/(others)/CompanyAssignments', params: { execId: String(item.id) } })}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="git-branch-outline" size={16} color={tokens.colors.accent} />
+                        <Text style={styles.assignCompaniesBtnText}>Assign</Text>
+                    </TouchableOpacity>
+                )}
+                <Ionicons style={{ marginLeft: 8 }} name="chevron-forward" size={18} color={tokens.colors.textFaint} />
+            </View>
         </Card>
     );
 
@@ -223,8 +346,17 @@ export default function ManageUsers() {
                             ))}
                         </View>
                         <View style={styles.modalButtonsRow}>
-                            <TouchableOpacity onPress={() => setCreateModalVisible(false)} style={[styles.modalBtn, styles.modalCancel]}><Text style={styles.modalCancelText}>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity disabled={creating} onPress={() => { handleCreate(); }} style={[styles.modalBtn, styles.modalSave]}>{creating ? <ActivityIndicator color="#000" /> : <Text style={styles.modalSaveText}>Create</Text>}</TouchableOpacity>
+                            {pendingAction === 'create' && (
+                                <TouchableOpacity onPress={() => setPendingAction(null)} style={[styles.modalBtn, styles.modalCancel]}><Text style={styles.modalCancelText}>No</Text></TouchableOpacity>
+                            )}
+                            <TouchableOpacity onPress={() => setCreateModalVisible(false)} style={[styles.modalBtn, styles.modalCancel]}><Text style={styles.modalCancelText}>{pendingAction === 'create' ? 'Cancel' : 'Close'}</Text></TouchableOpacity>
+                            <TouchableOpacity
+                                disabled={creating}
+                                onPress={() => { pendingAction === 'create' ? handleCreate() : setPendingAction('create'); }}
+                                style={[styles.modalBtn, styles.modalSave, pendingAction === 'create' && styles.modalConfirm]}
+                            >
+                                {creating ? <ActivityIndicator color="#000" /> : <Text style={styles.modalSaveText}>{pendingAction === 'create' ? 'Yes, Create' : 'Create'}</Text>}
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </View>
@@ -248,17 +380,78 @@ export default function ManageUsers() {
                                         thumbColor={editIsActive ? '#000' : '#777'}
                                         style={{ marginLeft: 12 }}
                                     />
+                                    <Text style={styles.activeHint}>{editIsActive ? 'Toggle to deactivate user' : 'Toggle to activate user'}</Text>
                                 </View>
-                                <TouchableOpacity disabled={deletingId === editUser?.id} onPress={() => confirmDelete(editUser)} style={styles.deleteDangerBtn}>
-                                    {deletingId === editUser?.id ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteDangerText}>Delete User</Text>}
+                                {editUser?.role === 'executive' && (
+                                    <TouchableOpacity
+                                        style={styles.inlineAssignBtn}
+                                        onPress={() => { setEditModalVisible(false); router.push({ pathname: '/(others)/CompanyAssignments', params: { execId: String(editUser.id) } }); }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Assign companies to this executive"
+                                        activeOpacity={0.85}
+                                    >
+                                        <Ionicons name="git-branch-outline" size={16} color={tokens.colors.accent} style={{ marginRight: 6 }} />
+                                        <Text style={styles.inlineAssignText}>Assign Companies</Text>
+                                    </TouchableOpacity>
+                                )}
+                                <TouchableOpacity
+                                    disabled={deletingId === editUser?.id}
+                                    onPress={() => { pendingAction === 'delete' ? confirmDelete(editUser) : setPendingAction('delete'); }}
+                                    style={[styles.deleteDangerBtn, pendingAction === 'delete' && styles.deleteDangerConfirm, pendingPaymentsMsg && styles.deleteDisabled]}
+                                >
+                                    {deletingId === editUser?.id ? <ActivityIndicator size="small" color="#fff" /> : (
+                                        <Text style={[styles.deleteDangerText, pendingPaymentsMsg && styles.deleteDisabledText]}>
+                                            {pendingPaymentsMsg ? 'Resolve pending to delete' : (pendingAction === 'delete' ? 'Confirm Delete?' : 'Delete User')}
+                                        </Text>
+                                    )}
                                 </TouchableOpacity>
                             </>
                         ) : (
                             <Text style={styles.selfNote}>Admin account stays active and cannot be deleted.</Text>
                         )}
                         <View style={styles.modalButtonsRow}>
-                            <TouchableOpacity onPress={() => setEditModalVisible(false)} style={[styles.modalBtn, styles.modalCancel]}><Text style={styles.modalCancelText}>Cancel</Text></TouchableOpacity>
-                            <TouchableOpacity disabled={savingEdits} onPress={saveEdits} style={[styles.modalBtn, styles.modalSave]}>{savingEdits ? <ActivityIndicator color="#000" /> : <Text style={styles.modalSaveText}>Save</Text>}</TouchableOpacity>
+                            {pendingAction === 'save' && (
+                                <TouchableOpacity onPress={() => setPendingAction(null)} style={[styles.modalBtn, styles.modalCancel]}><Text style={styles.modalCancelText}>No</Text></TouchableOpacity>
+                            )}
+                            <TouchableOpacity onPress={() => setEditModalVisible(false)} style={[styles.modalBtn, styles.modalCancel]}><Text style={styles.modalCancelText}>{pendingAction === 'save' ? 'Cancel' : 'Close'}</Text></TouchableOpacity>
+                            <TouchableOpacity
+                                disabled={savingEdits}
+                                onPress={() => { pendingAction === 'save' ? saveEdits() : setPendingAction('save'); }}
+                                style={[styles.modalBtn, styles.modalSave, pendingAction === 'save' && styles.modalConfirm]}
+                            >
+                                {savingEdits ? <ActivityIndicator color="#000" /> : <Text style={styles.modalSaveText}>{pendingAction === 'save' ? 'Yes, Save' : 'Save'}</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+            {/* Pending Payments Modal */}
+            <Modal transparent visible={!!pendingPaymentsMsg} animationType="fade" onRequestClose={() => setPendingPaymentsMsg(null)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalCard, styles.modalCardWarn]}>
+                        <View style={styles.warnBox}>
+                            <Text style={styles.warnTitle}>Pending payments detected</Text>
+                            <Text style={[styles.warnText, { marginBottom: 8 }]}>Finish pending payments first, or deactivate the user.</Text>
+                            <View style={styles.warnChipsRow}>
+                                {!!pendingPaymentsMsg?.pendingSubmitted && pendingPaymentsMsg.pendingSubmitted > 0 && (
+                                    <View style={[styles.warnChip, styles.warnChipNeutral]}>
+                                        <Text style={styles.warnChipText}>{pendingPaymentsMsg.pendingSubmitted} awaiting accountant</Text>
+                                    </View>
+                                )}
+                                {!!pendingPaymentsMsg?.pendingAdmin && pendingPaymentsMsg.pendingAdmin > 0 && (
+                                    <View style={[styles.warnChip, styles.warnChipNeutral]}>
+                                        <Text style={styles.warnChipText}>{pendingPaymentsMsg.pendingAdmin} awaiting admin</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                        <View style={[styles.warnButtonsRow, { marginTop: 12 }]}>
+                            <TouchableOpacity onPress={() => setPendingPaymentsMsg(null)} style={[styles.modalBtn, styles.modalCancel]}>
+                                <Text style={styles.modalCancelText}>Finish payments</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={async () => { await safeDeactivate(editUser); setPendingPaymentsMsg(null); setEditModalVisible(false); }} style={[styles.modalBtn, styles.deactivateDangerBtn]}>
+                                <Text style={styles.deactivateDangerText}>Deactivate now</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </View>
@@ -295,11 +488,18 @@ const styles = StyleSheet.create({
     statusDot: { width: 10, height: 10, borderRadius: 5 },
     activeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     activeLabel: { color: tokens.colors.textDim, fontSize: 13 },
+    activeHint: { marginLeft: 10, color: tokens.colors.textDim, fontSize: 11 },
     deleteDangerBtn: { backgroundColor: tokens.colors.danger, paddingVertical: 10, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
     deleteDangerText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+    deleteDisabled: { opacity: 0.6 },
+    deleteDisabledText: { color: '#ddd' },
     badge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20, borderWidth: 1, marginLeft: 8 },
     badgeText: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3 },
     smallBtn: { marginLeft: 8, padding: 10, backgroundColor: '#111', borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border, alignItems: 'center', justifyContent: 'center' },
+    assignCompaniesBtn: { marginLeft: 8, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: tokens.colors.cardAlt, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+    assignCompaniesBtnText: { marginLeft: 4, color: tokens.colors.textDim, fontSize: 11, fontWeight: '600' },
+    inlineAssignBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: tokens.colors.cardAlt, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border, marginBottom: 12 },
+    inlineAssignText: { color: tokens.colors.text, fontSize: 13, fontWeight: '600' },
     sectionHeading: { color: tokens.colors.text, fontWeight: '600', marginBottom: 8, fontSize: 15 },
     createRowGroup: {},
     createInput: { backgroundColor: '#111', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, fontSize: 14, marginBottom: 10 },
@@ -311,8 +511,9 @@ const styles = StyleSheet.create({
     roleChipTextActive: { color: '#000', fontWeight: '600' },
     createBtn: { backgroundColor: tokens.colors.accent, paddingVertical: 12, borderRadius: 14, alignItems: 'center', marginTop: 4 },
     createBtnText: { color: '#000', fontWeight: '600', fontSize: 14 },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center', padding: 24 },
     modalCard: { backgroundColor: tokens.colors.card, borderRadius: 20, padding: 20, width: '100%', borderWidth: 1, borderColor: tokens.colors.border },
+    modalCardWarn: { borderWidth: 2, borderColor: tokens.colors.warning },
     modalTitle: { color: tokens.colors.text, fontSize: 16, fontWeight: '600', marginBottom: 12 },
     modalInput: { backgroundColor: '#111', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, fontSize: 14, marginBottom: 10 },
     fieldBlock: { marginBottom: 4 },
@@ -321,7 +522,19 @@ const styles = StyleSheet.create({
     modalBtn: { paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12 },
     modalCancel: { backgroundColor: '#222', marginRight: 10 },
     modalSave: { backgroundColor: tokens.colors.accent },
+    modalConfirm: { backgroundColor: tokens.colors.warning },
     modalCancelText: { color: tokens.colors.textDim, fontWeight: '500' },
     modalSaveText: { color: '#000', fontWeight: '600' },
     selfNote: { color: tokens.colors.warning, fontSize: 11, marginTop: -4, marginBottom: 10 },
+    deleteDangerConfirm: { backgroundColor: '#b71c1c' },
+    deactivateDangerBtn: { backgroundColor: tokens.colors.danger, marginLeft: 10 },
+    deactivateDangerText: { color: '#fff', fontWeight: '700' },
+    warnBox: { borderWidth: 2, borderColor: tokens.colors.warning, backgroundColor: tokens.colors.cardAlt, borderRadius: 12, padding: 12, marginBottom: 12 },
+    warnTitle: { color: tokens.colors.warning, fontWeight: '700', marginBottom: 4, fontSize: 13 },
+    warnText: { color: tokens.colors.textDim, fontSize: 12 },
+    warnChipsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8 },
+    warnChip: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12, borderWidth: 1 },
+    warnChipNeutral: { borderColor: tokens.colors.border, backgroundColor: '#111' },
+    warnChipText: { color: tokens.colors.textDim, fontSize: 11, fontWeight: '600' },
+    warnButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
 });

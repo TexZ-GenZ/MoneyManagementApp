@@ -1,11 +1,11 @@
 import logging
-import os
 from app.core.logging_config import get_logger
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from app.db.session import SessionLocal
 from app.services.notifications import run_notification_scan
+from datetime import datetime
 from app.models.models import Setting
 
 scheduler: BackgroundScheduler | None = None
@@ -17,6 +17,31 @@ log = get_logger(__name__)
 def _scan_job():
     db = SessionLocal()
     try:
+        # Gate entire scan by exec window (IST) to avoid unnecessary DB work
+        s = db.get(Setting, 1)
+        if s:
+            start_h = s.exec_window_start_hour or 6
+            end_h = s.exec_window_end_hour or 22
+
+            # Convert IST start/end to UTC hour as in notifications service
+            def ist_to_utc(h: int) -> int:
+                return int((h - 5.5) % 24)
+
+            utc_start = ist_to_utc(start_h)
+            utc_end = ist_to_utc(end_h)
+            nowh = datetime.utcnow().hour
+            if utc_start < utc_end:
+                in_window = utc_start <= nowh < utc_end
+            else:
+                in_window = nowh >= utc_start or nowh < utc_end
+            if not in_window:
+                log.debug(
+                    "Scan skipped (outside exec window) utc_hour=%s window=%s-%s",
+                    nowh,
+                    utc_start,
+                    utc_end,
+                )
+                return
         run_notification_scan(db)
         db.commit()
     except Exception as e:
@@ -40,29 +65,21 @@ def _configure_jobs():
     try:
         s = db.get(Setting, 1)
         interval_hours = s.notif_every_hours if s and s.notif_every_hours else 2
-        daily_hour = (
-            s.payment_notif_daily_hour if s and s.payment_notif_daily_hour else 9
-        )
+    # daily digest removed
     finally:
         db.close()
+    trigger = IntervalTrigger(hours=interval_hours)
     scheduler.add_job(
         _scan_job,
-        IntervalTrigger(hours=interval_hours),
+        trigger,
         id="notif_interval",
         max_instances=1,
         coalesce=True,
         replace_existing=True,
         misfire_grace_time=300,
     )
-    log.info("Notification scheduler using hours interval=%s", interval_hours)
-    scheduler.add_job(
-        _scan_job,
-        CronTrigger(hour=daily_hour, minute=0),
-        id="notif_daily",
-        max_instances=1,
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
+    log.info("Notification scheduler interval configured hours=%s", interval_hours)
+    # daily cron removed
 
 
 def start_scheduler():

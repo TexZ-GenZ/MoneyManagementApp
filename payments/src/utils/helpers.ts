@@ -93,10 +93,38 @@ export const isValidAmount = (amount: string | number): boolean => {
 
 // Error handling
 export const getErrorMessage = (error: any): string => {
-  if (typeof error === 'string') return error;
-  if (error?.response?.data?.message) return error.response.data.message;
-  if (error?.message) return error.message;
-  return 'An unexpected error occurred';
+  // Prefer backend-provided fields
+  const fromData = error?.response?.data;
+  if (fromData) {
+    if (typeof fromData.detail === 'string') return fromData.detail;
+    if (typeof fromData.message === 'string') return fromData.message;
+    if (typeof fromData.error === 'string') return fromData.error;
+    if (Array.isArray(fromData.errors) && fromData.errors.length > 0) {
+      const first = fromData.errors[0];
+      if (typeof first === 'string') return first;
+      if (first?.message) return first.message;
+    }
+  }
+
+  // String error
+  if (typeof error === 'string') return sanitizeHttpMessage(error);
+
+  // Standard Error
+  if (error?.message) return sanitizeHttpMessage(error.message);
+
+  return 'Something went wrong. Please try again.';
+};
+
+// Remove noisy status codes like "HTTP 401: Unauthorized"
+const sanitizeHttpMessage = (msg: string): string => {
+  if (!msg) return 'Something went wrong. Please try again.';
+  // Strip leading "HTTP 4xx/5xx: ..." prefix
+  const cleaned = msg.replace(/^HTTP\s+\d{3}[^:]*:\s*/i, '').trim();
+  // Common fallbacks
+  if (/unauthorized/i.test(cleaned) || /forbidden/i.test(cleaned)) return 'You don\'t have permission to perform this action.';
+  if (/not found/i.test(cleaned)) return 'Requested resource was not found.';
+  if (/timeout/i.test(cleaned)) return 'The request timed out. Please try again.';
+  return cleaned || 'Something went wrong. Please try again.';
 };
 
 // Storage helpers

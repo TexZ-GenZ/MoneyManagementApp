@@ -73,7 +73,10 @@ export default function ExecutiveDashboard() {
   const enriched = useMemo(() => companies.map(c => ({ ...c, __cls: classify(c) })), [companies, classify]);
   const overdueCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'overdue').sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0)), [enriched]);
   const todayCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'today').sort((a, b) => (parseFloat(b.outbal) || 0) - (parseFloat(a.outbal) || 0)), [enriched]);
-  const upcomingCompanies = useMemo(() => enriched.filter(c => c.__cls.bucket === 'upcoming').sort((a, b) => (c.__cls.due - b.__cls.due)), [enriched]);
+  const upcomingCompanies = useMemo(() => enriched
+    .filter(c => c.__cls.bucket === 'upcoming')
+    .sort((a, b) => (a.__cls.due - b.__cls.due))
+    , [enriched]);
 
   const activeList = viewMode === 'today' ? todayCompanies : viewMode === 'upcoming' ? upcomingCompanies : overdueCompanies;
   const previewList = activeList.slice(0, 8);
@@ -99,7 +102,7 @@ export default function ExecutiveDashboard() {
   );
 
   return (
-    <Screen title="Dashboard" subtitle="Collections Priority" scroll>
+    <Screen title="Dashboard" subtitle="Collections Priority" scroll hideBackButton>
       <Card style={styles.summaryCard}>
         <View style={styles.summaryRow}>
           <View style={styles.summaryBox}>
@@ -111,7 +114,7 @@ export default function ExecutiveDashboard() {
             <Text style={[styles.summaryValue, { color: tokens.colors.danger }]}>{overdueCompanies.length}</Text>
           </View>
           <View style={styles.summaryBox}>
-            <Text style={styles.summaryLabel}>Due Today</Text>
+            <Text style={styles.summaryLabel}>Promise Today</Text>
             <Text style={[styles.summaryValue, { color: tokens.colors.warning || '#f5b100' }]}>{todayCompanies.length}</Text>
           </View>
           <View style={styles.summaryBox}>
@@ -120,18 +123,26 @@ export default function ExecutiveDashboard() {
           </View>
         </View>
         <View style={styles.quickActionsRow}>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('../CompanyList/ExecutiveCompanies')}><Text style={styles.quickBtnText}>All</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => setViewMode('overdue')}><Text style={styles.quickBtnText}>Overdue</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => setViewMode('today')}><Text style={styles.quickBtnText}>Today</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => setViewMode('upcoming')}><Text style={styles.quickBtnText}>Upcoming</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('../CompanyList/ExecutiveCompanies')}>
+            <Text style={styles.quickBtnText}>All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickBtn, viewMode === 'overdue' && styles.quickBtnActive]} onPress={() => setViewMode('overdue')}>
+            <Text style={[styles.quickBtnText, viewMode === 'overdue' && styles.quickBtnTextActive]}>Overdue</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickBtn, viewMode === 'today' && styles.quickBtnActive]} onPress={() => setViewMode('today')}>
+            <Text style={[styles.quickBtnText, viewMode === 'today' && styles.quickBtnTextActive]}>Today</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickBtn, viewMode === 'upcoming' && styles.quickBtnActive]} onPress={() => setViewMode('upcoming')}>
+            <Text style={[styles.quickBtnText, viewMode === 'upcoming' && styles.quickBtnTextActive]}>Upcoming</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.nextHint}>{nextActionableCount === 0 ? 'No overdue or today dues. Great!' : `${nextActionableCount} need attention (overdue + today).`}</Text>
+        <Text style={styles.nextHint}>{nextActionableCount === 0 ? 'No overdue or today promises. Great!' : `${nextActionableCount} need attention (overdue + today).`}</Text>
       </Card>
       <View style={{ height: 24 }} />
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
           {viewMode === 'overdue' && `Overdue (Top ${previewList.length})`}
-          {viewMode === 'today' && `Due Today (${todayCompanies.length})`}
+          {viewMode === 'today' && `Promise Today (${todayCompanies.length})`}
           {viewMode === 'upcoming' && `Upcoming 7 Days (Top ${previewList.length})`}
         </Text>
         {!loading && activeList.length > 8 && (
@@ -144,7 +155,7 @@ export default function ExecutiveDashboard() {
         ) : error ? (
           <View style={styles.loadingWrap}><Text style={styles.errorText}>{error}</Text></View>
         ) : previewList.length === 0 ? (
-          <Text style={styles.empty}>{viewMode === 'overdue' ? 'No overdue companies. Good job.' : viewMode === 'today' ? 'Nothing due today.' : 'No upcoming dues in next 7 days.'}</Text>
+          <Text style={styles.empty}>{viewMode === 'overdue' ? 'No overdue companies. Good job.' : viewMode === 'today' ? 'Nothing promised today.' : 'No upcoming promises in next 7 days.'}</Text>
         ) : (
           <FlatList data={previewList} keyExtractor={(item, i) => item.code + i} renderItem={renderItem} scrollEnabled={false} />
         )}
@@ -156,26 +167,29 @@ export default function ExecutiveDashboard() {
 const styles = StyleSheet.create({
   summaryCard: {},
   summaryRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  summaryBox: { width: '48%', backgroundColor: tokens.colors.cardAlt, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: tokens.colors.border, marginBottom: 10 },
-  summaryLabel: { fontSize: 12, color: tokens.colors.textDim, fontWeight: '600', letterSpacing: 0.4, marginBottom: 6 },
-  summaryValue: { fontSize: 20, fontWeight: '700', color: tokens.colors.accent },
-  quickActionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  quickBtn: { flex: 1, marginHorizontal: 4, backgroundColor: '#111', paddingVertical: 10, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: tokens.colors.border },
-  quickBtnText: { color: tokens.colors.text, fontSize: 12, fontWeight: '600' },
-  nextHint: { marginTop: 12, fontSize: 12, color: tokens.colors.textDim, textAlign: 'center' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: tokens.colors.text },
-  viewAll: { fontSize: 12, fontWeight: '600', color: tokens.colors.accent },
+  summaryBox: { width: '48%', backgroundColor: tokens.colors.cardAlt, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: tokens.colors.border, marginBottom: 10 },
+  summaryLabel: { fontSize: 13, color: tokens.colors.textDim, fontWeight: '600', letterSpacing: 0.5, marginBottom: 6 },
+  summaryValue: { fontSize: 22, fontWeight: '700', color: tokens.colors.accent },
+  quickActionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  // Updated to themed cardAlt color (was hardcoded #111)
+  quickBtn: { flex: 1, marginHorizontal: 4, backgroundColor: tokens.colors.cardAlt, paddingVertical: 8, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: tokens.colors.border },
+  quickBtnActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
+  quickBtnText: { color: tokens.colors.text, fontSize: 13, fontWeight: '600' },
+  quickBtnTextActive: { color: '#000', fontWeight: '800' },
+  nextHint: { marginTop: 10, fontSize: 11, color: tokens.colors.textDim, textAlign: 'center' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: tokens.colors.text },
+  viewAll: { fontSize: 11, fontWeight: '600', color: tokens.colors.accent },
   listCard: { paddingHorizontal: 0, paddingVertical: 0 },
-  loadingWrap: { paddingVertical: 34 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: tokens.colors.border },
-  companyName: { color: tokens.colors.text, fontSize: 14, fontWeight: '600' },
-  companyMeta: { color: tokens.colors.textDim, fontSize: 11, marginTop: 4 },
+  loadingWrap: { paddingVertical: 32 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderColor: tokens.colors.border },
+  companyName: { color: tokens.colors.text, fontSize: 15, fontWeight: '600' },
+  companyMeta: { color: tokens.colors.textDim, fontSize: 12, marginTop: 3 },
   outbalValue: { color: tokens.colors.danger, fontWeight: '700' },
-  badge: { fontSize: 10, fontWeight: '700', color: '#fff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, letterSpacing: 0.5 },
+  badge: { fontSize: 11, fontWeight: '700', color: '#fff', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 13, letterSpacing: 0.5 },
   badgeOverdue: { backgroundColor: tokens.colors.danger },
   badgeToday: { backgroundColor: tokens.colors.warning || '#f5b100', color: '#000' },
   badgeUpcoming: { backgroundColor: tokens.colors.accent, color: '#000' },
-  empty: { color: tokens.colors.textDim, fontSize: 13, padding: 18, textAlign: 'center' },
-  errorText: { color: tokens.colors.danger, fontSize: 13, textAlign: 'center' },
+  empty: { color: tokens.colors.textDim, fontSize: 12, padding: 16, textAlign: 'center' },
+  errorText: { color: tokens.colors.danger, fontSize: 12, textAlign: 'center' },
 });

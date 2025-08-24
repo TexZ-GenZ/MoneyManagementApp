@@ -10,10 +10,14 @@ class CompanyBase(BaseModel):
     name: str
     area: Optional[str] = None
     location: Optional[str] = None
-    credit_date: Optional[date] = None
-    promise_date: Optional[date] = None
+    credit_date: Optional[date] = None  # deprecated in list context
+    promise_date: Optional[date] = None  # deprecated in list context
     outbal: Decimal
     amount: Decimal
+    # Enriched fields (not persisted directly on companies table)
+    assigned_executive_id: Optional[int] = None
+    assigned_executive_username: Optional[str] = None
+    assigned_executive_active: Optional[bool] = None
 
     class Config:
         from_attributes = True

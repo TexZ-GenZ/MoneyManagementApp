@@ -50,6 +50,7 @@ class BillPaymentHistoryItem(BaseModel):
     payment_status: str
     collected_at: datetime
     method: str
+    comments: Optional[str] = None
     accountant_comment: Optional[str] = None
     admin_comment: Optional[str] = None
     exec_location_verified: Optional[bool] = None
@@ -79,6 +80,7 @@ class PaymentDetailOut(BaseModel):
     amount_collected: Decimal
     method: str
     status: str
+    comments: Optional[str] = None
     next_promise_date: Optional[date] = None
     exec_location_verified: Optional[bool] = None
     exec_lat: Optional[float] = None
@@ -91,3 +93,24 @@ class PaymentDetailOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PaymentActivityItem(BaseModel):
+    payment_id: int
+    company_code: str
+    company_name: Optional[str] = None
+    company_area: Optional[str] = None
+    executive_id: int
+    executive_username: Optional[str] = None
+    executive_name: Optional[str] = None
+    amount_collected: Decimal
+    method: str
+    status: str
+    last_activity_at: datetime
+    last_activity_type: str  # 'submitted' | 'accountant_review' | 'admin_review'
+    last_comment: Optional[str] = None
+
+
+class PaymentActivityList(BaseModel):
+    items: List[PaymentActivityItem]
+    total: int

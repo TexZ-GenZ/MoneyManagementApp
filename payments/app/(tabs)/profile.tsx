@@ -84,7 +84,7 @@ export default function ProfileScreen() {
 
 
   return (
-    <Screen title="My Profile" subtitle="" contentStyle={undefined}>
+    <Screen title="My Profile" subtitle="" contentStyle={undefined} hideBackButton>
       {loading && (
         <View style={styles.center}>
           <ActivityIndicator color={tokens.colors.accent} />
@@ -100,7 +100,7 @@ export default function ProfileScreen() {
         </Card>
       )}
       {!loading && me && (
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
           <Card style={styles.cardSection}>
             <View style={styles.headerRow}>
               <Text style={styles.name}>{me.username}</Text>

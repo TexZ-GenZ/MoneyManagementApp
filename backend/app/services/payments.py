@@ -16,6 +16,8 @@ from app.models.models import (
 )
 from app.services.company import recalc_company_totals
 from sqlalchemy.exc import IntegrityError
+import httpx
+from app.models.models import Role, User, PushToken
 
 
 def create_payment_with_allocations(
@@ -190,6 +192,37 @@ def create_payment_with_allocations(
         # Re-raise if not an idempotency collision scenario
         raise
     db.refresh(p)
+    # Immediate push notification to accountants for new submitted payment
+    try:
+        accountant_users = (
+            db.query(User)
+            .filter(User.role == Role.accountant, User.is_active == True)
+            .all()
+        )
+        if accountant_users:
+            tokens = (
+                db.query(PushToken)
+                .filter(PushToken.user_id.in_([u.id for u in accountant_users]))
+                .all()
+            )
+            for t in tokens:
+                if not t.token.startswith("ExponentPushToken"):
+                    continue
+                try:
+                    httpx.post(
+                        "https://exp.host/--/api/v2/push/send",
+                        json={
+                            "to": t.token,
+                            "title": "Payment Submitted",
+                            "body": f"Payment {p.id} awaiting accountant approval",
+                            "data": {"payment_id": p.id, "stage": "accountant"},
+                        },
+                        timeout=8,
+                    )
+                except Exception:
+                    continue
+    except Exception:
+        pass
     return p
 
 

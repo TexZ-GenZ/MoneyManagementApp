@@ -40,9 +40,8 @@ class ApiService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || `HTTP ${response.status}: ${response.statusText}`
-        );
+        const errMsg = errorData?.detail || errorData?.message || errorData?.error || 'Request failed';
+        throw new Error(errMsg);
       }
 
       return await response.json();
@@ -69,7 +68,8 @@ class ApiService {
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${res.status}: ${res.statusText}`);
+      const errMsg = errorData?.detail || errorData?.message || errorData?.error || 'Login failed';
+      throw new Error(errMsg);
     }
 
     const response = await res.json();
@@ -306,9 +306,8 @@ class ApiService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || `HTTP ${response.status}: ${response.statusText}`
-      );
+      const errMsg = errorData?.detail || errorData?.message || errorData?.error || 'Import failed';
+      throw new Error(errMsg);
     }
 
     return await response.json();
@@ -328,9 +327,8 @@ class ApiService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || `HTTP ${response.status}: ${response.statusText}`
-      );
+      const errMsg = errorData?.detail || errorData?.message || errorData?.error || 'Import failed';
+      throw new Error(errMsg);
     }
 
     return await response.json();

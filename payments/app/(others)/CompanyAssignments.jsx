@@ -1,11 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { getErrorMessage } from '../../src/utils/helpers';
 import { useSelector } from 'react-redux';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { StorageService } from '../../src/services/storageService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 
 /*
  UX Goals:
@@ -17,6 +20,8 @@ import { StorageService } from '../../src/services/storageService';
 */
 
 export default function CompanyAssignments() {
+    const { execId } = useLocalSearchParams();
+    const insets = useSafeAreaInsets();
     const currentUserRole = useSelector(state => state.auth?.user?.role);
     const [loading, setLoading] = useState(true);
     const [companies, setCompanies] = useState([]); // all with assignment info
@@ -29,6 +34,9 @@ export default function CompanyAssignments() {
     const [mutating, setMutating] = useState(false);
     const [companySearch, setCompanySearch] = useState('');
     const [execViewExec, setExecViewExec] = useState(null); // selected executive object when drilling into assigned tab
+    // Clean confirmation modal for assign/reassign instead of inline toggle
+    const [confirmActionMode, setConfirmActionMode] = useState(null); // null | 'assign' | 'reassign'
+    const [confirmUnassignVisible, setConfirmUnassignVisible] = useState(false);
 
     const fetchCompanies = useCallback(async () => {
         setLoading(true);
@@ -112,7 +120,7 @@ export default function CompanyAssignments() {
                 return;
             }
             throw new Error('assignments_endpoint');
-        } catch (e) { console.error(e); Alert.alert('Error', 'Failed to load companies (assignments).'); }
+        } catch (e) { console.error(e); Alert.alert('Error', getErrorMessage(e)); }
         finally { setLoading(false); }
     }, [currentUserRole]);
 
@@ -124,11 +132,24 @@ export default function CompanyAssignments() {
             if (!res.ok) throw new Error('execs');
             const data = await res.json();
             setExecutives((data.items || data || []));
-        } catch (e) { console.error(e); Alert.alert('Error', 'Failed to load executives'); }
+        } catch (e) { console.error(e); Alert.alert('Error', getErrorMessage(e)); }
         finally { setExecutiveLoading(false); }
     }, []);
 
     useEffect(() => { fetchCompanies(); fetchExecutives(); }, [fetchCompanies, fetchExecutives]);
+
+    // When execId param provided (from ManageUsers shortcut), switch to assigned tab and set exec view once executives loaded.
+    useEffect(() => {
+        if (!execId) return;
+        // ensure tab is assigned
+        setTab('assigned');
+    }, [execId]);
+
+    useEffect(() => {
+        if (!execId || executives.length === 0) return;
+        const found = executives.find(e => String(e.id) === String(execId));
+        if (found) setExecViewExec({ id: found.id, username: found.username, is_active: found.is_active, count: 0 });
+    }, [execId, executives]);
 
     const unassigned = companies.filter(c => !c.assigned_executive_id);
     const assigned = companies.filter(c => c.assigned_executive_id);
@@ -166,6 +187,8 @@ export default function CompanyAssignments() {
     let baseList;
     if (tab === 'unassigned') baseList = unassigned; else if (execViewExec) baseList = assignedByExec[execViewExec.id] || []; else baseList = [];
     const filteredCompanies = baseList.filter(c => fuzzyMatch(companySearch, `${c.name || ''} ${c.code}`));
+    const filteredCodes = React.useMemo(() => filteredCompanies.map(c => c.code), [filteredCompanies]);
+    const allFilteredSelected = filteredCodes.length > 0 && filteredCodes.every(c => selected.has(c));
 
     const toggleSelect = (code) => {
         setSelected(prev => {
@@ -180,8 +203,10 @@ export default function CompanyAssignments() {
     // When switching tab or leaving exec view, clear state
     useEffect(() => { clearSelection(); setCompanySearch(''); if (tab === 'unassigned') setExecViewExec(null); }, [tab]);
 
-    const beginAssignOrReassign = () => {
-        if (selected.size === 0) return; setAssignModalVisible(true);
+    const beginAssignOrReassign = (mode = 'assign') => {
+        if (selected.size === 0) return;
+        // Open a confirmation modal; on confirm we open the executive picker
+        setConfirmActionMode(mode);
     };
 
     const performAssign = async (execId) => {
@@ -203,40 +228,32 @@ export default function CompanyAssignments() {
             await fetchCompanies();
             setAssignModalVisible(false);
             clearSelection();
-        } catch (e) { console.error(e); Alert.alert('Assign Failed', 'Could not assign'); }
+        } catch (e) { console.error(e); Alert.alert('Assign Failed', getErrorMessage(e)); }
         finally { setMutating(false); }
     };
 
-    const performUnassign = async () => {
+    const doUnassign = async () => {
         if (selected.size === 0) return;
-        Alert.alert('Unassign', `Remove ${selected.size} company assignment(s)?`, [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Unassign', style: 'destructive', onPress: async () => {
-                    setMutating(true);
-                    try {
-                        const h = await StorageService.getAuthHeader();
-                        const body = { company_codes: Array.from(selected) };
-                        const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/assignments/unassign`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
-                        if (!r.ok) {
-                            if (r.status === 404) {
-                                // fallback sequential unassign; need to know current executive for each; fallback tries all execs endpoint
-                                // We rely on existing assignments in companies state (assigned_executive_id)
-                                for (const code of body.company_codes) {
-                                    const c = companies.find(x => x.code === code);
-                                    if (c && c.assigned_executive_id) {
-                                        try { await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives/${c.assigned_executive_id}/assign/${code}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } }); } catch (_) { }
-                                    }
-                                }
-                            } else { throw new Error('unassign'); }
+        setMutating(true);
+        try {
+            const h = await StorageService.getAuthHeader();
+            const body = { company_codes: Array.from(selected) };
+            const r = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/assignments/unassign`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body: JSON.stringify(body) });
+            if (!r.ok) {
+                if (r.status === 404) {
+                    // fallback sequential unassign using current company assigned_executive_id
+                    for (const code of body.company_codes) {
+                        const c = companies.find(x => x.code === code);
+                        if (c && c.assigned_executive_id) {
+                            try { await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives/${c.assigned_executive_id}/assign/${code}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', ...h } }); } catch (_) { }
                         }
-                        await fetchCompanies();
-                        clearSelection();
-                    } catch (e) { console.error(e); Alert.alert('Unassign Failed', 'Could not unassign'); }
-                    finally { setMutating(false); }
-                }
+                    }
+                } else { throw new Error('unassign'); }
             }
-        ]);
+            await fetchCompanies();
+            clearSelection();
+        } catch (e) { console.error(e); Alert.alert('Unassign Failed', getErrorMessage(e)); }
+        finally { setMutating(false); setConfirmUnassignVisible(false); }
     };
 
     const toggleSelectAllFiltered = () => {
@@ -280,7 +297,11 @@ export default function CompanyAssignments() {
     return (
         <Screen title="Company Assignments" subtitle="Assign / manage executive ownership">
             {!loading && companies.length > 0 && (
-                <Text style={styles.debugSummary}>Total: {companies.length} | Unassigned: {unassigned.length} | Assigned: {assigned.length}</Text>
+                tab === 'assigned' && execViewExec ? (
+                    <Text style={styles.debugSummary}>Assigned to {execViewExec.username}: {(assignedByExec[execViewExec.id] || []).length}</Text>
+                ) : (
+                    <Text style={styles.debugSummary}>Total: {companies.length} | Unassigned: {unassigned.length} | Assigned: {assigned.length}</Text>
+                )
             )}
             {/* Tabs */}
             <View style={styles.tabRow}>
@@ -288,7 +309,7 @@ export default function CompanyAssignments() {
                     <Text style={[styles.tabText, tab === 'unassigned' && styles.tabTextActive]}>Unassigned ({unassigned.length})</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.tabBtn, { marginRight: 0 }, tab === 'assigned' && styles.tabBtnActive]} onPress={() => setTab('assigned')}>
-                    <Text style={[styles.tabText, tab === 'assigned' && styles.tabTextActive]}>Assigned ({assigned.length})</Text>
+                    <Text style={[styles.tabText, tab === 'assigned' && styles.tabTextActive]}>Assigned ({execViewExec ? (assignedByExec[execViewExec.id] || []).length : assigned.length})</Text>
                 </TouchableOpacity>
             </View>
             {tab === 'assigned' && !execViewExec && (
@@ -338,8 +359,8 @@ export default function CompanyAssignments() {
                         value={companySearch}
                         onChangeText={setCompanySearch}
                     />
-                    <TouchableOpacity onPress={toggleSelectAllFiltered} style={styles.selectAllLargeBtn}>
-                        <Text style={styles.selectAllLargeText}>Select All</Text>
+                    <TouchableOpacity onPress={toggleSelectAllFiltered} style={styles.selectAllLargeBtn} disabled={filteredCompanies.length === 0}>
+                        <Text style={styles.selectAllLargeText}>{allFilteredSelected ? 'Deselect All' : 'Select All'}</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -360,25 +381,39 @@ export default function CompanyAssignments() {
                 />
             ) : null)}
             {selected.size > 0 && ((tab === 'unassigned') || (tab === 'assigned' && execViewExec)) && (
-                <View style={styles.actionBar}>
-                    <Text style={styles.actionBarText}>{selected.size} selected</Text>
-                    {tab === 'unassigned' ? (
-                        <TouchableOpacity disabled={mutating} onPress={beginAssignOrReassign} style={[styles.actionBtn, styles.assignBtn]}>
-                            {mutating ? <ActivityIndicator color="#000" /> : <Text style={styles.actionBtnText}>Assign</Text>}
-                        </TouchableOpacity>
-                    ) : (
-                        <>
-                            <TouchableOpacity disabled={mutating} onPress={performUnassign} style={[styles.actionBtn, styles.unassignBtn]}>
-                                {mutating ? <ActivityIndicator color="#fff" /> : <Text style={styles.unassignBtnText}>Unassign</Text>}
+                <View
+                    accessibilityRole="toolbar"
+                    accessibilityLabel={`${selected.size} selected actions`}
+                    style={[
+                        styles.actionBar,
+                        {
+                            paddingBottom: 8 + insets.bottom,
+                        },
+                    ]}
+                >
+                    <View style={styles.actionBarBox}>
+                        <View style={styles.actionCountBadge}>
+                            <Ionicons name="checkmark-done" size={14} color={tokens.colors.accent} style={{ marginRight: 6 }} />
+                            <Text style={styles.actionCountText}>{selected.size} selected</Text>
+                        </View>
+                        <View style={styles.actionGroup}>
+                            {tab === 'assigned' && (
+                                <TouchableOpacity disabled={mutating} onPress={() => setConfirmUnassignVisible(true)} style={[styles.actionBtn, styles.unassignBtn]}>
+                                    {mutating ? <ActivityIndicator color="#fff" /> : <Text style={styles.unassignBtnText}>Unassign</Text>}
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                disabled={mutating}
+                                onPress={() => beginAssignOrReassign(tab === 'assigned' ? 'reassign' : 'assign')}
+                                style={[styles.actionBtn, styles.assignBtn]}
+                            >
+                                {mutating ? <ActivityIndicator color="#000" /> : <Text style={styles.actionBtnText}>{tab === 'assigned' ? 'Reassign' : 'Assign'}</Text>}
                             </TouchableOpacity>
-                            <TouchableOpacity disabled={mutating} onPress={beginAssignOrReassign} style={[styles.actionBtn, styles.assignBtn]}>
-                                {mutating ? <ActivityIndicator color="#000" /> : <Text style={styles.actionBtnText}>Reassign</Text>}
+                            <TouchableOpacity onPress={clearSelection} style={[styles.actionBtn, styles.clearBtn]}>
+                                <Text style={styles.clearBtnText}>Clear</Text>
                             </TouchableOpacity>
-                        </>
-                    )}
-                    <TouchableOpacity onPress={clearSelection} style={[styles.actionBtn, styles.clearBtn]}>
-                        <Text style={styles.clearBtnText}>Clear</Text>
-                    </TouchableOpacity>
+                        </View>
+                    </View>
                 </View>
             )}
             <Modal transparent visible={assignModalVisible} animationType="fade" onRequestClose={() => setAssignModalVisible(false)}>
@@ -402,51 +437,107 @@ export default function CompanyAssignments() {
                     </View>
                 </View>
             </Modal>
+            {/* Confirm Assign/Reassign Modal */}
+            <Modal transparent visible={!!confirmActionMode} animationType="fade" onRequestClose={() => setConfirmActionMode(null)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>{confirmActionMode === 'reassign' ? 'Reassign companies?' : 'Assign companies?'}</Text>
+                        <Text style={styles.modalBodyText}>
+                            You have selected {selected.size} compan{selected.size === 1 ? 'y' : 'ies'}. Continue to choose an executive?
+                        </Text>
+                        <View style={styles.modalButtonsRow}>
+                            <TouchableOpacity onPress={() => setConfirmActionMode(null)} style={[styles.modalBtn, styles.modalCancel]}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => { setConfirmActionMode(null); setAssignModalVisible(true); }} style={[styles.modalBtn, styles.modalConfirm]}>
+                                <Text style={styles.modalConfirmText}>Choose Executive</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+            {/* Confirm Unassign Modal */}
+            <Modal transparent visible={confirmUnassignVisible} animationType="fade" onRequestClose={() => setConfirmUnassignVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>Unassign companies?</Text>
+                        <Text style={styles.modalBodyText}>
+                            This will remove assignments for {selected.size} compan{selected.size === 1 ? 'y' : 'ies'}. They will move back to Unassigned.
+                        </Text>
+                        <View style={styles.modalButtonsRow}>
+                            <TouchableOpacity onPress={() => setConfirmUnassignVisible(false)} style={[styles.modalBtn, styles.modalCancel]}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={doUnassign} style={[styles.modalBtn, styles.modalDanger]}>
+                                {mutating ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalDangerText}>Unassign</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </Screen>
     );
 }
 
 const styles = StyleSheet.create({
     companyCard: { paddingHorizontal: 16, paddingVertical: 14 },
-    companyCardSelected: { borderWidth: 1, borderColor: tokens.colors.accent, backgroundColor: 'rgba(200,241,76,0.05)' },
+    companyCardSelected: { borderWidth: 1, borderColor: tokens.colors.accent, backgroundColor: tokens.colors.cardAlt || tokens.colors.card },
     row: { flexDirection: 'row', alignItems: 'center' },
-    avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#111', alignItems: 'center', justifyContent: 'center', marginRight: 12, borderWidth: 1, borderColor: tokens.colors.border },
+    avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, alignItems: 'center', justifyContent: 'center', marginRight: 12, borderWidth: 1, borderColor: tokens.colors.border },
     companyName: { color: tokens.colors.text, fontWeight: '600', fontSize: 15 },
     meta: { color: tokens.colors.textDim, fontSize: 11, marginTop: 2 },
-    execTag: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: '#111', borderRadius: 10, color: tokens.colors.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
-    unassignedTag: { backgroundColor: '#181818', color: tokens.colors.warning },
-    inactiveTag: { backgroundColor: '#181818', color: tokens.colors.textDim },
-    searchRowLarge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 14 },
+    execTag: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderRadius: 10, color: tokens.colors.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
+    unassignedTag: { backgroundColor: tokens.colors.card, color: tokens.colors.warning },
+    inactiveTag: { backgroundColor: tokens.colors.card, color: tokens.colors.textDim },
+    searchRowLarge: { flexDirection: 'row', alignItems: 'center', backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 14 },
     searchInputLarge: { flex: 1, color: tokens.colors.text, fontSize: 15, fontWeight: '500', paddingVertical: 6 },
-    selectAllLargeBtn: { marginLeft: 10, backgroundColor: tokens.colors.accent, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
-    selectAllLargeText: { color: '#000', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-    actionBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#101010', borderTopWidth: 1, borderColor: '#222', padding: 14, flexDirection: 'row', alignItems: 'center' },
+    selectAllLargeBtn: { marginLeft: 10, backgroundColor: tokens.colors.border, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
+    selectAllLargeText: { color: tokens.colors.text, fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
+    actionBar: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 14, alignItems: 'center', zIndex: 100, elevation: 12, shadowColor: '#000', shadowOpacity: 0.2, shadowOffset: { width: 0, height: -2 }, shadowRadius: 6 },
     actionBarText: { color: tokens.colors.text, fontWeight: '600', flex: 1 },
-    actionBtn: { paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, marginLeft: 8 },
+    actionBarBox: { alignSelf: 'center', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', rowGap: 10, backgroundColor: tokens.colors.card, borderWidth: 2, borderColor: tokens.colors.accent, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 14, minWidth: '70%', maxWidth: '92%' },
+    actionGroup: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', columnGap: 8, flexShrink: 1, flexWrap: 'wrap' },
+    actionBarLeft: { flex: 1 },
+    actionCountBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', backgroundColor: tokens.colors.card, borderWidth: 1, borderColor: tokens.colors.accent, borderRadius: 16, paddingVertical: 6, paddingHorizontal: 10, marginBottom: 2 },
+    actionCountText: { color: tokens.colors.text, fontWeight: '700', fontSize: 12 },
+    actionGroup: { flexDirection: 'row', alignItems: 'center' },
+    actionBtn: { paddingVertical: 9, paddingHorizontal: 14, borderRadius: 12, marginLeft: 8 },
     assignBtn: { backgroundColor: tokens.colors.accent },
+    assignBtnArmed: { backgroundColor: tokens.colors.warning },
+    cancelConfirmBtn: { backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderWidth: 1, borderColor: tokens.colors.border },
+    cancelConfirmText: { color: tokens.colors.textDim, fontWeight: '600' },
     actionBtnText: { color: '#000', fontWeight: '600' },
     unassignBtn: { backgroundColor: tokens.colors.danger },
     unassignBtnText: { color: '#fff', fontWeight: '600' },
-    clearBtn: { backgroundColor: '#222' },
+    clearBtn: { backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderWidth: 1, borderColor: tokens.colors.border },
     clearBtnText: { color: tokens.colors.textDim, fontWeight: '500' },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
     modalCard: { backgroundColor: tokens.colors.card, borderRadius: 20, padding: 20, width: '100%', maxHeight: '80%', borderWidth: 1, borderColor: tokens.colors.border },
     modalTitle: { color: tokens.colors.text, fontSize: 16, fontWeight: '600', marginBottom: 12 },
-    execRow: { paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#111', borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border },
+    modalBodyText: { color: tokens.colors.textDim, fontSize: 14, marginBottom: 12 },
+    modalButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 8 },
+    modalBtn: { paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12 },
+    modalCancel: { backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderWidth: 1, borderColor: tokens.colors.border },
+    modalCancelText: { color: tokens.colors.textDim, fontWeight: '600' },
+    modalConfirm: { backgroundColor: tokens.colors.accent },
+    modalConfirmText: { color: '#000', fontWeight: '700' },
+    modalDanger: { backgroundColor: tokens.colors.danger, borderWidth: 0 },
+    modalDangerText: { color: '#fff', fontWeight: '700' },
+    execRow: { paddingVertical: 10, paddingHorizontal: 12, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border },
     execRowText: { color: tokens.colors.text },
-    closeModalBtn: { marginTop: 14, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#222', borderRadius: 10 },
+    closeModalBtn: { marginTop: 14, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 16, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderRadius: 10 },
     closeModalText: { color: tokens.colors.textDim, fontWeight: '500' },
     infoBanner: { color: tokens.colors.warning, fontSize: 11, textAlign: 'center', marginTop: 8, paddingHorizontal: 12 },
     debugSummary: { color: tokens.colors.textDim, fontSize: 11, textAlign: 'center', marginBottom: 8 },
     execCard: { paddingHorizontal: 16, paddingVertical: 16 },
     countTag: { backgroundColor: tokens.colors.accent, color: '#000', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, fontSize: 12, fontWeight: '600' },
     execHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-    backBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#111', borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border },
+    backBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border },
     backBtnText: { marginLeft: 6, color: tokens.colors.text, fontSize: 12, fontWeight: '600' },
     execHeaderTitle: { flex: 1, textAlign: 'center', color: tokens.colors.text, fontWeight: '600', fontSize: 16 },
     execListContainer: { flex: 1, marginBottom: 16 },
     tabRow: { flexDirection: 'row', marginBottom: 12, gap: 12 },
-    tabBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, backgroundColor: '#111', alignItems: 'center', borderWidth: 1, borderColor: tokens.colors.border },
+    tabBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, alignItems: 'center', borderWidth: 1, borderColor: tokens.colors.border },
     tabBtnActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
     tabText: { color: tokens.colors.textDim, fontSize: 13, fontWeight: '500' },
     tabTextActive: { color: '#000', fontWeight: '600' },
