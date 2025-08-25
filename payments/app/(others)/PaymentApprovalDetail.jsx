@@ -143,7 +143,7 @@ export default function PaymentApprovalDetail() {
                                     </Text>
                                 ) : null}
                                 {payment.next_promise_date && (
-                                    <Text style={styles.bigLine} numberOfLines={1}>Next Promise: {payment.next_promise_date}</Text>
+                                    <Text style={styles.bigLine} numberOfLines={1}>Promise: {payment.next_promise_date}</Text>
                                 )}
                             </View>
                             <View style={styles.amountStatusCol}>

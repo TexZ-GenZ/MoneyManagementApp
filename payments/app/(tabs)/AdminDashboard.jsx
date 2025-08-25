@@ -9,6 +9,7 @@ import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { API_BASE_URL } from '../../src/utils/constants';
+import { formatDate } from '../../src/ui/format';
 
 export default function AdminDashboard() {
   const [recentPayments, setRecentPayments] = useState([]);
@@ -154,7 +155,7 @@ export default function AdminDashboard() {
             {item.billNumbers && item.billNumbers.length ? `Bill ${item.billNumbers.join(', ')}` : 'No Bill'} • {item.executiveName}
           </Text>
           <Text style={styles.recentAmountLine} numberOfLines={1}>
-            {item.amount_collected ? `₹${item.amount_collected}` : 'No Amount'}{item.collected_at ? ` • ${new Date(item.collected_at).toLocaleDateString('en-IN')}` : ''}
+            {item.amount_collected ? `₹${item.amount_collected}` : 'No Amount'}{item.collected_at ? ` • ${formatDate(item.collected_at)}` : ''}
           </Text>
         </View>
         <TouchableOpacity style={styles.detailBtn} onPress={() => router.push({ pathname: '../(others)/PaymentApprovalDetail', params: { payment_id: item.id } })}>

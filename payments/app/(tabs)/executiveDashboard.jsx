@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, FlatList, TouchableOpacity }
 import { useFocusEffect } from 'expo-router';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
+import { formatDate } from '../../src/ui/format';
 import { tokens } from '../../src/ui/tokens';
 import { StorageService } from '../../src/services/storageService';
 import { useRouter } from 'expo-router';
@@ -84,7 +85,7 @@ export default function ExecutiveDashboard() {
 
   const nextActionableCount = overdueCompanies.length + todayCompanies.length;
 
-  const formatShortDate = (d) => d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+  const formatShortDate = (d) => d ? formatDate(d) : '—';
   const badgeFor = (it) => {
     const bucket = it.__cls?.bucket;
     if (bucket === 'overdue') return <Text style={[styles.badge, styles.badgeOverdue]}>OVERDUE</Text>;

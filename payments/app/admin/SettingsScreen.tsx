@@ -4,6 +4,7 @@ import ClockHourPicker from '@/src/ui/components/ClockHourPicker';
 import Screen from '@/src/ui/components/Screen';
 import Card from '@/src/ui/components/Card';
 import { tokens } from '@/src/ui/tokens';
+import { formatDate } from '@/src/ui/format';
 import { useAppDispatch, useAppSelector } from '@/src/store/hooks';
 import { fetchSettings, updateCreditExtensionDays, updateSettings } from '@/src/store/settingsSlice';
 
@@ -100,7 +101,7 @@ export default function SettingsScreen() {
     if (selectedValue == null) return '—';
     const today = new Date();
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + selectedValue);
-    return d.toLocaleDateString();
+  return formatDate(d);
   }, [selectedValue]);
 
   const applyCredit = async () => {

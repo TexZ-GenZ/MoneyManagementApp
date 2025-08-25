@@ -6,6 +6,7 @@ import { logoutUser } from '@/src/store/authSlice';
 import { useRouter } from 'expo-router';
 import Screen from '@/src/ui/components/Screen';
 import Card from '@/src/ui/components/Card';
+import { formatDateTime } from '@/src/ui/format';
 import { tokens } from '@/src/ui/tokens';
 import Constants from 'expo-constants';
 import { API_BASE_URL } from '@/src/utils/constants';
@@ -118,8 +119,8 @@ export default function ProfileScreen() {
           <Card style={styles.cardSection}>
             <SectionTitle text="Session" />
             <Row label="Expires In" value={expiresInMin !== undefined ? `${expiresInMin} min` : '-'} />
-            <Row label="Expires At" value={expMs ? new Date(expMs).toLocaleString() : '-'} />
-            <Row label="Issued At" value={decoded?.iat ? new Date(decoded.iat * 1000).toLocaleString() : '-'} last />
+            <Row label="Expires At" value={expMs ? formatDateTime(expMs) : '-'} />
+            <Row label="Issued At" value={decoded?.iat ? formatDateTime(decoded.iat * 1000) : '-'} last />
           </Card>
           <Card style={styles.cardSection}>
             <SectionTitle text="App" />

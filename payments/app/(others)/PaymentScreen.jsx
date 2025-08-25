@@ -16,9 +16,8 @@ import * as Location from "expo-location";
 import DateTimePickerModal from "react-native-modal-datetime-picker"; // still used for next promise only
 import { Picker } from '@react-native-picker/picker';
 import { StorageService } from "../../src/services/storageService";
-import Screen from '../../src/ui/components/Screen';
-import { Card } from '../../src/ui/components/Card';
-import { tokens } from '../../src/ui/tokens';
+
+import { formatDateTime } from '../../src/ui/format';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
 const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer"];
@@ -292,16 +291,8 @@ export default function CollectPaymentScreen() {
     }
   };
 
-  const formatDateTime = (date) => {
-    return date.toLocaleString('en-IN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
+  // Use shared formatDateTime util for IST, no seconds
+
 
   // Auto set amount on full payment toggle if bill amount provided
   useEffect(() => {
@@ -401,7 +392,7 @@ export default function CollectPaymentScreen() {
               <>
                 <FieldLabel label="Next Promise Date (Required for Partial)" />
                 <TouchableOpacity onPress={showNextPromiseDatePicker} style={styles.fieldBtn} disabled={submitting}>
-                  <Text style={styles.fieldBtnText}>{nextPromiseDate ? nextPromiseDate.toDateString() : 'Select date'}</Text>
+                  <Text style={styles.fieldBtnText}>{nextPromiseDate ? formatDate(nextPromiseDate) : 'Select date'}</Text>
                 </TouchableOpacity>
                 <DateTimePickerModal isVisible={isNextPromiseDatePickerVisible} mode="date" minimumDate={new Date()} onConfirm={handleConfirmNextPromiseDate} onCancel={hideNextPromiseDatePicker} />
               </>

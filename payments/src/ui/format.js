@@ -24,9 +24,19 @@ export function formatDate(dateLike) {
 export function formatDateTime(dateLike) {
     if (!dateLike) return '—';
     try {
-        const d = new Date(dateLike);
-        if (isNaN(d.getTime())) return dateLike;
-        return d.toLocaleString('en-IN', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+    const d = new Date(dateLike);
+    if (isNaN(d.getTime())) return dateLike;
+    // Build "25-Aug-2025, 18:00" in IST (Asia/Kolkata) using formatToParts
+    const opts = { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' };
+    const parts = new Intl.DateTimeFormat('en-GB', opts).formatToParts(d);
+    const lookup = {};
+    parts.forEach(p => { if (p.type && p.value) lookup[p.type] = p.value; });
+    const day = lookup.day || '';
+    const month = (lookup.month || '').replace('.', ''); // ensure no trailing dot
+    const year = lookup.year || '';
+    const hour = lookup.hour || '00';
+    const minute = lookup.minute || '00';
+    return `${day}-${month}-${year}, ${hour}:${minute}`;
     } catch {
         return dateLike;
     }
