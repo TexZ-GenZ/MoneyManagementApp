@@ -179,7 +179,7 @@ export default function AdminDashboard() {
       </Card>
       <View style={styles.sectionSpacer} />
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Recent Payments</Text>
+        <Text style={styles.sectionTitle}>Payments to Approve</Text>
         <TouchableOpacity onPress={() => router.push('../(others)/NotifyAdmin')}><Text style={styles.sectionLink}>View All</Text></TouchableOpacity>
       </View>
       <Card style={styles.recentCard}>

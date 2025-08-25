@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Header
 from pathlib import Path
 from sqlalchemy.orm import Session
-from sqlalchemy import text, or_, func
+from sqlalchemy import text, or_, func, literal
 from typing import Optional, List
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -189,7 +189,7 @@ def list_companies(
     ),
     sort: Optional[str] = Query(
         None,
-        description="name_asc|code_asc|outbal_desc|outbal_asc|amount_desc|amount_asc",
+        description="name_asc|code_asc|outbal_desc|outbal_asc|amount_desc|amount_asc|pending_desc|overdue_desc",
     ),
 ):
     base = db.query(Company).filter(Company.is_archived == False)
@@ -221,7 +221,40 @@ def list_companies(
     total = base.count()
 
     # Sorting
-    if sort == "code_asc":
+    if sort in ("pending_desc", "overdue_desc"):
+        # Join aggregated bill counts when sorting by counts
+        settings_row = ensure_settings_row(db)
+        credit_days = settings_row.credit_extension_days or 0
+        eff_due = func.coalesce(
+            Bill.promise_date, Bill.bill_date + literal(credit_days), Bill.due_date
+        )
+        agg = (
+            db.query(
+                Bill.company_code.label("code"),
+                func.count()
+                .filter((Bill.status == "pending") & (Bill.is_archived == False))
+                .label("pending_count"),
+                func.count()
+                .filter(
+                    (Bill.status == "pending")
+                    & (Bill.is_archived == False)
+                    & (eff_due < func.current_date())
+                )
+                .label("overdue_count"),
+            )
+            .group_by(Bill.company_code)
+            .subquery()
+        )
+        base = base.outerjoin(agg, agg.c.code == Company.code)
+        if sort == "overdue_desc":
+            base = base.order_by(
+                func.coalesce(agg.c.overdue_count, 0).desc(), Company.name.asc()
+            )
+        else:
+            base = base.order_by(
+                func.coalesce(agg.c.pending_count, 0).desc(), Company.name.asc()
+            )
+    elif sort == "code_asc":
         base = base.order_by(Company.code.asc())
     elif sort == "outbal_desc":
         base = base.order_by(Company.outbal.desc())
@@ -244,6 +277,34 @@ def list_companies(
     # Enrich via separate lightweight query (avoids duplicates / distinct complexity)
     code_list = [c.code for c in rows]
     if code_list:
+        # Compute counts for this page
+        settings_row = ensure_settings_row(db)
+        credit_days = settings_row.credit_extension_days or 0
+        eff_due = func.coalesce(
+            Bill.promise_date, Bill.bill_date + literal(credit_days), Bill.due_date
+        )
+        cnt_rows = (
+            db.query(
+                Bill.company_code.label("code"),
+                func.count()
+                .filter((Bill.status == "pending") & (Bill.is_archived == False))
+                .label("pending_count"),
+                func.count()
+                .filter(
+                    (Bill.status == "pending")
+                    & (Bill.is_archived == False)
+                    & (eff_due < func.current_date())
+                )
+                .label("overdue_count"),
+            )
+            .filter(Bill.company_code.in_(code_list))
+            .group_by(Bill.company_code)
+            .all()
+        )
+        counts = {
+            r.code: (int(r.pending_count or 0), int(r.overdue_count or 0))
+            for r in cnt_rows
+        }
         assignments = (
             db.query(ExecAssignment, User)
             .join(User, User.id == ExecAssignment.executive_id)
@@ -252,6 +313,9 @@ def list_companies(
         )
         by_code = {a.company_code: u for a, u in assignments}
         for c in rows:
+            pc, oc = counts.get(c.code, (0, 0))
+            setattr(c, "pending_count", pc)
+            setattr(c, "overdue_count", oc)
             u = by_code.get(c.code)
             if u:
                 setattr(c, "assigned_executive_id", u.id)
@@ -1142,6 +1206,9 @@ def get_executive_companies(
         from collections import defaultdict
 
         best: dict[str, date] = {}
+        pending_counts = defaultdict(int)
+        overdue_counts = defaultdict(int)
+        today = date.today()
         for company_code, promise_date, bill_date, due_date in pending:
             # Effective due is bill.promise_date if set, else bill_date+credit_days, else bill.due_date
             eff_due = None
@@ -1156,11 +1223,16 @@ def get_executive_companies(
                 eff_due = due_date
             if eff_due is None:
                 continue
+            pending_counts[company_code] += 1
+            if eff_due < today:
+                overdue_counts[company_code] += 1
             prev = best.get(company_code)
             if prev is None or eff_due < prev:
                 best[company_code] = eff_due
         for c in items:
             setattr(c, "next_due_date", best.get(c.code))
+            setattr(c, "pending_count", int(pending_counts.get(c.code, 0)))
+            setattr(c, "overdue_count", int(overdue_counts.get(c.code, 0)))
     return {"items": items, "total": len(items)}
 
 
@@ -1193,7 +1265,12 @@ def my_companies(user: User = Depends(get_current_user), db: Session = Depends(g
             )
             .all()
         )
+        from collections import defaultdict
+
         best: dict[str, date] = {}
+        pending_counts = defaultdict(int)
+        overdue_counts = defaultdict(int)
+        today = date.today()
         for company_code, promise_date, bill_date, due_date in pending:
             eff_due = None
             if promise_date is not None:
@@ -1207,11 +1284,16 @@ def my_companies(user: User = Depends(get_current_user), db: Session = Depends(g
                 eff_due = due_date
             if eff_due is None:
                 continue
+            pending_counts[company_code] += 1
+            if eff_due < today:
+                overdue_counts[company_code] += 1
             prev = best.get(company_code)
             if prev is None or eff_due < prev:
                 best[company_code] = eff_due
         for c in items:
             setattr(c, "next_due_date", best.get(c.code))
+            setattr(c, "pending_count", int(pending_counts.get(c.code, 0)))
+            setattr(c, "overdue_count", int(overdue_counts.get(c.code, 0)))
     return {"items": items, "total": len(items)}
 
 

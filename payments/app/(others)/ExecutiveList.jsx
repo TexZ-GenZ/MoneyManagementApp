@@ -81,36 +81,7 @@ export default function AdminExecutiveList() {
     </TouchableOpacity>
   );
 
-  const Header = () => (
-    <>
-      <Card style={styles.searchCard}>
-        <View style={styles.searchRow}>
-          <Ionicons name="search-outline" size={20} color={tokens.colors.accent} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by name or phone..."
-            placeholderTextColor={tokens.colors.textDim}
-            value={search}
-            onChangeText={handleSearch}
-            autoCorrect={false}
-            autoCapitalize='none'
-            returnKeyType='search'
-            blurOnSubmit={false}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearch(""); setFiltered(executives); }}>
-              <Ionicons name="close-circle" size={20} color={tokens.colors.textDim} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </Card>
-      <View style={styles.resultHeader}>
-        <Text style={styles.resultsHeading}>
-          {search ? `Search Results (${filtered.length})` : `All Executives (${executives.length})`}
-        </Text>
-      </View>
-    </>
-  );
+  // Header moved inline into ListHeaderComponent to avoid remounts and preserve TextInput focus
 
   return (
     <Screen title="Executives" subtitle="View list of executives">
@@ -125,7 +96,36 @@ export default function AdminExecutiveList() {
             data={filtered}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderItem}
-            ListHeaderComponent={Header}
+            ListHeaderComponent={(
+              <>
+                <Card style={styles.searchCard}>
+                  <View style={styles.searchRow}>
+                    <Ionicons name="search-outline" size={20} color={tokens.colors.accent} style={styles.searchIcon} />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Search by name or phone..."
+                      placeholderTextColor={tokens.colors.textDim}
+                      value={search}
+                      onChangeText={handleSearch}
+                      autoCorrect={false}
+                      autoCapitalize='none'
+                      returnKeyType='search'
+                      blurOnSubmit={false}
+                    />
+                    {search.length > 0 && (
+                      <TouchableOpacity onPress={() => { setSearch(""); setFiltered(executives); }}>
+                        <Ionicons name="close-circle" size={20} color={tokens.colors.textDim} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </Card>
+                <View style={styles.resultHeader}>
+                  <Text style={styles.resultsHeading}>
+                    {search ? `Search Results (${filtered.length})` : `All Executives (${executives.length})`}
+                  </Text>
+                </View>
+              </>
+            )}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"

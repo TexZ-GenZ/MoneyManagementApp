@@ -2,6 +2,8 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 from app.models.models import (
     Company,
+    Bill,
+    ExecAssignment,
     Notification,
     NotificationType,
     NotificationStatus,
@@ -382,8 +384,99 @@ def _send_exec_pending_pushes(db: Session):
 
 
 def _send_executive_overdue_push(db: Session):
-    # Deprecated: retained for backward compatibility; no-op now.
-    return
+    """Send an aggregated push to each executive summarizing overdue companies (based on pending bills with effective due < today).
+    Respects exec window hours (IST), same as other exec pushes. Runs at notification frequency.
+    """
+    s = db.get(Setting, 1)
+    if not s:
+        return
+    # Window check (IST -> UTC)
+    start_h = s.exec_window_start_hour or 6
+    end_h = s.exec_window_end_hour or 22
+
+    def ist_to_utc(h: int) -> int:
+        return int((h - 5.5) % 24)
+
+    now = datetime.utcnow()
+    utc_start = ist_to_utc(start_h)
+    utc_end = ist_to_utc(end_h)
+    if utc_start < utc_end:
+        in_window = utc_start <= now.hour < utc_end
+    else:
+        in_window = now.hour >= utc_start or now.hour < utc_end
+    if not in_window:
+        return
+
+    credit_days = s.credit_extension_days or 0
+    today = date.today()
+
+    # Fetch pending bills joined to exec assignments and active users
+    rows = (
+        db.query(
+            ExecAssignment.executive_id,
+            Bill.company_code,
+            Bill.promise_date,
+            Bill.bill_date,
+            Bill.due_date,
+        )
+        .join(Bill, Bill.company_code == ExecAssignment.company_code)
+        .join(User, User.id == ExecAssignment.executive_id)
+        .filter(
+            User.is_active == True,
+            Bill.status == "pending",
+            getattr(Bill, "is_archived", False) == False,
+        )
+        .all()
+    )
+    if not rows:
+        return
+
+    # Compute overdue companies per executive (distinct by company)
+    exec_overdue_companies: dict[int, set[str]] = {}
+    for exec_id, company_code, promise_date, bill_date, due_date in rows:
+        eff_due = None
+        if promise_date is not None:
+            eff_due = promise_date
+        elif bill_date is not None:
+            try:
+                eff_due = bill_date + timedelta(days=credit_days)
+            except Exception:
+                eff_due = bill_date
+        else:
+            eff_due = due_date
+        if eff_due is None:
+            continue
+        if eff_due < today:
+            sset = exec_overdue_companies.setdefault(exec_id, set())
+            sset.add(company_code)
+
+    if not exec_overdue_companies:
+        return
+
+    # Tokens per executive
+    exec_ids = list(exec_overdue_companies.keys())
+    tokens = db.query(PushToken).filter(PushToken.user_id.in_(exec_ids)).all()
+    tok_map: dict[int, list[str]] = {}
+    for t in tokens:
+        if t.token.startswith("ExponentPushToken"):
+            tok_map.setdefault(t.user_id, []).append(t.token)
+
+    # Send pushes
+    for exec_id, companies in exec_overdue_companies.items():
+        count = len(companies)
+        if count <= 0:
+            continue
+        title = "Overdue Companies"
+        body = f"{count} companie(s) overdue. Collect soon."
+        for tk in tok_map.get(exec_id, []):
+            try:
+                httpx.post(
+                    "https://exp.host/--/api/v2/push/send",
+                    json={"to": tk, "title": title, "body": body},
+                    timeout=8,
+                )
+            except Exception as e:
+                log.warning("Exec overdue push err=%s", e)
 
 
 def _send_push_token(token: str, title: str, body: str):

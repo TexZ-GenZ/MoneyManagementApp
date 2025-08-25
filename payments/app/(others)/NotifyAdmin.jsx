@@ -214,109 +214,7 @@ export default function AdminNotifyScreen() {
         </View>
     );
 
-    const Header = () => (
-        <Card style={styles.searchCard}>
-            <View style={styles.searchContainer}>
-                <View style={styles.searchInputContainer}>
-                    <Ionicons name="search" color={tokens.colors.textDim} size={18} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search by company name"
-                        placeholderTextColor={tokens.colors.textDim}
-                        value={search}
-                        onChangeText={setSearch}
-                        returnKeyType="search"
-                    />
-                    {search !== '' && (
-                        <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                            <Ionicons name="close-circle" size={18} color={tokens.colors.textDim} />
-                        </TouchableOpacity>
-                    )}
-                </View>
-                <TouchableOpacity
-                    onPress={handleRefresh}
-                    disabled={refreshing}
-                    style={styles.refreshButton}
-                >
-                    <Ionicons
-                        name="refresh"
-                        size={20}
-                        color={tokens.colors.accent}
-                        style={refreshing ? styles.refreshing : {}}
-                    />
-                </TouchableOpacity>
-            </View>
-            {execOptions.length > 0 && (
-                <TouchableOpacity
-                    style={styles.filterToggle}
-                    onPress={() => setShowFilters(!showFilters)}
-                >
-                    <View style={styles.filterToggleLeft}>
-                        <Ionicons name="funnel-outline" size={16} color={tokens.colors.textDim} />
-                        <Text style={styles.filterToggleText}>
-                            Executive Filter
-                            {selectedExecs.size > 0 && ` (${selectedExecs.size})`}
-                        </Text>
-                    </View>
-                    <Ionicons
-                        name={showFilters ? 'chevron-up' : 'chevron-down'}
-                        size={16}
-                        color={tokens.colors.textDim}
-                    />
-                </TouchableOpacity>
-            )}
-            {showFilters && execOptions.length > 0 && (
-                <View style={styles.filterContainer}>
-                    <View style={styles.chipContainer}>
-                        {execOptions.map(executive => {
-                            const isSelected = selectedExecs.has(executive.id);
-                            return (
-                                <TouchableOpacity
-                                    key={executive.id}
-                                    style={[
-                                        styles.chip,
-                                        isSelected ? styles.chipSelected : styles.chipUnselected
-                                    ]}
-                                    onPress={() => toggleExecutiveFilter(executive.id)}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.chipText,
-                                            isSelected && styles.chipTextSelected
-                                        ]}
-                                    >
-                                        {executive.name}
-                                    </Text>
-                                    {executive.count > 0 && (
-                                        <View style={[styles.badge, isSelected && styles.badgeSelected]}>
-                                            <Text style={[styles.badgeText, isSelected && styles.badgeTextSelected]}>
-                                                {executive.count}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                    {selectedExecs.size > 0 && (
-                        <TouchableOpacity
-                            onPress={() => setSelectedExecs(new Set())}
-                            style={styles.clearChipsButton}
-                        >
-                            <Text style={styles.clearChipsText}>Clear selection</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            )}
-            {loading && (
-                <View style={styles.skeletonContainer}>
-                    <SkeletonCard />
-                    <SkeletonCard />
-                    <SkeletonCard />
-                </View>
-            )}
-        </Card>
-    );
+    // Header moved inline into ListHeaderComponent to avoid remounts and keep TextInput focus stable
 
     return (
         <Screen title="Admin Approvals" subtitle={`${filteredItems.length} of ${approvalItems.length} items`}>
@@ -324,7 +222,112 @@ export default function AdminNotifyScreen() {
                 data={loading ? [] : filteredItems}
                 keyExtractor={item => item.id.toString()}
                 renderItem={renderItem}
-                ListHeaderComponent={Header}
+                ListHeaderComponent={(
+                    <Card style={styles.searchCard}>
+                        <View style={styles.searchContainer}>
+                            <View style={styles.searchInputContainer}>
+                                <Ionicons name="search" color={tokens.colors.textDim} size={18} />
+                                <TextInput
+                                    style={styles.searchInput}
+                                    placeholder="Search by company name"
+                                    placeholderTextColor={tokens.colors.textDim}
+                                    value={search}
+                                    onChangeText={setSearch}
+                                    returnKeyType="search"
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
+                                    blurOnSubmit={false}
+                                />
+                                {search !== '' && (
+                                    <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                                        <Ionicons name="close-circle" size={18} color={tokens.colors.textDim} />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            <TouchableOpacity
+                                onPress={handleRefresh}
+                                disabled={refreshing}
+                                style={styles.refreshButton}
+                            >
+                                <Ionicons
+                                    name="refresh"
+                                    size={20}
+                                    color={tokens.colors.accent}
+                                    style={refreshing ? styles.refreshing : {}}
+                                />
+                            </TouchableOpacity>
+                        </View>
+                        {execOptions.length > 0 && (
+                            <TouchableOpacity
+                                style={styles.filterToggle}
+                                onPress={() => setShowFilters(!showFilters)}
+                            >
+                                <View style={styles.filterToggleLeft}>
+                                    <Ionicons name="funnel-outline" size={16} color={tokens.colors.textDim} />
+                                    <Text style={styles.filterToggleText}>
+                                        Executive Filter
+                                        {selectedExecs.size > 0 && ` (${selectedExecs.size})`}
+                                    </Text>
+                                </View>
+                                <Ionicons
+                                    name={showFilters ? 'chevron-up' : 'chevron-down'}
+                                    size={16}
+                                    color={tokens.colors.textDim}
+                                />
+                            </TouchableOpacity>
+                        )}
+                        {showFilters && execOptions.length > 0 && (
+                            <View style={styles.filterContainer}>
+                                <View style={styles.chipContainer}>
+                                    {execOptions.map(executive => {
+                                        const isSelected = selectedExecs.has(executive.id);
+                                        return (
+                                            <TouchableOpacity
+                                                key={executive.id}
+                                                style={[
+                                                    styles.chip,
+                                                    isSelected ? styles.chipSelected : styles.chipUnselected
+                                                ]}
+                                                onPress={() => toggleExecutiveFilter(executive.id)}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.chipText,
+                                                        isSelected && styles.chipTextSelected
+                                                    ]}
+                                                >
+                                                    {executive.name}
+                                                </Text>
+                                                {executive.count > 0 && (
+                                                    <View style={[styles.badge, isSelected && styles.badgeSelected]}>
+                                                        <Text style={[styles.badgeText, isSelected && styles.badgeTextSelected]}>
+                                                            {executive.count}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                                {selectedExecs.size > 0 && (
+                                    <TouchableOpacity
+                                        onPress={() => setSelectedExecs(new Set())}
+                                        style={styles.clearChipsButton}
+                                    >
+                                        <Text style={styles.clearChipsText}>Clear selection</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
+                        {loading && (
+                            <View style={styles.skeletonContainer}>
+                                <SkeletonCard />
+                                <SkeletonCard />
+                                <SkeletonCard />
+                            </View>
+                        )}
+                    </Card>
+                )}
                 ListEmptyComponent={!loading ? renderEmptyState : null}
                 refreshControl={
                     <RefreshControl

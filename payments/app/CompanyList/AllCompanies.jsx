@@ -16,13 +16,13 @@ export default function CompanyListScreen() {
   const [allExecutives, setAllExecutives] = useState([]);
   // Executive filter (unique executive names). Fallback to 'area' field if executive name not provided by API.
   const [execFilters, setExecFilters] = useState([]); // multi usernames
-  const [sortMode, setSortMode] = useState('OUTBAL_DESC'); // default now outbal desc
+  const [sortMode, setSortMode] = useState('OVERDUE_DESC'); // default: overdue high first
   const [showFilters, setShowFilters] = useState(false);
   const router = useRouter();
 
   useEffect(() => { loadCompanies(); }, []);
 
-  // Refetch when server-side capable filters/sorts change (excluding search which has its own flow)
+  // Refetch when server-side capable filters/sorts change (excluding search which is now handled in handleSearch)
   useEffect(() => {
     const params = new URLSearchParams();
     params.set('skip', '0');
@@ -33,8 +33,10 @@ export default function CompanyListScreen() {
     else if (sortMode === 'OUTBAL_ASC') params.set('sort', 'outbal_asc');
     else if (sortMode === 'AMOUNT_DESC') params.set('sort', 'amount_desc');
     else if (sortMode === 'AMOUNT_ASC') params.set('sort', 'amount_asc');
+    else if (sortMode === 'PENDING_DESC') params.set('sort', 'pending_desc');
+    else if (sortMode === 'OVERDUE_DESC') params.set('sort', 'overdue_desc');
     else params.set('sort', 'name_asc');
-    if (search.trim().length >= 2) params.set('q', search.trim());
+    // Don't include search in this effect - it's handled in handleSearch
     const url = `${API_BASE_URL}/companies?${params.toString()}`;
     let cancelled = false;
     (async () => {
@@ -55,22 +57,13 @@ export default function CompanyListScreen() {
     return () => { cancelled = true; };
   }, [execFilters, sortMode]);
 
-  useEffect(() => {
-    // Remote filter when search text length >=2
-    const t = search.trim();
-    if (t.length >= 2) {
-      remoteSearch(t);
-    } else {
-      // fallback to local filtering of initial batch
-      handleSearch(t);
-    }
-  }, [search]);
+  // Remove the problematic useEffect that triggers on every search change
 
   const loadCompanies = async () => {
     setLoading(true);
     try {
       // Initial fetch honors default sort (outbal desc)
-      const response = await fetch(`${API_BASE_URL}/companies?skip=0&limit=1000&sort=outbal_desc`, { method: 'GET', headers: { 'content-type': 'application/json' } });
+      const response = await fetch(`${API_BASE_URL}/companies?skip=0&limit=1000&sort=overdue_desc`, { method: 'GET', headers: { 'content-type': 'application/json' } });
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
       const dataArr = data.items || [];
@@ -102,6 +95,8 @@ export default function CompanyListScreen() {
       else if (sortMode === 'OUTBAL_ASC') params.set('sort', 'outbal_asc');
       else if (sortMode === 'AMOUNT_DESC') params.set('sort', 'amount_desc');
       else if (sortMode === 'AMOUNT_ASC') params.set('sort', 'amount_asc');
+      else if (sortMode === 'PENDING_DESC') params.set('sort', 'pending_desc');
+      else if (sortMode === 'OVERDUE_DESC') params.set('sort', 'overdue_desc');
       else params.set('sort', 'name_asc');
       const response = await fetch(`${API_BASE_URL}/companies?${params.toString()}`, { method: 'GET', headers: { 'content-type': 'application/json' } });
       if (!response.ok) throw new Error('Search failed');
@@ -117,7 +112,22 @@ export default function CompanyListScreen() {
 
   const handleSearch = (text) => {
     setSearch(text);
-    if (!text.trim()) { setFiltered(companies); }
+    const t = text.trim();
+    if (t.length >= 2) {
+      // Remote search for longer queries
+      remoteSearch(t);
+    } else {
+      // Local filtering for short queries
+      if (!t) {
+        setFiltered(companies);
+      } else {
+        const lower = t.toLowerCase();
+        setFiltered(companies.filter(c =>
+          (c.name && c.name.toLowerCase().includes(lower)) ||
+          (c.code && c.code.toLowerCase().includes(lower))
+        ));
+      }
+    }
   };
 
   // Use the preserved full executive list so options don't disappear when filters are applied
@@ -157,6 +167,14 @@ export default function CompanyListScreen() {
               <Text style={styles.metricLabel}>AMOUNT</Text>
               <Text style={styles.metricValue} numberOfLines={1}>{amountNum}</Text>
             </View>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>OVERDUE</Text>
+              <Text style={[styles.metricValue, (item.overdue_count || 0) > 0 ? styles.dangerValue : null]} numberOfLines={1}>{item.overdue_count ?? 0}</Text>
+            </View>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>PENDING</Text>
+              <Text style={styles.metricValue} numberOfLines={1}>{item.pending_count ?? 0}</Text>
+            </View>
           </View>
         </Card>
       </TouchableOpacity>
@@ -175,66 +193,7 @@ export default function CompanyListScreen() {
 
   const clearExec = () => setExecFilters([]);
 
-  const Header = () => (
-    <View>
-      <View style={styles.searchWrapper}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by name or code"
-          value={search}
-          onChangeText={handleSearch}
-          placeholderTextColor={tokens.colors.textFaint}
-          autoCorrect={false}
-          autoCapitalize='none'
-          returnKeyType='search'
-        />
-      </View>
-      <View style={styles.toolbar}>
-        <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowFilters(s => !s)}>
-          <Text style={styles.toolbarBtnText}>Filters & Sort</Text>
-        </TouchableOpacity>
-        <Text style={styles.toolbarSummary} numberOfLines={1}>
-          {`${filtered.length} shown · Sort: ${sortMode.toLowerCase()}${execFilters.length ? ' · Execs: ' + execFilters.length : ''}`}
-        </Text>
-      </View>
-      {showFilters && (
-        <View style={styles.filterPanel}>
-          <Text style={styles.panelHeading}>Sort By</Text>
-          <View style={styles.optionsRow}>
-            <Option label="Outbal High→Low" active={sortMode === 'OUTBAL_DESC'} onPress={() => setSortMode('OUTBAL_DESC')} />
-            <Option label="Outbal Low→High" active={sortMode === 'OUTBAL_ASC'} onPress={() => setSortMode('OUTBAL_ASC')} />
-            <Option label="Amount High→Low" active={sortMode === 'AMOUNT_DESC'} onPress={() => setSortMode('AMOUNT_DESC')} />
-            <Option label="Amount Low→High" active={sortMode === 'AMOUNT_ASC'} onPress={() => setSortMode('AMOUNT_ASC')} />
-          </View>
-          <View style={styles.optionsRow}>
-            <Option label="Name" active={sortMode === 'NAME_ASC'} onPress={() => setSortMode('NAME_ASC')} />
-            <Option label="Code" active={sortMode === 'CODE_ASC'} onPress={() => setSortMode('CODE_ASC')} />
-          </View>
-          <Text style={styles.panelHeading}>Executives ({execFilters.length ? execFilters.length : 'all'})</Text>
-          <View style={styles.execContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {executives.map(e => {
-                const active = execFilters.includes(e);
-                return (
-                  <TouchableOpacity key={e} onPress={() => toggleExec(e)} style={[styles.execPill, active && styles.execPillActive]} activeOpacity={0.7}>
-                    <Text style={[styles.execPillText, active && styles.execPillTextActive]}>{e}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            {execFilters.length > 0 && (
-              <TouchableOpacity onPress={clearExec} style={styles.clearExecBelow} activeOpacity={0.7}>
-                <Text style={styles.clearExecBelowText}>Clear</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity style={styles.closePanelBtn} onPress={() => setShowFilters(false)}>
-            <Text style={styles.closePanelText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+  // Header moved inline into ListHeaderComponent to keep a stable element and avoid remounting on keystrokes
 
   return (
     <Screen title="Companies" subtitle="Browse all companies">
@@ -245,7 +204,68 @@ export default function CompanyListScreen() {
           data={finalData}
           keyExtractor={(item) => item.code}
           renderItem={renderItem}
-          ListHeaderComponent={Header}
+          ListHeaderComponent={(
+            <>
+              <View style={styles.searchWrapper}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search by name or code"
+                  value={search}
+                  onChangeText={handleSearch}
+                  placeholderTextColor={tokens.colors.textFaint}
+                  autoCorrect={false}
+                  autoCapitalize='none'
+                  returnKeyType='search'
+                />
+              </View>
+              <View style={styles.toolbar}>
+                <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowFilters(s => !s)}>
+                  <Text style={styles.toolbarBtnText}>Filters & Sort</Text>
+                </TouchableOpacity>
+                <Text style={styles.toolbarSummary} numberOfLines={1}>
+                  {`${filtered.length} shown · Sort: ${sortMode.toLowerCase()}${execFilters.length ? ' · Execs: ' + execFilters.length : ''}`}
+                </Text>
+              </View>
+              {showFilters && (
+                <View style={styles.filterPanel}>
+                  <Text style={styles.panelHeading}>Sort By</Text>
+                  <View style={styles.optionsRow}>
+                    <Option label="Outbal High→Low" active={sortMode === 'OUTBAL_DESC'} onPress={() => setSortMode('OUTBAL_DESC')} />
+                    <Option label="Outbal Low→High" active={sortMode === 'OUTBAL_ASC'} onPress={() => setSortMode('OUTBAL_ASC')} />
+                    <Option label="Amount High→Low" active={sortMode === 'AMOUNT_DESC'} onPress={() => setSortMode('AMOUNT_DESC')} />
+                    <Option label="Amount Low→High" active={sortMode === 'AMOUNT_ASC'} onPress={() => setSortMode('AMOUNT_ASC')} />
+                  </View>
+                  <View style={styles.optionsRow}>
+                    <Option label="Name" active={sortMode === 'NAME_ASC'} onPress={() => setSortMode('NAME_ASC')} />
+                    <Option label="Code" active={sortMode === 'CODE_ASC'} onPress={() => setSortMode('CODE_ASC')} />
+                    <Option label="Overdue High→Low" active={sortMode === 'OVERDUE_DESC'} onPress={() => setSortMode('OVERDUE_DESC')} />
+                    <Option label="Pending High→Low" active={sortMode === 'PENDING_DESC'} onPress={() => setSortMode('PENDING_DESC')} />
+                  </View>
+                  <Text style={styles.panelHeading}>Executives ({execFilters.length ? execFilters.length : 'all'})</Text>
+                  <View style={styles.execContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {executives.map(e => {
+                        const active = execFilters.includes(e);
+                        return (
+                          <TouchableOpacity key={e} onPress={() => toggleExec(e)} style={[styles.execPill, active && styles.execPillActive]} activeOpacity={0.7}>
+                            <Text style={[styles.execPillText, active && styles.execPillTextActive]}>{e}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                    {execFilters.length > 0 && (
+                      <TouchableOpacity onPress={clearExec} style={styles.clearExecBelow} activeOpacity={0.7}>
+                        <Text style={styles.clearExecBelowText}>Clear</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <TouchableOpacity style={styles.closePanelBtn} onPress={() => setShowFilters(false)}>
+                    <Text style={styles.closePanelText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
           ListEmptyComponent={<Text style={styles.empty}>No companies match filters.</Text>}
           contentContainerStyle={{ paddingBottom: 60 }}
           showsVerticalScrollIndicator={false}

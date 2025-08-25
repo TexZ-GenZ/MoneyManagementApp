@@ -18,6 +18,9 @@ class CompanyBase(BaseModel):
     next_due_date: Optional[date] = None
     outbal: Decimal
     amount: Decimal
+    # Counts (enriched): number of pending and overdue bills
+    pending_count: Optional[int] = None
+    overdue_count: Optional[int] = None
     # Enriched fields (not persisted directly on companies table)
     assigned_executive_id: Optional[int] = None
     assigned_executive_username: Optional[str] = None

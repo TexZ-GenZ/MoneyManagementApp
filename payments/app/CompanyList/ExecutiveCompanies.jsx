@@ -26,7 +26,7 @@ export default function ExecutiveCompaniesScreen() {
   // UI state
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all | active | zero
-  const [sortMode, setSortMode] = useState('outbal_desc'); // outbal_desc | outbal_asc
+  const [sortMode, setSortMode] = useState('overdue_desc'); // overdue_desc | pending_desc | outbal_desc | outbal_asc
 
   const fetchAuthHeader = async () => {
     const header = await StorageService.getAuthHeader();
@@ -93,6 +93,10 @@ export default function ExecutiveCompaniesScreen() {
     };
     list.sort((a, b) => {
       switch (sortMode) {
+        case 'pending_desc':
+          return (b.pending_count || 0) - (a.pending_count || 0);
+        case 'overdue_desc':
+          return (b.overdue_count || 0) - (a.overdue_count || 0);
         case 'outbal_asc':
           return safeNum(a.outbal) - safeNum(b.outbal);
         case 'outbal_desc':
@@ -136,6 +140,14 @@ export default function ExecutiveCompaniesScreen() {
             <Text style={styles.metaLabel}>Outstanding:</Text>
             <Text style={styles.outbalValue}>{money(item.outbal)}</Text>
           </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Overdue:</Text>
+            <Text style={[styles.metaValue, (item.overdue_count || 0) > 0 ? { color: tokens.colors.danger } : null]}>{item.overdue_count ?? 0}</Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Pending:</Text>
+            <Text style={styles.metaValue}>{item.pending_count ?? 0}</Text>
+          </View>
           <View style={styles.tapHintRow}>
             <Ionicons name="document-text-outline" size={14} color={tokens.colors.accent} />
             <Text style={styles.tapHint}>View bills</Text>
@@ -152,6 +164,8 @@ export default function ExecutiveCompaniesScreen() {
   );
 
   const sortChips = [
+    { value: 'overdue_desc', label: 'Overdue High' },
+    { value: 'pending_desc', label: 'Pending High' },
     { value: 'outbal_desc', label: 'Outbal High' },
     { value: 'outbal_asc', label: 'Outbal Low' },
   ];
@@ -162,33 +176,7 @@ export default function ExecutiveCompaniesScreen() {
     </TouchableOpacity>
   );
 
-  const Header = () => (
-    <View>
-      <View style={styles.searchWrapper}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search companies"
-          value={search}
-          onChangeText={setSearch}
-          placeholderTextColor={tokens.colors.textFaint}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-      </View>
-      <Card style={styles.filtersContainer}>
-        <Text style={styles.filtersHeading}>Filter</Text>
-        <View style={styles.filterWrap}>
-          <FilterChip value="all" label="All" />
-          <FilterChip value="active" label=">0 Outbal" />
-          <FilterChip value="zero" label="Zero" />
-        </View>
-        <View style={styles.dividerLine} />
-        <Text style={styles.filtersHeading}>Sort</Text>
-        <View style={styles.sortWrap}>{sortChips.map(s => <SortChip key={s.value} value={s.value} label={s.label} />)}</View>
-      </Card>
-    </View>
-  );
+  // Header moved inline into ListHeaderComponent to avoid remounts and keep TextInput focus stable
 
   return (
     <Screen title={execUsername ? execUsername : 'Executive'} subtitle="Assigned Companies">
@@ -201,7 +189,34 @@ export default function ExecutiveCompaniesScreen() {
           data={filtered}
           keyExtractor={(item) => item.code}
           renderItem={renderItem}
-          ListHeaderComponent={Header}
+          ListHeaderComponent={(
+            <View>
+              <View style={styles.searchWrapper}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search companies"
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholderTextColor={tokens.colors.textFaint}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  blurOnSubmit={false}
+                />
+              </View>
+              <Card style={styles.filtersContainer}>
+                <Text style={styles.filtersHeading}>Filter</Text>
+                <View style={styles.filterWrap}>
+                  <FilterChip value="all" label="All" />
+                  <FilterChip value="active" label=">0 Outbal" />
+                  <FilterChip value="zero" label="Zero" />
+                </View>
+                <View style={styles.dividerLine} />
+                <Text style={styles.filtersHeading}>Sort</Text>
+                <View style={styles.sortWrap}>{sortChips.map(s => <SortChip key={s.value} value={s.value} label={s.label} />)}</View>
+              </Card>
+            </View>
+          )}
           ListEmptyComponent={<Text style={styles.empty}>No companies match.</Text>}
           contentContainerStyle={{ paddingBottom: 80 }}
           showsVerticalScrollIndicator={false}

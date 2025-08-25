@@ -290,6 +290,7 @@ export default function PaymentDetails() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 contentContainerStyle={{ paddingBottom: 140 }}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
             />
             {userRole === 'executive' && (
                 <TouchableOpacity style={styles.fab} onPress={() => router.push({ pathname: './PaymentScreen', params: { company_code: code, bill_id, bill_number, bill_amount: amount } })}>

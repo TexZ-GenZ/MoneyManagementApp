@@ -123,47 +123,7 @@ export default function CompanyBillsList() {
         </View>
     );
 
-    const renderHeader = () => (
-        <View>
-            <Card style={styles.searchCard}>
-                <View style={styles.searchRow}>
-                    <TextInput
-                        value={searchCode}
-                        onChangeText={setSearchCode}
-                        placeholder="Search by bill code"
-                        placeholderTextColor={tokens.colors.textDim}
-                        style={styles.searchInput}
-                        autoCorrect={false}
-                        autoCapitalize="none"
-                        returnKeyType="search"
-                        blurOnSubmit={false}
-                    />
-                    {searchCode?.length > 0 && (
-                        <TouchableOpacity style={styles.clearBtn} onPress={() => setSearchCode('')} activeOpacity={0.7}>
-                            <Text style={styles.clearBtnText}>Clear</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </Card>
-            <View style={styles.statPillsRow}>
-                <View style={styles.statPill}>
-                    <Text style={styles.statPillLabel}>Outstanding</Text>
-                    <Text style={[styles.statPillValue, { color: tokens.colors.danger }]}>{formatCurrency(outbal)}</Text>
-                </View>
-                <View style={styles.statPill}>
-                    <Text style={styles.statPillLabel}>Total</Text>
-                    <Text style={[styles.statPillValue, { color: tokens.colors.accent }]}>{formatCurrency(amount)}</Text>
-                </View>
-            </View>
-            <Card style={styles.filtersCard}>
-                {renderFilters()}
-            </Card>
-            <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{visibleBills.length}</Text></View>
-            {loading && (
-                <View style={{ marginTop: 10 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
-            )}
-        </View>
-    );
+    // Header moved inline into ListHeaderComponent to avoid remounts and keep TextInput focus stable
 
     return (
         <Screen title={name} subtitle={`Code ${code}`}>
@@ -171,7 +131,47 @@ export default function CompanyBillsList() {
                 data={loading ? [] : visibleBills}
                 keyExtractor={item => (item?.id ? item.id.toString() : item.bill_number)}
                 renderItem={renderBillItem}
-                ListHeaderComponent={renderHeader}
+                ListHeaderComponent={(
+                    <View>
+                        <Card style={styles.searchCard}>
+                            <View style={styles.searchRow}>
+                                <TextInput
+                                    value={searchCode}
+                                    onChangeText={setSearchCode}
+                                    placeholder="Search by bill code"
+                                    placeholderTextColor={tokens.colors.textDim}
+                                    style={styles.searchInput}
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
+                                    returnKeyType="search"
+                                    blurOnSubmit={false}
+                                />
+                                {searchCode?.length > 0 && (
+                                    <TouchableOpacity style={styles.clearBtn} onPress={() => setSearchCode('')} activeOpacity={0.7}>
+                                        <Text style={styles.clearBtnText}>Clear</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </Card>
+                        <View style={styles.statPillsRow}>
+                            <View style={styles.statPill}>
+                                <Text style={styles.statPillLabel}>Outstanding</Text>
+                                <Text style={[styles.statPillValue, { color: tokens.colors.danger }]}>{formatCurrency(outbal)}</Text>
+                            </View>
+                            <View style={styles.statPill}>
+                                <Text style={styles.statPillLabel}>Total</Text>
+                                <Text style={[styles.statPillValue, { color: tokens.colors.accent }]}>{formatCurrency(amount)}</Text>
+                            </View>
+                        </View>
+                        <Card style={styles.filtersCard}>
+                            {renderFilters()}
+                        </Card>
+                        <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{visibleBills.length}</Text></View>
+                        {loading && (
+                            <View style={{ marginTop: 10 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
+                        )}
+                    </View>
+                )}
                 ListEmptyComponent={!loading ? renderEmptyComponent : null}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 showsVerticalScrollIndicator={false}
