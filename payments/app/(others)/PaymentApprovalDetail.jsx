@@ -143,12 +143,16 @@ export default function PaymentApprovalDetail() {
                                     </Text>
                                 ) : null}
                                 {payment.next_promise_date && (
-                                    <Text style={styles.bigLine} numberOfLines={1}>Promise: {payment.next_promise_date}</Text>
+                                    <Text style={styles.bigLine}>Promise: {formatDateTime(payment.next_promise_date)}</Text>
                                 )}
+                                {payment?.status ? (
+                                    <View style={styles.statusBelow}>
+                                        <StatusBadge status={payment.status} />
+                                    </View>
+                                ) : null}
                             </View>
                             <View style={styles.amountStatusCol}>
                                 <Text style={styles.amount}>{formatCurrency(payment.amount_collected)}</Text>
-                                <StatusBadge status={payment.status} />
                             </View>
                         </View>
                         <View style={styles.metaGrid}>
@@ -315,6 +319,7 @@ const styles = StyleSheet.create({
     execName: { marginTop: 6, fontSize: 13, fontWeight: '600', color: tokens.colors.text },
     billList: { marginTop: 6, fontSize: 12, fontWeight: '500', color: tokens.colors.textDim },
     bigLine: { marginTop: 6, fontSize: 14, fontWeight: '600', color: tokens.colors.text },
+    statusBelow: { marginTop: 6, alignSelf: 'flex-start' },
     paymentMeta: { marginTop: 4, fontSize: 11, fontWeight: '600', color: tokens.colors.textSubtle, letterSpacing: 0.5 },
     headerTopLine: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
     companyMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap' },
