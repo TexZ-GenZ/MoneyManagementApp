@@ -5,7 +5,7 @@
     "slug": "payments",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/1024.png",
     "scheme": "payments",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,12 +14,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/icon_adaptive_fore.png",
+        "backgroundImage": "./assets/images/icon_adaptive_back.png"
       },
       "notification": {
-        "icon": "./assets/images/drawable-xxxhdpi/ic_stat_payments.png",
-        "color": "#2E86AB"
+        "icon": "./assets/images/notification_icon.png",
+        "color": "#523BF5"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.skywalker421.payments",
@@ -42,7 +42,9 @@
         }
       ],
       "expo-font",
-      "expo-notifications"
+      "expo-notifications",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
     ],
     "experiments": {
       "typedRoutes": true
@@ -52,6 +54,12 @@
       "eas": {
         "projectId": "85091841-3805-4902-9e31-08bafa2771a9"
       }
+    },
+    "runtimeVersion": "1.0",
+    "updates": {
+      "url": "https://u.expo.dev/85091841-3805-4902-9e31-08bafa2771a9",
+      "checkOnLaunch": "ALWAYS",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

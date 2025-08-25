@@ -74,11 +74,11 @@ export default function ExecutiveDashboard() {
   const overdueCompanies = useMemo(() => enriched
     .filter(c => c.__cls.bucket === 'overdue')
     .sort((a, b) => (a.__cls.due - b.__cls.due))
-  , [enriched]);
+    , [enriched]);
   const upcomingCompanies = useMemo(() => enriched
     .filter(c => c.__cls.bucket === 'upcoming')
     .sort((a, b) => (a.__cls.due - b.__cls.due))
-  , [enriched]);
+    , [enriched]);
 
   const activeList = viewMode === 'upcoming' ? upcomingCompanies : overdueCompanies;
   const previewList = activeList.slice(0, 8);
@@ -171,7 +171,7 @@ export default function ExecutiveDashboard() {
           <FlatList data={previewList} keyExtractor={(item, i) => item.code + i} renderItem={renderItem} scrollEnabled={false} />
         )}
       </Card>
-      <View style = {{marginBottom : 30}} ></View>
+      <View style={{ marginBottom: 30 }} ></View>
     </Screen>
   );
 }
