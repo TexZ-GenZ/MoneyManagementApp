@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StorageService } from "@/src/services/storageService";
 import GridBackground from '../(others)/GridBGComponent';
+import { tokens } from "../../src/ui/tokens";
 
 export default function EditUserScreen() {
   const router = useRouter();
@@ -121,13 +122,13 @@ export default function EditUserScreen() {
             <View style={styles.fieldContainer}>
               <Text style={styles.label}>Username</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="person-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+                <Ionicons name="person-outline" size={20} color={tokens.colors.accent} style={styles.inputIcon} />
                 <TextInput
                   value={name}
                   onChangeText={setName}
                   style={styles.input}
                   placeholder="Enter username"
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  placeholderTextColor={tokens.colors.textDim}
                   editable={!loading}
                 />
               </View>
@@ -137,13 +138,13 @@ export default function EditUserScreen() {
             <View style={styles.fieldContainer}>
               <Text style={styles.label}>Phone Number</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="call-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+                <Ionicons name="call-outline" size={20} color={tokens.colors.accent} style={styles.inputIcon} />
                 <TextInput
                   value={phone}
                   onChangeText={setPhone}
                   style={styles.input}
                   placeholder="Enter phone number"
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  placeholderTextColor={tokens.colors.textDim}
                   keyboardType="phone-pad"
                   editable={!loading}
                 />
@@ -154,13 +155,13 @@ export default function EditUserScreen() {
             <View style={styles.fieldContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#c8f14c" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={20} color={tokens.colors.accent} style={styles.inputIcon} />
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
                   style={styles.input}
                   placeholder="Enter new password"
-                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                  placeholderTextColor={tokens.colors.textDim}
                   secureTextEntry
                   editable={!loading}
                 />
@@ -170,9 +171,9 @@ export default function EditUserScreen() {
 
           {/* Update Button */}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.updateButton, loading && styles.updateButtonDisabled]} 
-              onPress={handleUpdate} 
+            <TouchableOpacity
+              style={[styles.updateButton, loading && styles.updateButtonDisabled]}
+              onPress={handleUpdate}
               disabled={loading}
             >
               {loading ? (
@@ -209,47 +210,40 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginTop: 20,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#f9f9f9',
-  },
+  title: { fontSize: 22, fontWeight: '700', color: tokens.colors.text },
   subtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: tokens.colors.textDim,
     marginTop: 4,
   },
   cardContainer: {
-    backgroundColor: '#000',
-    borderRadius: 20,
-    paddingVertical: 24,
+    backgroundColor: tokens.colors.cardAlt,
+    borderRadius: 16,
+    paddingVertical: 20,
     paddingHorizontal: 16,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
     marginBottom: 20,
   },
   fieldContainer: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 13,
+    fontWeight: '600',
+    color: tokens.colors.textSubtle,
     marginBottom: 8,
     marginLeft: 4,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    backgroundColor: tokens.colors.cardAlt,
+    borderRadius: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: tokens.colors.border,
   },
   inputIcon: {
     marginRight: 12,
@@ -258,14 +252,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#fff',
+    color: tokens.colors.text,
   },
   buttonContainer: {
     marginTop: 'auto',
     marginBottom: 30,
   },
   updateButton: {
-    backgroundColor: '#c8f14c',
+    backgroundColor: tokens.colors.accent,
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 16,

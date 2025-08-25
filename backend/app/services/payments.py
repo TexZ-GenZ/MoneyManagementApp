@@ -18,6 +18,9 @@ from app.services.company import recalc_company_totals
 from sqlalchemy.exc import IntegrityError
 import httpx
 from app.models.models import Role, User, PushToken
+from app.core.logging_config import get_logger
+
+log = get_logger(__name__)
 
 
 def create_payment_with_allocations(
@@ -47,10 +50,9 @@ def create_payment_with_allocations(
     if not company:
         raise ValueError("Company not found")
     if next_promise_date:
+        # Must not be earlier than company's credit_date
         if company.credit_date and next_promise_date < company.credit_date:
             raise ValueError("next_promise_date cannot be earlier than credit_date")
-        if company.promise_date and next_promise_date < company.promise_date:
-            raise ValueError("next_promise_date cannot move backward")
     # Validate allocations before creating the payment
     if amount_collected is None or amount_collected <= 0:
         raise ValueError("amount_collected must be > 0")
@@ -100,6 +102,10 @@ def create_payment_with_allocations(
         )
         if amt > effective_remaining:
             raise ValueError("Allocation exceeds bill remaining amount")
+        # Forward-only per-bill promise rule
+        if next_promise_date and getattr(b, "promise_date", None):
+            if next_promise_date < b.promise_date:
+                raise ValueError("next_promise_date cannot move backward for this bill")
         total_alloc += amt
     amount_collected_dec = Decimal(str(amount_collected))
     if total_alloc > amount_collected_dec:
@@ -168,6 +174,14 @@ def create_payment_with_allocations(
                 next_send_at=None,
             )
         )
+        try:
+            log.info(
+                "Created payment_review DB notification company=%s message=%s",
+                company_code,
+                f"Payment pending review for company {company_code}",
+            )
+        except Exception:
+            pass
     elif len(pending_reviews) > 1:
         # Collapse duplicates deterministically: keep the earliest created, mark others stopped
         pending_reviews.sort(key=lambda n: n.created_at)
@@ -209,12 +223,34 @@ def create_payment_with_allocations(
                 if not t.token.startswith("ExponentPushToken"):
                     continue
                 try:
+                    # Compose a richer, concise message for accountants
+                    def _fmt_amount(x):
+                        try:
+                            return f"{float(x):,.2f}"
+                        except Exception:
+                            return str(x)
+
+                    comp = db.get(Company, p.company_code)
+                    comp_part = p.company_code + (
+                        f" ({comp.name})"
+                        if comp and getattr(comp, "name", None)
+                        else ""
+                    )
+                    body = f"#{p.id} • {comp_part} • INR {_fmt_amount(p.amount_collected)} via {p.method} • Collected {p.collected_at.date().isoformat()} • Awaiting accountant approval"
+                    try:
+                        log.info(
+                            "Sending accountant push payment_id=%s body=%s",
+                            p.id,
+                            body,
+                        )
+                    except Exception:
+                        pass
                     httpx.post(
                         "https://exp.host/--/api/v2/push/send",
                         json={
                             "to": t.token,
                             "title": "Payment Submitted",
-                            "body": f"Payment {p.id} awaiting accountant approval",
+                            "body": body,
                             "data": {"payment_id": p.id, "stage": "accountant"},
                         },
                         timeout=8,
@@ -253,16 +289,35 @@ def admin_approve_payment(db: Session, payment_id: int) -> Payment:
         if b.amount_paid >= b.amount:
             b.status = BillStatus.paid
         db.add(b)
-    # update company promise date if provided
+    # update per-bill promise date if provided (do not set company-wide)
     if p.next_promise_date:
+        # Enforce not earlier than company credit_date
         comp = db.get(Company, p.company_code)
-        # Enforce DB check constraint promise_date >= credit_date when both present
-        if comp.credit_date and p.next_promise_date < comp.credit_date:
-            # Clamp to credit_date to avoid IntegrityError while preserving intent
-            comp.promise_date = comp.credit_date
-        else:
-            comp.promise_date = p.next_promise_date
-        db.add(comp)
+        target_date = p.next_promise_date
+        if comp and comp.credit_date and target_date < comp.credit_date:
+            target_date = comp.credit_date
+        # Apply to all allocated bills in this payment
+        for a in allocs:
+            b = (
+                db.query(Bill)
+                .with_for_update()
+                .filter(Bill.id == a.bill_id)
+                .one_or_none()
+            )
+            if not b:
+                continue
+            # Forward only
+            if getattr(b, "promise_date", None) and target_date < b.promise_date:
+                # skip backward moves for this bill
+                continue
+            b.promise_date = target_date
+            try:
+                from app.models.models import Company as CompanyModel  # reuse enum
+
+                b.promise_date_source = CompanyModel.PromiseSource.exec
+            except Exception:
+                pass
+            db.add(b)
     p.status = PaymentStatus.admin_approved
     p.admin_review_at = datetime.utcnow()
     db.add(p)
@@ -278,3 +333,46 @@ def admin_approve_payment(db: Session, payment_id: int) -> Payment:
     recalc_company_totals(db, p.company_code)
     db.refresh(p)
     return p
+
+
+def reconcile_bill_promises(db: Session) -> int:
+    """Rebuild per-bill promise_date from admin-approved payments/allocations.
+    For each bill, set promise_date to the latest applicable next_promise_date among
+    admin-approved payments that allocated to it (clamped to company's credit_date when earlier).
+    Returns number of bills updated.
+    """
+    # Fetch all bills with their company for credit_date clamp
+    bills = (
+        db.query(Bill, Company).join(Company, Company.code == Bill.company_code).all()
+    )
+    updated = 0
+    for b, c in bills:
+        # Get latest next_promise_date from approved payments that allocated to this bill
+        latest = (
+            db.query(func.max(Payment.next_promise_date))
+            .join(PaymentAllocation, PaymentAllocation.payment_id == Payment.id)
+            .filter(
+                PaymentAllocation.bill_id == b.id,
+                Payment.status == PaymentStatus.admin_approved,
+                Payment.next_promise_date.isnot(None),
+            )
+            .scalar()
+        )
+        target = latest
+        if target and c and c.credit_date and target < c.credit_date:
+            target = c.credit_date
+        # Only update if changed
+        if getattr(b, "promise_date", None) != target:
+            b.promise_date = target
+            try:
+                from app.models.models import Company as CompanyModel  # reuse enum
+
+                b.promise_date_source = (
+                    CompanyModel.PromiseSource.exec if target else None
+                )
+            except Exception:
+                pass
+            db.add(b)
+            updated += 1
+    db.commit()
+    return updated

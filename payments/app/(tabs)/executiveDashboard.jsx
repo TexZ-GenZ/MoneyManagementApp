@@ -50,7 +50,6 @@ export default function ExecutiveDashboard() {
 
   const today = useMemo(() => new Date(), []);
   const parseDate = (d) => { try { return d ? new Date(d) : null; } catch { return null; } };
-  const isPast = (d) => d && d < new Date(today.toDateString());
   const money = (v) => {
     if (v === null || v === undefined || v === '') return '—';
     const num = typeof v === 'number' ? v : parseFloat(v);
@@ -59,9 +58,8 @@ export default function ExecutiveDashboard() {
   };
 
   const classify = useCallback((c) => {
-    const credit = parseDate(c.credit_date);
-    const promise = parseDate(c.promise_date);
-    const due = promise || credit; // prefer promise, fallback credit
+    // Use earliest pending bill's promise_date (or dynamic due) provided as next_due_date by API
+    const due = parseDate(c.next_due_date);
     if (!due) return { bucket: 'none', due };
     const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
     const dueMid = new Date(due); dueMid.setHours(0, 0, 0, 0);

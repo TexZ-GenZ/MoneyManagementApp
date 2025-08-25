@@ -93,24 +93,24 @@ export default function TabLayout() {
           fontWeight: '600',
           color: '#ffffff'
         },
-        tabBarItemStyle: {
-          paddingVertical: 6,
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: 52,
-          flex: 1,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '700',
-          marginTop: 2,
-          marginBottom: 2,
-        },
-        tabBarIconStyle: {
-          marginTop: 0,
-          alignItems: 'center',
-          justifyContent: 'center'
-        },
+        // tabBarItemStyle: {
+        //   paddingVertical: 6,
+        //   justifyContent: 'center',
+        //   alignItems: 'center',
+        //   minHeight: 52,
+        //   flex: 1,
+        // },
+        // tabBarLabelStyle: {
+        //   fontSize: 12,
+        //   fontWeight: '700',
+        //   marginTop: 2,
+        //   marginBottom: 2,
+        // },
+        // tabBarIconStyle: {
+        //   marginTop: 0,
+        //   alignItems: 'center',
+        //   justifyContent: 'center'
+        // },
         tabBarStyle: baseTabBarStyle,
       }}>
 
@@ -125,9 +125,9 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'} color={color} />
           ),
-          tabBarLabel: ({ color }) => (
-            <Text style={{ color, fontSize: 12, fontWeight: '700', marginTop: 2, textAlign: 'center' }}>Admin Dashboard</Text>
-          ),
+          // tabBarLabel: ({ color }) => (
+          //   <Text style={{ color, fontSize: 12, fontWeight: '700', marginTop: 2, textAlign: 'center' }}>Admin Dashboard</Text>
+          // ),
         }}
       />
 
@@ -169,7 +169,7 @@ export default function TabLayout() {
         name="History"
         options={{
           title: 'History',
-          href: (userRole === 'accountant' || userRole === 'executive') ? '/(tabs)/UnifiedHistory' : null,
+          href: (userRole === 'accountant' || userRole === 'executive') ? '/(tabs)/History' : null,
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name={focused ? 'time' : 'time-outline'} color={color} />
           ),
@@ -186,28 +186,7 @@ export default function TabLayout() {
               name={focused ? 'person' : 'person-outline'}
               color={color}
               size={26}
-              style={{
-                alignSelf: 'center',
-                marginTop: -9,
-              }}
-            />
-          ),
-          tabBarLabel: ({ color }) => (
-            <Text
-              includeFontPadding={true}
-              allowFontScaling={false}
-              numberOfLines={1}
-              style={{
-                color,
-                fontSize: 11,
-                fontWeight: '700',
-                textAlign: 'center',
-                marginTop: -4,
-                marginBottom: 0,
-              }}
-            >
-              Profile
-            </Text>
+            ></TabBarIcon>
           ),
           headerRight: () => (
             <TabBarIcon

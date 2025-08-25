@@ -81,10 +81,10 @@ export default function AdminExecutiveList() {
     </TouchableOpacity>
   );
 
-  return (
-    <Screen title="Executives" subtitle="View list of executives">
+  const Header = () => (
+    <>
       <Card style={styles.searchCard}>
-        <View style={styles.searchWrapper}>
+        <View style={styles.searchRow}>
           <Ionicons name="search-outline" size={20} color={tokens.colors.accent} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
@@ -92,6 +92,10 @@ export default function AdminExecutiveList() {
             placeholderTextColor={tokens.colors.textDim}
             value={search}
             onChangeText={handleSearch}
+            autoCorrect={false}
+            autoCapitalize='none'
+            returnKeyType='search'
+            blurOnSubmit={false}
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => { setSearch(""); setFiltered(executives); }}>
@@ -105,6 +109,11 @@ export default function AdminExecutiveList() {
           {search ? `Search Results (${filtered.length})` : `All Executives (${executives.length})`}
         </Text>
       </View>
+    </>
+  );
+
+  return (
+    <Screen title="Executives" subtitle="View list of executives">
       <View style={styles.listFlex}>
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -116,8 +125,10 @@ export default function AdminExecutiveList() {
             data={filtered}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderItem}
+            ListHeaderComponent={Header}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={filtered.length === 0 ? { flexGrow: 1, justifyContent: 'center' } : { paddingBottom: 40 }}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Ionicons name="people-outline" size={48} color={tokens.colors.textDim} />
@@ -137,32 +148,17 @@ export default function AdminExecutiveList() {
 }
 
 const styles = StyleSheet.create({
-  searchCard: { paddingVertical: 20, paddingHorizontal: 16, marginBottom: 24 },
+  // Align with themed search UI used elsewhere (Bills screen)
+  searchCard: { marginBottom: 12, padding: 12 },
   listFlex: { flex: 1, paddingHorizontal: 4 },
-  searchWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#fff',
-  },
+  searchRow: { flexDirection: 'row', alignItems: 'center' },
+  searchIcon: { marginRight: 12 },
+  searchInput: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, color: tokens.colors.text, fontSize: 16 },
   resultsSection: { flex: 1 },
   resultHeader: {
     marginBottom: 10,
   },
-  resultsHeading: { color: tokens.colors.text, fontSize: 16, fontWeight: '600' },
+  resultsHeading: { color: tokens.colors.text, fontSize: 16, fontWeight: '700' },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -181,7 +177,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  executiveIconWrapper: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(200, 241, 76, 0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 16 },
+  executiveIconWrapper: { width: 44, height: 44, borderRadius: 22, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
   executiveDetails: {
     flex: 1,
   },

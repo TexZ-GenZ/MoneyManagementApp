@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from "@expo/vector-icons";
+import { tokens } from "../../src/ui/tokens";
 import { StorageService } from "@/src/services/storageService";
 import GridBackground from '../(others)/GridBGComponent';
 
@@ -115,12 +116,12 @@ export default function EditUserFindScreen() {
               <Ionicons
                 name="search-outline"
                 size={20}
-                color="#c8f14c"
+                color={tokens.colors.accent}
                 style={styles.searchIcon}
               />
               <TextInput
                 placeholder="Enter username or phone"
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                placeholderTextColor={tokens.colors.textDim}
                 value={input}
                 onChangeText={setInput}
                 style={styles.input}
@@ -154,7 +155,7 @@ export default function EditUserFindScreen() {
                     >
                       <View style={styles.userInfo}>
                         <View style={styles.userIconWrapper}>
-                          <Ionicons name="person" size={20} color="#c8f14c" />
+                          <Ionicons name="person" size={20} color={tokens.colors.accent} />
                         </View>
                         <View style={styles.userDetails}>
                           <Text style={styles.userName}>{item.username}</Text>
@@ -192,50 +193,38 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginTop: 20,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#f9f9f9',
-  },
+  title: { fontSize: 22, fontWeight: '700', color: tokens.colors.text },
   subtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: tokens.colors.textDim,
     marginTop: 4,
   },
   cardContainer: {
-    backgroundColor: '#000',
-    borderRadius: 20,
-    paddingVertical: 24,
+    backgroundColor: tokens.colors.cardAlt,
+    borderRadius: 16,
+    paddingVertical: 20,
     paddingHorizontal: 16,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
     marginBottom: 20,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    backgroundColor: tokens.colors.cardAlt,
+    borderRadius: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: tokens.colors.border,
     marginBottom: 16,
   },
   searchIcon: {
     marginRight: 12,
   },
-  input: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#fff',
-  },
+  input: { flex: 1, paddingVertical: 12, fontSize: 16, color: tokens.colors.text },
   searchButton: {
-    backgroundColor: '#c8f14c',
+    backgroundColor: tokens.colors.accent,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -250,7 +239,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   error: {
-    color: '#ff6b6b',
+    color: tokens.colors.danger,
     marginBottom: 10,
     textAlign: 'center',
     fontSize: 14,
@@ -259,18 +248,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   resultsHeading: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: tokens.colors.text,
     fontSize: 16,
     marginBottom: 10,
-    fontFamily: 'Inter',
+    fontWeight: '700',
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.border,
   },
   userInfo: {
     flexDirection: 'row',
@@ -281,7 +270,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(200, 241, 76, 0.1)',
+    backgroundColor: tokens.colors.cardAlt,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -289,27 +280,17 @@ const styles = StyleSheet.create({
   userDetails: {
     flex: 1,
   },
-  userName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  userPhone: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-  },
+  userName: { color: tokens.colors.text, fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  userPhone: { color: tokens.colors.textDim, fontSize: 14 },
   editIconWrapper: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(200, 241, 76, 0.1)',
+    backgroundColor: tokens.colors.cardAlt,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  arrow: {
-    color: '#c8f14c',
-    fontSize: 18,
-    marginLeft: 8,
-  },
+  arrow: { color: tokens.colors.accent, fontSize: 18, marginLeft: 8 },
 });

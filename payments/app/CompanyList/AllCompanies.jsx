@@ -175,8 +175,8 @@ export default function CompanyListScreen() {
 
   const clearExec = () => setExecFilters([]);
 
-  return (
-    <Screen title="Companies" subtitle="Browse all companies">
+  const Header = () => (
+    <View>
       <View style={styles.searchWrapper}>
         <TextInput
           style={styles.searchInput}
@@ -233,19 +233,24 @@ export default function CompanyListScreen() {
           </TouchableOpacity>
         </View>
       )}
+    </View>
+  );
+
+  return (
+    <Screen title="Companies" subtitle="Browse all companies">
       {loading ? (
         <ActivityIndicator size="large" color={tokens.colors.accent} style={{ marginTop: 30 }} />
       ) : (
-        <>
-          <FlatList
-            data={finalData}
-            keyExtractor={(item) => item.code}
-            renderItem={renderItem}
-            ListEmptyComponent={<Text style={styles.empty}>No companies match filters.</Text>}
-            contentContainerStyle={{ paddingBottom: 60 }}
-            showsVerticalScrollIndicator={false}
-          />
-        </>
+        <FlatList
+          data={finalData}
+          keyExtractor={(item) => item.code}
+          renderItem={renderItem}
+          ListHeaderComponent={Header}
+          ListEmptyComponent={<Text style={styles.empty}>No companies match filters.</Text>}
+          contentContainerStyle={{ paddingBottom: 60 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
       )}
     </Screen>
   );

@@ -10,6 +10,7 @@ class BillOut(BaseModel):
     company_code: str
     bill_date: date
     due_date: date
+    promise_date: Optional[date] = None
     amount: Decimal
     amount_paid: Decimal
     status: str
@@ -21,3 +22,7 @@ class BillOut(BaseModel):
 class BillList(BaseModel):
     items: List[BillOut]
     total: int
+
+
+class BillUpdatePromise(BaseModel):
+    promise_date: date

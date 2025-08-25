@@ -4,6 +4,7 @@ export interface Bill {
   code: string; // Company code (foreign key)
   date: string; // Bill date
   due_date: string; // Credit date
+  promise_date?: string | null; // Per-bill promise date (authoritative when present)
   debit: number; // Bill amount
   status: 'pending' | 'paid' | 'partial';
   paidAmount?: number;

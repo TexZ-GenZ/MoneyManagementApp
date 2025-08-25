@@ -10,6 +10,10 @@ import { formatDateTime } from '@/src/ui/format';
 import { tokens } from '@/src/ui/tokens';
 import Constants from 'expo-constants';
 import { API_BASE_URL } from '@/src/utils/constants';
+import { Ionicons } from '@expo/vector-icons';
+
+// Avoid double-applying IST on this screen: formatDateTime already adds +05:30.
+const IST_OFFSET_MS = 330 * 60 * 1000;
 
 type MeResponse = {
   id: string | number;
@@ -20,7 +24,6 @@ type MeResponse = {
 };
 
 type DecodedToken = { exp?: number; iat?: number;[k: string]: any };
-
 
 function decodeJwt(token?: string): DecodedToken | null {
   if (!token) return null;
@@ -80,9 +83,28 @@ export default function ProfileScreen() {
     router.replace('/login');
   };
 
+  // No refresh button; session does not renew here.
+
   const now = Date.now();
   const expMs = decoded?.exp ? decoded.exp * 1000 : undefined;
   const expiresInMin = expMs ? Math.max(0, Math.round((expMs - now) / 60000)) : undefined;
+  // formatDateTime already converts to IST. Our exp appears already IST-relative here,
+  // so adjust to UTC before formatting to avoid double addition on this screen only.
+  const displayExpMs = expMs ? expMs - IST_OFFSET_MS : undefined;
+
+  const initials = (name?: string) => {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
+
+  const maskMobile = (m?: string) => {
+    if (!m) return '-';
+    const digits = m.replace(/\D/g, '');
+    if (digits.length < 5) return '••••';
+    return `••••••${digits.slice(-4)}`;
+  };
 
 
   return (
@@ -105,33 +127,32 @@ export default function ProfileScreen() {
         <ScrollView contentContainerStyle={{ paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
           <Card style={styles.cardSection}>
             <View style={styles.headerRow}>
-              <Text style={styles.name}>{me.username}</Text>
-              <RoleBadge role={me.role} />
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials(me.username)}</Text>
+              </View>
+              <View style={{ flex: 1, paddingLeft: 12 }}>
+                <Text style={styles.name}>{me.username}</Text>
+                <View style={styles.tagRow}>
+                  <RoleBadge role={me.role} />
+                </View>
+              </View>
             </View>
-            <Text style={styles.subMeta}>User ID: {me.id}</Text>
           </Card>
           <Card style={styles.cardSection}>
             <SectionTitle text="Account" />
-            <Row label="Role" value={me.role} />
-            <Row label="Area" value={me.area || '-'} />
-            <Row label="Mobile" value={me.mobile || '-'} last />
+            <IconRow icon="id-card-outline" label="Role" value={me.role} />
+            <IconRow icon="call-outline" label="Mobile" value={maskMobile(me.mobile)} last />
           </Card>
           <Card style={styles.cardSection}>
             <SectionTitle text="Session" />
-            <Row label="Expires In" value={expiresInMin !== undefined ? `${expiresInMin} min` : '-'} />
-            <Row label="Expires At" value={expMs ? formatDateTime(expMs) : '-'} />
-            <Row label="Issued At" value={decoded?.iat ? formatDateTime(decoded.iat * 1000) : '-'} last />
+            <IconRow icon="timer-outline" label="Expires In" value={expiresInMin !== undefined ? `${expiresInMin} min` : '-'} />
+            <IconRow icon="calendar-outline" label="Expires At" value={displayExpMs ? formatDateTime(displayExpMs) : '-'} last />
           </Card>
-          <Card style={styles.cardSection}>
-            <SectionTitle text="App" />
-            <Row label="Version" value={appVersion} last />
-          </Card>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: tokens.colors.accent, flex: 1 }]} onPress={load}>
-              <Text style={styles.actionBtnText}>Refresh</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: tokens.colors.danger, flex: 1 }]} onPress={handleLogout}>
-              <Text style={styles.actionBtnText}>Logout</Text>
+          {/* Removed session, app version, and advanced details for a cleaner view */}
+          <View style={{ marginTop: 16 }}>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.logoutText}>Logout</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -151,6 +172,18 @@ function Row({ label, value, last = false }: { label: string; value: string; las
 
 function SectionTitle({ text }: { text: string }) {
   return <Text style={styles.sectionTitle}>{text}</Text>;
+}
+
+function IconRow({ icon, label, value, last = false }: { icon: any; label: string; value: string; last?: boolean }) {
+  return (
+    <View style={[styles.row, !last && styles.rowBorder]}>
+      <View style={styles.rowLeft}>
+        <Ionicons name={icon} size={16} color={tokens.colors.textSubtle} style={{ marginRight: 8 }} />
+        <Text style={styles.rowLabel} allowFontScaling={false}>{label}</Text>
+      </View>
+      <Text style={styles.rowValue} numberOfLines={1} ellipsizeMode="tail">{value}</Text>
+    </View>
+  );
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -175,15 +208,34 @@ const styles = StyleSheet.create({
   error: { color: tokens.colors.danger, fontSize: 14 },
   cardSection: { marginTop: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  name: { fontSize: 20, fontWeight: '700', color: tokens.colors.text, flex: 1, paddingRight: 10 },
+  name: { fontSize: 20, fontWeight: '800', color: tokens.colors.text, flex: 1, paddingRight: 10 },
   subMeta: { marginTop: 6, fontSize: 12, color: tokens.colors.textDim },
+  avatar: {
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: tokens.colors.cardAlt,
+    borderWidth: 1, borderColor: tokens.colors.border,
+    alignItems: 'center', justifyContent: 'center'
+  },
+  avatarText: { color: tokens.colors.text, fontWeight: '800', fontSize: 20 },
+  tagRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: tokens.colors.textSubtle, marginBottom: 4, letterSpacing: 0.5 },
-  row: { paddingVertical: 10, flexDirection: 'row', alignItems: 'flex-start' },
+  row: { paddingVertical: 12, flexDirection: 'row', alignItems: 'center' },
   rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: tokens.colors.divider },
-  rowLabel: { width: 110, color: tokens.colors.textDim, fontSize: 13, paddingRight: 8 },
-  rowValue: { flex: 1, color: tokens.colors.text, fontSize: 14, fontWeight: '600', textAlign: 'right', flexWrap: 'wrap' },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', width: 100 },
+  rowLabel: { color: tokens.colors.textDim, fontSize: 13, flex: 1 },
+  rowValue: { color: tokens.colors.text, fontSize: 14, fontWeight: '700', flex: 1, textAlign: 'right', paddingLeft: 16 },
   roleBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, alignSelf: 'flex-start' },
   roleBadgeText: { color: '#000', fontWeight: '700', fontSize: 12 },
   actionBtn: { paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
   actionBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.danger,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  logoutText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+
 });

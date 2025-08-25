@@ -18,7 +18,7 @@ from app.schemas.company import (
     AssignmentBatchIn,
     UnassignBatchIn,
 )
-from app.schemas.bill import BillList, BillOut
+from app.schemas.bill import BillList, BillOut, BillUpdatePromise
 from app.schemas.payment import (
     PaymentSubmit,
     PaymentOut,
@@ -48,6 +48,11 @@ from app.services.company import (
     resolve_promise_crossed_notifications,
 )
 from app.services.payments import create_payment_with_allocations, admin_approve_payment
+from app.services.payments import (
+    create_payment_with_allocations,
+    admin_approve_payment,
+    reconcile_bill_promises,
+)
 from app.services.notifications import run_notification_scan
 from app.core.scheduler import reschedule_jobs
 from app.services.imports import (
@@ -58,6 +63,7 @@ from app.models.models import (
     User,
     Company,
     Bill,
+    BillStatus,
     Payment,
     PaymentStatus,
     Setting,
@@ -69,6 +75,9 @@ from app.models.models import (
     NotificationStatus,
     PushToken,
 )
+from app.core.logging_config import get_logger
+
+log = get_logger(__name__)
 
 router = APIRouter()
 
@@ -304,6 +313,7 @@ def company_dashboard(code: str, db: Session = Depends(get_db)):
             company_code=b.company_code,
             bill_date=b.bill_date,
             due_date=dynamic_due,
+            promise_date=getattr(b, "promise_date", None),
             amount=b.amount,
             amount_paid=b.amount_paid,
             status=b.status.value if hasattr(b.status, "value") else str(b.status),
@@ -317,6 +327,11 @@ def company_dashboard(code: str, db: Session = Depends(get_db)):
         area=c.area,
         credit_date=c.credit_date,
         promise_date=c.promise_date,
+        promise_date_source=(
+            c.promise_date_source.value
+            if getattr(c, "promise_date_source", None)
+            else None
+        ),
         outbal=c.outbal,
         amount=c.amount,
         pending_bills=pending_out,
@@ -330,7 +345,10 @@ def company_dashboard(code: str, db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("executive", "admin"))],
 )
 def set_promise_date(
-    code: str, body: CompanyUpdatePromise, db: Session = Depends(get_db)
+    code: str,
+    body: CompanyUpdatePromise,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     c = db.get(Company, code)
     if not c:
@@ -344,6 +362,16 @@ def set_promise_date(
             status_code=400, detail="promise_date cannot be earlier than credit_date"
         )
     c.promise_date = body.promise_date
+    try:
+        from app.models.models import Company as CompanyModel, Role as RoleEnum
+
+        c.promise_date_source = (
+            CompanyModel.PromiseSource.exec
+            if user.role == RoleEnum.executive
+            else CompanyModel.PromiseSource.admin
+        )
+    except Exception:
+        pass
     db.commit()
     db.refresh(c)
     recompute_company_amounts(db, c.code)
@@ -368,10 +396,24 @@ def set_credit_date(
             status_code=400,
             detail="Existing promise_date earlier than new credit_date; update promise_date first",
         )
+    old_credit = c.credit_date
     c.credit_date = body.credit_date
     db.commit()
     db.refresh(c)
-    recompute_company_amounts(db, c.code)
+    # If promise was auto-derived earlier, recompute auto promise; if exec/admin-set, do not override
+    try:
+        from app.models.models import Company as CompanyModel
+
+        if (
+            getattr(c, "promise_date_source", None)
+            and c.promise_date_source == CompanyModel.PromiseSource.auto
+        ) or c.promise_date is None:
+            # Recompute credit_date via totals, which will set promise_date if empty
+            recalc_company_totals(db, c.code)
+        else:
+            recompute_company_amounts(db, c.code)
+    except Exception:
+        recompute_company_amounts(db, c.code)
     resolve_promise_crossed_notifications(db, c)
     return c
 
@@ -411,6 +453,7 @@ def list_company_bills(
                 company_code=b.company_code,
                 bill_date=b.bill_date,
                 due_date=dynamic_due,
+                promise_date=getattr(b, "promise_date", None),
                 amount=b.amount,
                 amount_paid=b.amount_paid,
                 status=b.status.value if hasattr(b.status, "value") else str(b.status),
@@ -435,6 +478,7 @@ def get_bill(bill_id: int, db: Session = Depends(get_db)):
         company_code=b.company_code,
         bill_date=b.bill_date,
         due_date=dynamic_due,
+        promise_date=getattr(b, "promise_date", None),
         amount=b.amount,
         amount_paid=b.amount_paid,
         status=b.status.value if hasattr(b.status, "value") else str(b.status),
@@ -471,6 +515,67 @@ def bill_payment_history(bill_id: int, db: Session = Depends(get_db)):
             )
         )
     return BillPaymentHistory(items=items, total=len(items))
+
+
+# Admin: Update a bill's promise date directly
+@router.patch(
+    "/admin/bills/{bill_id}/promise-date",
+    response_model=BillOut,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_update_bill_promise(
+    bill_id: int,
+    body: BillUpdatePromise,
+    db: Session = Depends(get_db),
+):
+    b = db.get(Bill, bill_id)
+    if not b or b.is_archived:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    # Forward-only for per-bill promise
+    if getattr(b, "promise_date", None) and body.promise_date < b.promise_date:
+        raise HTTPException(status_code=400, detail="Cannot move promise_date backward")
+    # Enforce not earlier than company's credit_date
+    comp = db.get(Company, b.company_code)
+    if comp and comp.credit_date and body.promise_date < comp.credit_date:
+        raise HTTPException(
+            status_code=400,
+            detail="promise_date cannot be earlier than company's credit_date",
+        )
+    # Apply
+    b.promise_date = body.promise_date
+    try:
+        from app.models.models import Company as CompanyModel
+
+        b.promise_date_source = CompanyModel.PromiseSource.admin
+    except Exception:
+        pass
+    # If bill is fully paid, keep status; otherwise ensure pending/partial remains
+    if b.amount_paid >= b.amount:
+        b.status = BillStatus.paid
+    elif b.amount_paid > 0:
+        b.status = BillStatus.partial
+    else:
+        b.status = BillStatus.pending
+    db.add(b)
+    db.commit()
+    db.refresh(b)
+    # Return BillOut with dynamic due consistent with get_bill
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
+    dynamic_due = (
+        (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
+    )
+    return BillOut(
+        id=b.id,
+        bill_number=b.bill_number,
+        company_code=b.company_code,
+        bill_date=b.bill_date,
+        due_date=dynamic_due,
+        promise_date=getattr(b, "promise_date", None),
+        amount=b.amount,
+        amount_paid=b.amount_paid,
+        status=b.status.value if hasattr(b.status, "value") else str(b.status),
+    )
 
 
 # Payments
@@ -727,6 +832,19 @@ def payments_activity(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+# Admin utility: reconcile per-bill promise dates from approved payments
+@router.post(
+    "/admin/reconcile/bill-promises",
+    dependencies=[Depends(require_roles("admin"))],
+)
+def admin_reconcile_bill_promises(db: Session = Depends(get_db)):
+    try:
+        count = reconcile_bill_promises(db)
+        return {"updated": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # (duplicate payments_activity removed; single definition exists above before /payments/{payment_id})
 
 
@@ -813,12 +931,32 @@ def accountant_approve(
                 try:
                     import httpx
 
+                    # Build richer body for admin stage
+                    comp = db.get(Company, p.company_code)
+                    comp_part = p.company_code + (
+                        f" ({comp.name})"
+                        if comp and getattr(comp, "name", None)
+                        else ""
+                    )
+                    try:
+                        amt = f"{float(p.amount_collected):,.2f}"
+                    except Exception:
+                        amt = str(p.amount_collected)
+                    body = f"#{p.id} • {comp_part} • INR {amt} via {p.method} • Collected {p.collected_at.date().isoformat()} • Awaiting admin approval"
+                    try:
+                        log.info(
+                            "Sending admin push payment_id=%s body=%s",
+                            p.id,
+                            body,
+                        )
+                    except Exception:
+                        pass
                     httpx.post(
                         "https://exp.host/--/api/v2/push/send",
                         json={
                             "to": t.token,
                             "title": "Payment Ready",
-                            "body": f"Payment {p.id} awaiting admin approval",
+                            "body": body,
                             "data": {"payment_id": p.id, "stage": "admin"},
                         },
                         timeout=8,
@@ -984,6 +1122,45 @@ def get_executive_companies(
         .filter(Company.code.in_(codes), Company.is_archived == False)
         .all()
     )
+    # Compute earliest pending bill-level due/promise per company in-bulk
+    if items:
+        code_list = [c.code for c in items]
+        settings_row = ensure_settings_row(db)
+        credit_days = settings_row.credit_extension_days or 0
+        # Fetch minimal fields from bills to compute next_due_date
+        pending = (
+            db.query(
+                Bill.company_code, Bill.promise_date, Bill.bill_date, Bill.due_date
+            )
+            .filter(
+                Bill.company_code.in_(code_list),
+                Bill.status == "pending",
+                Bill.is_archived == False,
+            )
+            .all()
+        )
+        from collections import defaultdict
+
+        best: dict[str, date] = {}
+        for company_code, promise_date, bill_date, due_date in pending:
+            # Effective due is bill.promise_date if set, else bill_date+credit_days, else bill.due_date
+            eff_due = None
+            if promise_date is not None:
+                eff_due = promise_date
+            elif bill_date is not None:
+                try:
+                    eff_due = bill_date + timedelta(days=credit_days)
+                except Exception:
+                    eff_due = bill_date
+            else:
+                eff_due = due_date
+            if eff_due is None:
+                continue
+            prev = best.get(company_code)
+            if prev is None or eff_due < prev:
+                best[company_code] = eff_due
+        for c in items:
+            setattr(c, "next_due_date", best.get(c.code))
     return {"items": items, "total": len(items)}
 
 
@@ -1000,6 +1177,41 @@ def my_companies(user: User = Depends(get_current_user), db: Session = Depends(g
         .filter(Company.code.in_(codes), Company.is_archived == False)
         .all()
     )
+    # Compute earliest pending bill-level due/promise per company
+    if items:
+        code_list = [c.code for c in items]
+        settings_row = ensure_settings_row(db)
+        credit_days = settings_row.credit_extension_days or 0
+        pending = (
+            db.query(
+                Bill.company_code, Bill.promise_date, Bill.bill_date, Bill.due_date
+            )
+            .filter(
+                Bill.company_code.in_(code_list),
+                Bill.status == "pending",
+                Bill.is_archived == False,
+            )
+            .all()
+        )
+        best: dict[str, date] = {}
+        for company_code, promise_date, bill_date, due_date in pending:
+            eff_due = None
+            if promise_date is not None:
+                eff_due = promise_date
+            elif bill_date is not None:
+                try:
+                    eff_due = bill_date + timedelta(days=credit_days)
+                except Exception:
+                    eff_due = bill_date
+            else:
+                eff_due = due_date
+            if eff_due is None:
+                continue
+            prev = best.get(company_code)
+            if prev is None or eff_due < prev:
+                best[company_code] = eff_due
+        for c in items:
+            setattr(c, "next_due_date", best.get(c.code))
     return {"items": items, "total": len(items)}
 
 

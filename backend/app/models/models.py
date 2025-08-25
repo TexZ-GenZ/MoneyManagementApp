@@ -43,6 +43,15 @@ class Company(Base):
     outbal: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
     credit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     promise_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    class PromiseSource(str, enum.Enum):
+        auto = "auto"  # derived from credit_date/extension
+        exec = "exec"  # set via executive partial payment or exec API
+        admin = "admin"  # set via admin API override
+
+    promise_date_source: Mapped[PromiseSource | None] = mapped_column(
+        Enum(PromiseSource, name="promisesource"), nullable=True
+    )
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
@@ -59,6 +68,23 @@ class Bill(Base):
     company_code: Mapped[str] = mapped_column(ForeignKey("companies.code"), index=True)
     bill_date: Mapped[date] = mapped_column(Date)
     due_date: Mapped[date] = mapped_column(Date)
+    # Optional per-bill promise date (manual or exec/admin-set); when present, UI should prefer over due_date
+    promise_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Track source for auditing/behaviour parity with Company
+    try:
+        from app.models.models import Company as _CompanyModel  # type: ignore
+
+        _PromiseSource = _CompanyModel.PromiseSource  # reuse same Enum
+    except Exception:  # pragma: no cover - during alembic runtime import order
+
+        class _PromiseSource(str, enum.Enum):
+            auto = "auto"
+            exec = "exec"
+            admin = "admin"
+
+    promise_date_source: Mapped[_PromiseSource | None] = mapped_column(
+        Enum(_PromiseSource, name="promisesource"), nullable=True
+    )
     amount: Mapped[Numeric] = mapped_column(Numeric(14, 2))
     amount_paid: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
     status: Mapped[BillStatus] = mapped_column(

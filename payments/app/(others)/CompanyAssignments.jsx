@@ -322,10 +322,12 @@ export default function CompanyAssignments() {
                             <TouchableOpacity activeOpacity={0.75} onPress={() => { setExecViewExec(item); setCompanySearch(''); clearSelection(); }}>
                                 <Card style={styles.execCard}>
                                     <View style={styles.row}>
-                                        <View style={[styles.avatar, { backgroundColor: '#111' }]}><Ionicons name={item.is_active ? 'person' : 'person-outline'} size={18} color={item.is_active ? tokens.colors.accent : tokens.colors.textDim} /></View>
+                                        <View style={styles.execAvatar}>
+                                            <Ionicons name={item.is_active ? 'person' : 'person-outline'} size={18} color={item.is_active ? tokens.colors.accent : tokens.colors.textDim} />
+                                        </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={styles.companyName}>{item.username}</Text>
-                                            <Text style={styles.meta}>{item.is_active ? 'Active' : 'Inactive'}</Text>
+                                            <Text style={[styles.meta, !item.is_active && styles.metaInactive]}>{item.is_active ? 'Active' : 'Inactive'}</Text>
                                         </View>
                                         <Text style={styles.countTag}>{item.count}</Text>
                                     </View>
@@ -489,7 +491,8 @@ const styles = StyleSheet.create({
     meta: { color: tokens.colors.textDim, fontSize: 11, marginTop: 2 },
     execTag: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderRadius: 10, color: tokens.colors.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
     unassignedTag: { backgroundColor: tokens.colors.card, color: tokens.colors.warning },
-    inactiveTag: { backgroundColor: tokens.colors.card, color: tokens.colors.textDim },
+    inactiveTag: { backgroundColor: tokens.colors.card, color: tokens.colors.danger },
+    metaInactive: { color: tokens.colors.danger, fontWeight: '700' },
     searchRowLarge: { flexDirection: 'row', alignItems: 'center', backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 14 },
     searchInputLarge: { flex: 1, color: tokens.colors.text, fontSize: 15, fontWeight: '500', paddingVertical: 6 },
     selectAllLargeBtn: { marginLeft: 10, backgroundColor: tokens.colors.border, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
@@ -531,6 +534,7 @@ const styles = StyleSheet.create({
     infoBanner: { color: tokens.colors.warning, fontSize: 11, textAlign: 'center', marginTop: 8, paddingHorizontal: 12 },
     debugSummary: { color: tokens.colors.textDim, fontSize: 11, textAlign: 'center', marginBottom: 8 },
     execCard: { paddingHorizontal: 16, paddingVertical: 16 },
+    execAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderWidth: 1, borderColor: tokens.colors.border, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     countTag: { backgroundColor: tokens.colors.accent, color: '#000', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, fontSize: 12, fontWeight: '600' },
     execHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
     backBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: tokens.colors.cardAlt || tokens.colors.card, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border },

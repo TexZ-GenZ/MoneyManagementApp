@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import ClockHourPicker from '@/src/ui/components/ClockHourPicker';
 import Screen from '@/src/ui/components/Screen';
 import Card from '@/src/ui/components/Card';
@@ -30,19 +31,20 @@ export default function SettingsScreen() {
 
   // Initialize notification state when fetched
   const FREQ_OPTS = [1, 2, 3, 4, 6, 8, 12, 24];
+  // Hydrate frequency once from backend
   useEffect(() => {
     if (notifEveryHours != null && notifEvery === '') {
       if (FREQ_OPTS.includes(notifEveryHours)) { setNotifEveryMode(notifEveryHours); }
       else { setNotifEveryMode('custom'); setNotifEveryCustom(String(notifEveryHours)); }
       setNotifEvery(String(notifEveryHours));
     }
-    if (startHourIst === '') {
-      if (execWindowStartHour != null) { setStartHourIst(String(execWindowStartHour)); } else { setStartHourIst('6'); }
-    }
-    if (endHourIst === '') {
-      if (execWindowEndHour != null) { setEndHourIst(String(execWindowEndHour)); } else { setEndHourIst('22'); }
-    }
-  }, [notifEveryHours, execWindowStartHour, execWindowEndHour]);
+  }, [notifEveryHours]);
+
+  // Hydrate window hours from backend; do not default until reset is explicitly used
+  useEffect(() => {
+    setStartHourIst(execWindowStartHour != null ? String(execWindowStartHour) : '');
+    setEndHourIst(execWindowEndHour != null ? String(execWindowEndHour) : '');
+  }, [execWindowStartHour, execWindowEndHour]);
 
   useEffect(() => { dispatch(fetchSettings()); }, [dispatch]);
   useEffect(() => {
@@ -101,7 +103,7 @@ export default function SettingsScreen() {
     if (selectedValue == null) return '—';
     const today = new Date();
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + selectedValue);
-  return formatDate(d);
+    return formatDate(d);
   }, [selectedValue]);
 
   const applyCredit = async () => {
@@ -214,24 +216,42 @@ export default function SettingsScreen() {
             maxLength={3}
           />
         )}
-        <View style={{ height: 20 }} />
-        <View style={styles.tabRow}>
-          <TouchableOpacity style={[styles.tabBtn, activeTab === 'start' && styles.tabBtnActive]} onPress={() => setActiveTab('start')}>
-            <Text style={[styles.tabBtnText, activeTab === 'start' && styles.tabBtnTextActive]}>Start</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tabBtn, activeTab === 'end' && styles.tabBtnActive]} onPress={() => setActiveTab('end')}>
-            <Text style={[styles.tabBtnText, activeTab === 'end' && styles.tabBtnTextActive]}>End</Text>
+        <View style={{ height: 12 }} />
+        <View style={styles.windowHeaderRow}>
+          <Text style={styles.smallLabel}>Current Window (IST)</Text>
+          <TouchableOpacity
+            style={styles.resetChip}
+            onPress={() => { setStartHourIst('6'); setEndHourIst('22'); }}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="refresh" size={14} color={tokens.colors.textSubtle} style={{ marginRight: 6 }} />
+            <Text style={styles.resetChipText}>Reset to 06–22</Text>
           </TouchableOpacity>
         </View>
+        <View style={styles.windowRow}>
+          <TouchableOpacity
+            style={[styles.windowChip, activeTab === 'start' && styles.windowChipActive]}
+            onPress={() => setActiveTab('start')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.windowChipLabel}>Start</Text>
+            <Text style={styles.windowChipTime}>{computeIstDisplay(startHourIst || '--')}</Text>
+          </TouchableOpacity>
+          <View style={{ width: 10 }} />
+          <TouchableOpacity
+            style={[styles.windowChip, activeTab === 'end' && styles.windowChipActive]}
+            onPress={() => setActiveTab('end')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.windowChipLabel}>End</Text>
+            <Text style={styles.windowChipTime}>{computeIstDisplay(endHourIst || '--')}</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={{ height: 8 }} />
         <ClockHourPicker value={activeTab === 'start' ? (startHourIst === '' ? null : istToUtc(Number(startHourIst))) : (endHourIst === '' ? null : istToUtc(Number(endHourIst)))} onChange={handleWindowHourChange} />
         <View style={{ height: 12 }} />
         <Text style={styles.clockMeta}>Window (IST): {computeIstDisplay(startHourIst || '--')} – {computeIstDisplay(endHourIst || '--')}</Text>
         {invalidWindow && <Text style={styles.error}>Start and End cannot be the same hour.</Text>}
-        <TouchableOpacity style={styles.resetBtn} onPress={() => {
-          setStartHourIst('6'); setEndHourIst('22');
-        }}>
-          <Text style={styles.resetBtnText}>Reset Window (06–22 IST)</Text>
-        </TouchableOpacity>
         <Text style={styles.note}>Executives (plus admin/accountant) receive repeating pending bills / approvals notifications every chosen frequency only inside this window.</Text>
         <TouchableOpacity
           style={[styles.saveBtn, (!dirtyNotif || savingNotif || isLoading || invalidWindow) && styles.saveBtnDisabled]}
@@ -306,4 +326,13 @@ const styles = StyleSheet.create({
   tabBtnTextActive: { color: '#000' },
   resetBtn: { marginTop: 10, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.10)', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   resetBtnText: { color: tokens.colors.textSubtle, fontSize: 12, fontWeight: '600' },
+  // New styles for clearer Current Window + Reset UX
+  windowHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  windowRow: { flexDirection: 'row', alignItems: 'stretch', marginBottom: 6 },
+  windowChip: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: tokens.colors.border },
+  windowChipActive: { borderColor: tokens.colors.accent },
+  windowChipLabel: { fontSize: 11, color: tokens.colors.textSubtle, fontWeight: '700', marginBottom: 2, letterSpacing: 0.3 },
+  windowChipTime: { fontSize: 16, fontWeight: '800', color: tokens.colors.text },
+  resetChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.10)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  resetChipText: { color: tokens.colors.textSubtle, fontSize: 12, fontWeight: '700' },
 });

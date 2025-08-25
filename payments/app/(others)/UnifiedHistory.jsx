@@ -99,7 +99,7 @@ export default function UnifiedHistory() {
     };
 
     const renderItem = ({ item }) => (
-        <TouchableOpacity onPress={() => openDetail(item)} activeOpacity={0.85}>
+        <TouchableOpacity onPress={() => openDetail(item)} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="View payment details">
             <Card style={[styles.rowCard, { borderLeftColor: statusColor(item.status) }]}>
                 <View style={styles.rowTop}>
                     <View style={styles.companyInfo}>
@@ -151,12 +151,16 @@ export default function UnifiedHistory() {
                         </View>
                     )}
                 </View>
+                {/* Clickable indicator */}
+                <View style={styles.clickHint}>
+                    <Ionicons name="chevron-forward" size={18} color={tokens.colors.textSubtle} />
+                </View>
             </Card>
         </TouchableOpacity>
     );
 
     return (
-        <Screen title="History" subtitle="Latest payment activity" showTopBarTitle scroll hideBackButton>
+        <Screen title="History" subtitle="Latest payment activity" scroll hideBackButton hideTopBar>
             <Card style={styles.searchCard}>
                 <View style={styles.searchRow}>
                     <Ionicons name="search" size={18} color={tokens.colors.textSubtle} style={{ marginRight: 8 }} />
@@ -239,14 +243,16 @@ function ucfirst(s) { if (!s) return s; return s.charAt(0).toUpperCase() + s.sli
 function kPlural(n) { return n === 1 ? '' : 's'; }
 
 const styles = StyleSheet.create({
-    searchCard: { marginHorizontal: 12, marginBottom: 10, padding: 12 },
+    searchCard: { marginHorizontal: 6, marginBottom: 10, padding: 12 },
     searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: tokens.colors.cardAlt, borderRadius: 10, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 10, paddingVertical: 8 },
     searchInput: { flex: 1, color: tokens.colors.text, fontSize: 14 },
     filtersRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 8 },
     rowCard: {
-        marginHorizontal: 12,
+        marginHorizontal: 6,
         marginBottom: 12,
         padding: 12,
+        paddingRight: 28,
+        paddingBottom: 24,
         borderLeftWidth: 4
     },
     rowTop: {
@@ -257,6 +263,7 @@ const styles = StyleSheet.create({
     companyInfo: {
         flex: 1
     },
+    clickHint: { position: 'absolute', right: 10, bottom: 10, opacity: 0.7 },
     companyName: {
         fontSize: 16,
         fontWeight: '800',

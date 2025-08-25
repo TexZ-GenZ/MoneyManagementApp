@@ -93,17 +93,30 @@ def scan_promise_credit_overdue(db: Session, interval_hours: int | None = None):
                         next_send_at=now,
                     )
                 )
-                log.info("Created promise_crossed notification company=%s", c.code)
+                log.info(
+                    "Created promise_crossed notification company=%s message=%s",
+                    c.code,
+                    msg,
+                )
             else:
                 # schedule resend if due
                 if _should_resend(existing, now, interval_hours):
                     existing.last_sent_at = now
                     existing.next_send_at = now + timedelta(hours=interval_hours)
-                    log.info("Resent promise_crossed notification company=%s", c.code)
+                    log.info(
+                        "Resent promise_crossed notification company=%s message=%s",
+                        c.code,
+                        existing.message,
+                    )
         else:
             if existing:
                 existing.status = NotificationStatus.stopped
                 existing.message = "Resolved: dates moved forward"
+                log.info(
+                    "Stopped promise_crossed notification company=%s message=%s",
+                    c.code,
+                    existing.message,
+                )
     db.commit()
 
 
@@ -133,13 +146,8 @@ def scan_payment_review(db: Session, interval_hours: int | None = None):
             .first()
         )
         if not existing:
-            # Stage-specific messaging to clarify workflow step
-            if p.status == PaymentStatus.submitted:
-                msg = f"Payment {p.id} pending accountant approval"
-            elif p.status == PaymentStatus.accountant_approved:
-                msg = f"Payment {p.id} pending admin approval"
-            else:
-                msg = f"Payment {p.id} pending review"
+            # Stage-specific messaging with richer details
+            msg = build_payment_review_message(db, p)
             db.add(
                 Notification(
                     company_code=p.company_code,
@@ -151,18 +159,27 @@ def scan_payment_review(db: Session, interval_hours: int | None = None):
                     next_send_at=now,
                 )
             )
-            log.info("Created payment_review notification payment=%s", p.id)
-        else:
-            # If payment advanced from accountant to admin stage, update message
-            if (
-                p.status == PaymentStatus.accountant_approved
-                and "admin approval" not in existing.message
-            ):
-                existing.message = f"Payment {p.id} pending admin approval"
-            if _should_resend(existing, now, interval_hours):
-                existing.last_sent_at = now
-                existing.next_send_at = now + timedelta(hours=interval_hours)
-                log.info("Resent payment_review notification payment=%s", p.id)
+            log.info(
+                "Created payment_review notification payment=%s message=%s",
+                p.id,
+                msg,
+            )
+    else:
+        # Update message as payment advances, keep details consistent
+        existing.message = build_payment_review_message(db, p)
+        log.info(
+            "Updated payment_review notification payment=%s message=%s",
+            p.id,
+            existing.message,
+        )
+        if _should_resend(existing, now, interval_hours):
+            existing.last_sent_at = now
+            existing.next_send_at = now + timedelta(hours=interval_hours)
+            log.info(
+                "Resent payment_review notification payment=%s message=%s",
+                p.id,
+                existing.message,
+            )
     if payments.count() == 0:
         db.query(Notification).filter(
             Notification.type == NotificationType.payment_review,
@@ -171,6 +188,42 @@ def scan_payment_review(db: Session, interval_hours: int | None = None):
             {Notification.status: NotificationStatus.stopped}, synchronize_session=False
         )
     db.commit()
+
+
+def build_payment_review_message(db: Session, p: Payment) -> str:
+    """Compose a concise, detailed message for a payment awaiting review/approval.
+    Example: "#123 • CTOT (Acme Co) • INR 12,345.67 via UPI • Collected 2025-08-25 • Awaiting admin approval"
+    """
+    comp: Company | None = db.get(Company, p.company_code)
+    company_part = f"{p.company_code}"
+    if comp and getattr(comp, "name", None):
+        company_part += f" ({comp.name})"
+    try:
+        amt = f"{float(p.amount_collected):,.2f}"
+    except Exception:
+        amt = str(p.amount_collected)
+    amt_part = f"INR {amt}"
+    method_part = f"via {p.method}" if p.method else ""
+    date_part = (
+        p.collected_at.date().isoformat() if getattr(p, "collected_at", None) else ""
+    )
+    stage = (
+        "accountant"
+        if p.status == PaymentStatus.submitted
+        else ("admin" if p.status == PaymentStatus.accountant_approved else "review")
+    )
+    parts = [
+        f"#{p.id}",
+        company_part,
+        f"{amt_part} {method_part}".strip(),
+        f"Collected {date_part}" if date_part else None,
+        (
+            f"Awaiting {stage} approval"
+            if stage in ("accountant", "admin")
+            else "Pending review"
+        ),
+    ]
+    return " • ".join([x for x in parts if x])
 
 
 def run_notification_scan(db: Session):

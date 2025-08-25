@@ -39,7 +39,16 @@ export default function Screen({
             end={{ x: 0, y: 1 }}
             style={styles.gradient}
         >
-            <SafeAreaView style={[styles.safe, { paddingBottom: 0, paddingTop: hideTopBar ? 20 : 10 }]}>
+            <SafeAreaView style={[
+                styles.safe,
+                {
+                    paddingBottom: 0,
+                    // When top bar is hidden, add more top padding and always include safe area
+                    paddingTop: hideTopBar
+                        ? Math.max(insets.top, 20) + 8 // at least 28px including status bar
+                        : Math.max(insets.top, 6),
+                }
+            ]}>
                 {!hideTopBar && (
                     <View style={[styles.topBar, { paddingTop: Math.max(4, insets.top) }]}>
                         {canGoBack && !hideBackButton ? (

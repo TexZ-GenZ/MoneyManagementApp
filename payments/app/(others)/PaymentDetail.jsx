@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl, ScrollView, Linking } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { StorageService } from '../../src/services/storageService';
 import { useAppSelector } from '../../src/store/hooks';
 import { useRouter } from 'expo-router';
@@ -12,6 +12,8 @@ import { formatCurrency, formatDateTime, formatDate } from '../../src/ui/format'
 import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 
 import { API_BASE_URL } from '../../src/utils/constants';
+import { onPaymentUpdate } from '../../src/events/paymentEvents';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
 export default function PaymentDetails() {
     // Params (may be partial / stale, we'll refetch authoritative data)
@@ -25,14 +27,15 @@ export default function PaymentDetails() {
     const [sortOrder, setSortOrder] = useState('recent'); // recent | oldest | amount_desc
     const [bill, setBill] = useState(null); // BillOut
     const [company, setCompany] = useState(null); // CompanyBase
+    const [showPromisePicker, setShowPromisePicker] = useState(false);
     const router = useRouter();
     const userRole = useAppSelector(s => s.auth.user?.role || '');
 
     useEffect(() => { fetchAll(); }, [bill_id]);
 
-    const fetchAll = async () => {
+    const fetchAll = useCallback(async () => {
         await Promise.all([fetchBill(), fetchCompany(), fetchPaymentHistory()]);
-    };
+    }, [bill_id]);
 
     const authHeaders = async () => {
         const tok = await StorageService.getToken();
@@ -74,6 +77,63 @@ export default function PaymentDetails() {
     const onRefresh = () => { setRefreshing(true); fetchAll(); };
 
     const toggleExpand = (idx) => setExpandedIdx(expandedIdx === idx ? null : idx);
+
+    const submitPromiseDate = async (pickedDate) => {
+        try {
+            if (!pickedDate) return;
+            const h = await authHeaders();
+            const iso = new Date(pickedDate).toISOString().split('T')[0];
+            const r = await fetch(`${API_BASE_URL}/admin/bills/${bill_id}/promise-date`, {
+                method: 'PATCH',
+                headers: h,
+                body: JSON.stringify({ promise_date: iso })
+            });
+            if (!r.ok) {
+                const txt = await r.text();
+                throw new Error(txt || 'HTTP error');
+            }
+            await fetchBill();
+            Alert.alert('Updated', 'Promise date updated.');
+        } catch (e) {
+            console.error('update promise failed', e);
+            const msg = String(e?.message || e);
+            Alert.alert('Error', msg.includes('earlier') ? 'Promise date cannot be earlier than credit date or current promise.' : 'Failed to update promise date.');
+        } finally {
+            setShowPromisePicker(false);
+        }
+    };
+
+    const minPickDate = useMemo(() => {
+        const today = new Date();
+        const candidates = [today];
+        if (bill?.promise_date) {
+            const d = new Date(bill.promise_date);
+            if (!isNaN(d.getTime())) candidates.push(d);
+        }
+        if (company?.credit_date) {
+            const d = new Date(company.credit_date);
+            if (!isNaN(d.getTime())) candidates.push(d);
+        }
+        return new Date(Math.max.apply(null, candidates.map(d => d.getTime())));
+    }, [bill?.promise_date, company?.credit_date]);
+
+    // Refresh when screen regains focus (after returning from add payment)
+    useFocusEffect(
+        useCallback(() => {
+            fetchAll();
+        }, [fetchAll])
+    );
+
+    // Also react to global payment update events to refresh instantly
+    useEffect(() => {
+        const off = onPaymentUpdate((evt) => {
+            // If event is specific to a bill, optionally filter by current bill_id
+            if (!evt || !evt.bill_id || String(evt.bill_id) === String(bill_id)) {
+                fetchAll();
+            }
+        });
+        return off;
+    }, [bill_id, fetchAll]);
 
     // Derived + filtering/sorting
     const filteredPayments = useMemo(() => {
@@ -172,18 +232,20 @@ export default function PaymentDetails() {
             </Card>
             <Card style={styles.infoCard}>
                 <View style={styles.billHeadlineRow}>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.headLeftRow}>
                         <Text style={styles.billHeadline}>{bill?.bill_number || bill_number}</Text>
-                        <Text style={styles.billDates}>{formatDate(bill?.bill_date || bill_date)}  •  Promise {formatDate(bill?.due_date || resolvedPromiseDateParam)}</Text>
                     </View>
                     <StatusBadge status={(bill?.status || status || 'pending')} />
                 </View>
+                <Text style={styles.billDates}>
+                    {formatDate(bill?.bill_date || bill_date)}  •  Promise {formatDate(bill?.promise_date || resolvedPromiseDateParam || bill?.due_date)}
+                </Text>
                 <InfoRow label="Bill Amount" value={formatCurrency(billAmountNum)} accent />
                 <InfoRow label="Status" value={(bill?.status || status)} />
                 <InfoRow label="Paid" value={formatCurrency(totalPaid)} />
                 <InfoRow label="Outstanding" value={formatCurrency(outstandingNum)} danger />
                 <InfoRow label="Bill Date" value={bill?.bill_date ? formatDate(bill.bill_date) : (bill_date ? formatDate(bill_date) : '—')} />
-                <InfoRow label="Promise Date" value={bill?.due_date ? formatDate(bill.due_date) : (resolvedPromiseDateParam ? formatDate(resolvedPromiseDateParam) : '—')} />
+                <InfoRow label="Promise Date" value={bill?.promise_date ? formatDate(bill.promise_date) : (resolvedPromiseDateParam ? formatDate(resolvedPromiseDateParam) : (bill?.due_date ? formatDate(bill.due_date) : '—'))} />
                 <View style={styles.divider} />
                 <InfoRow label="Company Code" value={company?.code || code} />
                 <InfoRow label="Company Name" value={company?.name || name} />
@@ -203,8 +265,22 @@ export default function PaymentDetails() {
         </View>
     );
 
+    const HeaderNode = (
+        <View style={styles.pageHeader}>
+            <Text style={styles.pageTitle}>{company?.name || name || code}</Text>
+            <View style={styles.pageHeaderSubRow}>
+                <Text style={styles.pageSubtitle} numberOfLines={1}>{`Bill ${bill?.bill_number || bill_number}`}</Text>
+                {userRole === 'admin' && (
+                    <TouchableOpacity style={styles.promiseBtnHeader} onPress={() => setShowPromisePicker(true)}>
+                        <Text style={styles.promiseBtnHeaderText}>Change Promise Date</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        </View>
+    );
+
     return (
-        <Screen title={company?.name || name || code} subtitle={`Bill ${bill?.bill_number || bill_number}`}>
+        <Screen header={HeaderNode}>
             <FlatList
                 data={filteredPayments}
                 keyExtractor={(item, idx) => item?.id ? item.id.toString() : idx.toString()}
@@ -220,6 +296,13 @@ export default function PaymentDetails() {
                     <Text style={styles.fabText}>Add Payment</Text>
                 </TouchableOpacity>
             )}
+            <DateTimePickerModal
+                isVisible={showPromisePicker}
+                mode="date"
+                onConfirm={submitPromiseDate}
+                onCancel={() => setShowPromisePicker(false)}
+                minimumDate={minPickDate}
+            />
         </Screen>
     );
 }
@@ -285,4 +368,17 @@ const styles = StyleSheet.create({
     infoLabel: { color: tokens.colors.textDim, fontSize: 12 },
     infoValue: { color: tokens.colors.text, fontSize: 13, fontWeight: '600', marginLeft: 12 },
     divider: { height: 1, backgroundColor: tokens.colors.divider, marginVertical: 10 },
+    promiseBtn: { alignSelf: 'flex-start', backgroundColor: tokens.colors.accent, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginBottom: 10 },
+    promiseBtnText: { color: '#000', fontWeight: '700', fontSize: 12 },
+    headLeftRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
+    promiseBtnInline: { backgroundColor: tokens.colors.accent, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+    promiseBtnInlineText: { color: '#000', fontWeight: '700', fontSize: 12 },
+    // Page header (outside card)
+    pageHeader: { marginBottom: 12 },
+    pageHeaderTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    pageHeaderSubRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    pageTitle: { fontSize: 30, fontWeight: '800', color: '#ffffff', letterSpacing: 0.6 },
+    pageSubtitle: { fontSize: 18, color: 'rgba(255,255,255,0.75)', marginTop: 8, flex: 1 },
+    promiseBtnHeader: { backgroundColor: tokens.colors.accent, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+    promiseBtnHeaderText: { color: '#000', fontWeight: '700', fontSize: 12 },
 });

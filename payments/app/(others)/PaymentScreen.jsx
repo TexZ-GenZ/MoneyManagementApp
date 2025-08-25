@@ -16,10 +16,12 @@ import * as Location from "expo-location";
 import DateTimePickerModal from "react-native-modal-datetime-picker"; // still used for next promise only
 import { Picker } from '@react-native-picker/picker';
 import { StorageService } from "../../src/services/storageService";
-
-import { formatDateTime } from '../../src/ui/format';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
+import Screen from '../../src/ui/components/Screen';
+import Card from '../../src/ui/components/Card';
+import { tokens } from '../../src/ui/tokens';
+import { API_BASE_URL } from '../../src/utils/constants';
+import { emitPaymentUpdate } from '../../src/events/paymentEvents';
+import { formatDate, formatDateTime } from '../../src/ui/format';
 const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer"];
 
 // Simple UUID v4 generator
@@ -50,13 +52,13 @@ export default function CollectPaymentScreen() {
   // Helper to floor a number to 2 decimal places
   const floor2 = (n) => Math.floor((n + Number.EPSILON) * 100) / 100;
 
-  // Sanitize & floor to 2 decimal places for partial payment input
+  // Sanitize & floor to 2 decimal places for partial payment input (fully editable)
   const handlePartialAmountChange = (raw) => {
     // Allow only digits and a single dot
     let cleaned = raw.replace(/[^0-9.]/g, '');
+    // Only one dot allowed
     const firstDot = cleaned.indexOf('.');
     if (firstDot !== -1) {
-      // Remove additional dots
       cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
     }
     // Limit to two decimal digits (truncate, not round up)
@@ -65,16 +67,8 @@ export default function CollectPaymentScreen() {
       let decPart = cleaned.slice(firstDot + 1, firstDot + 3); // at most 2 digits
       cleaned = decPart.length ? `${intPart}.${decPart}` : intPart + '.';
     }
-    if (cleaned === '' || cleaned === '.') { setAmountCollected(''); return; }
-    let num = parseFloat(cleaned);
-    if (isNaN(num)) { setAmountCollected(''); return; }
-    num = floor2(num);
-    // Cap to remaining (also floored) if available
-    if (billRemaining != null) {
-      const cap = floor2(billRemaining);
-      if (num > cap) num = cap;
-    }
-    setAmountCollected(num.toFixed(2));
+    // Allow empty string for full editability
+    setAmountCollected(cleaned);
   };
   // Fetch bill details to compute remaining outstanding
   useEffect(() => {
@@ -128,6 +122,8 @@ export default function CollectPaymentScreen() {
     setBillRemaining(remaining);
   }, [billData, pendingReserved]);
   const [companyName, setCompanyName] = useState(null);
+  const [companyCreditDate, setCompanyCreditDate] = useState(null);
+  const [billPromiseDate, setBillPromiseDate] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]);
 
   const [location, setLocation] = useState(null);
@@ -172,7 +168,7 @@ export default function CollectPaymentScreen() {
     fetchLocation();
   }, []);
 
-  // Fetch company name if available
+  // Fetch company details if available
   useEffect(() => {
     (async () => {
       if (!company_code) return;
@@ -182,10 +178,27 @@ export default function CollectPaymentScreen() {
         if (r.ok) {
           const data = await r.json();
           setCompanyName(data.name || null);
+          setCompanyCreditDate(data.credit_date ? new Date(data.credit_date) : null);
+          // Note: promise now tracked per-bill; keep credit_date only from company
         }
       } catch (_) { }
     })();
   }, [company_code]);
+
+  // Fetch bill to get bill-level promise_date
+  useEffect(() => {
+    (async () => {
+      if (!bill_id) return;
+      try {
+        const token = await StorageService.getToken();
+        const r = await fetch(`${API_BASE_URL}/bills/${bill_id}`, { headers: { 'Authorization': token ? `Bearer ${token.access_token}` : '' } });
+        if (r.ok) {
+          const data = await r.json();
+          setBillPromiseDate(data.promise_date ? new Date(data.promise_date) : null);
+        }
+      } catch (_) { }
+    })();
+  }, [bill_id]);
 
   // Keep collectedAt ticking (minute precision) but not editable
   useEffect(() => {
@@ -201,6 +214,17 @@ export default function CollectPaymentScreen() {
     if (!isFullPayment && !nextPromiseDate) {
       Alert.alert('Missing Next Promise', 'Next promise date is required for partial payments.');
       return false;
+    }
+    // Business rule: next_promise_date must not be earlier than credit_date or existing bill promise_date
+    if (!isFullPayment && nextPromiseDate) {
+      const minDate = billPromiseDate || companyCreditDate; // bill promise takes precedence when present
+      if (minDate && nextPromiseDate < minDate) {
+        const msg = billPromiseDate
+          ? `Next promise date cannot be earlier than current promise date (${formatDate(billPromiseDate)}).`
+          : `Next promise date cannot be earlier than credit date (${formatDate(companyCreditDate)}).`;
+        Alert.alert('Invalid Next Promise', msg);
+        return false;
+      }
     }
     if (!location) {
       Alert.alert('Location Needed', 'Enable and capture location before submitting.');
@@ -259,7 +283,8 @@ export default function CollectPaymentScreen() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        const serverDetail = errorData?.detail || errorData?.message;
+        throw new Error(serverDetail || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
@@ -271,6 +296,10 @@ export default function CollectPaymentScreen() {
           {
             text: "OK",
             onPress: () => {
+              try {
+                // Notify lists/detail screens to refresh immediately
+                emitPaymentUpdate({ type: 'submitted', bill_id: bill_id ? Number(bill_id) : undefined });
+              } catch (_) { }
               router.back();
             }
           }
@@ -294,14 +323,24 @@ export default function CollectPaymentScreen() {
   // Use shared formatDateTime util for IST, no seconds
 
 
-  // Auto set amount on full payment toggle if bill amount provided
+  // Auto set amount on payment type toggle
   useEffect(() => {
     if (isFullPayment && !submitting) {
+      // Full payment: set to max
       const useRemaining = billRemaining != null ? billRemaining : (bill_amount ? Number(bill_amount) : null);
       if (useRemaining != null) {
         const floored = floor2(useRemaining);
         setAmountCollected(floored.toFixed(2));
       }
+    } else if (!isFullPayment && !submitting) {
+      // Partial: set to 1 less than max, or 1 if not possible
+      const useRemaining = billRemaining != null ? billRemaining : (bill_amount ? Number(bill_amount) : null);
+      let partial = 1;
+      if (useRemaining != null && useRemaining > 1) {
+        partial = floor2(useRemaining - 1);
+        if (partial < 1) partial = 1;
+      }
+      setAmountCollected(partial.toFixed(2));
     }
   }, [isFullPayment, bill_amount, billRemaining, submitting]);
 
@@ -372,6 +411,7 @@ export default function CollectPaymentScreen() {
                 placeholderTextColor={tokens.colors.textFaint}
                 onChangeText={handlePartialAmountChange}
                 editable={!submitting && !isFullPayment}
+                maxLength={12}
               />
             )}
 
@@ -544,7 +584,7 @@ const styles = StyleSheet.create({
   },
   locationRefreshBtnTextModern: { color: tokens.colors.accent, fontWeight: '800', fontSize: 16, letterSpacing: 0.2 },
   locationRefreshBtnIcon: { fontSize: 18, color: tokens.colors.accent, marginRight: 6, fontWeight: '800' },
-  submitBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, backgroundColor: tokens.colors.screen },
+  submitBar: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, backgroundColor: tokens.colors.bg },
   submitBtn: { backgroundColor: tokens.colors.accent, paddingVertical: 16, borderRadius: 16, alignItems: 'center' },
   submitBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
   disabledBtn: { opacity: 0.6 },

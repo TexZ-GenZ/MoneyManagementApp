@@ -166,7 +166,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <Screen title="Dashboard" subtitle="Quick access & recent activity" scroll hideBackButton>
+    <Screen title="Dashboard" subtitle="Quick access & recent activity" scroll hideBackButton hideTopBar>
       <Card style={styles.navCard}>
         <FlatList
           data={navGrid}
@@ -196,6 +196,8 @@ export default function AdminDashboard() {
           />
         )}
       </Card>
+
+      <View style = {{marginBottom: 30}}></View>
     </Screen>
   );
 }

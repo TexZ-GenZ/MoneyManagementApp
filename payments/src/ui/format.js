@@ -24,19 +24,19 @@ export function formatDate(dateLike) {
 export function formatDateTime(dateLike) {
     if (!dateLike) return '—';
     try {
-    const d = new Date(dateLike);
-    if (isNaN(d.getTime())) return dateLike;
-    // Build "25-Aug-2025, 18:00" in IST (Asia/Kolkata) using formatToParts
-    const opts = { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' };
-    const parts = new Intl.DateTimeFormat('en-GB', opts).formatToParts(d);
-    const lookup = {};
-    parts.forEach(p => { if (p.type && p.value) lookup[p.type] = p.value; });
-    const day = lookup.day || '';
-    const month = (lookup.month || '').replace('.', ''); // ensure no trailing dot
-    const year = lookup.year || '';
-    const hour = lookup.hour || '00';
-    const minute = lookup.minute || '00';
-    return `${day}-${month}-${year}, ${hour}:${minute}`;
+        const d = new Date(dateLike);
+        if (isNaN(d.getTime())) return dateLike;
+        // Force-convert to IST (UTC+05:30) without relying on Intl timeZone support
+        const IST_OFFSET_MINUTES = 5 * 60 + 30; // 330 minutes
+        const istMs = d.getTime() + IST_OFFSET_MINUTES * 60 * 1000 - (d.getTimezoneOffset() * 60 * 1000);
+        const ist = new Date(istMs);
+        const day = String(ist.getUTCDate()).padStart(2, '0');
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = monthNames[ist.getUTCMonth()];
+        const year = ist.getUTCFullYear();
+        const hour = String(ist.getUTCHours()).padStart(2, '0');
+        const minute = String(ist.getUTCMinutes()).padStart(2, '0');
+        return `${day}-${month}-${year}, ${hour}:${minute}`;
     } catch {
         return dateLike;
     }

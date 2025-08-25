@@ -261,6 +261,7 @@ const LoginScreen = () => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={-90}
     >
       {/* Simple light blue gradient filling whole screen */}
       <LinearGradient colors={['#ffffff', '#e8f9ff', '#d0f3ff', '#a9e7ff', '#8fdfff']} locations={[0, 0.3, 0.55, 0.8, 1]} style={StyleSheet.absoluteFill} />

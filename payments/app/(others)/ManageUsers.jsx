@@ -48,6 +48,10 @@ export default function ManageUsers() {
     const [deletingId, setDeletingId] = useState(null);
     const [pendingAction, setPendingAction] = useState(null); // 'create' | 'save' | 'delete'
     const [pendingPaymentsMsg, setPendingPaymentsMsg] = useState(null); // { pendingSubmitted, pendingAdmin }
+    // Edit modal input focus states (for accent border on focus)
+    const [editUsernameFocused, setEditUsernameFocused] = useState(false);
+    const [editMobileFocused, setEditMobileFocused] = useState(false);
+    const [editPasswordFocused, setEditPasswordFocused] = useState(false);
 
     const fetchUsers = useCallback(async () => {
         setLoading(true);
@@ -295,7 +299,16 @@ export default function ManageUsers() {
                         <Card style={{ marginBottom: 16 }}>
                             <View style={styles.searchRow}>
                                 <Ionicons name="search" size={16} color={tokens.colors.accent} style={{ marginRight: 8 }} />
-                                <TextInput value={search} onChangeText={setSearch} placeholder="Search username or mobile" placeholderTextColor={tokens.colors.textDim} style={styles.searchInput} />
+                                <TextInput
+                                    value={search}
+                                    onChangeText={setSearch}
+                                    placeholder="Search username or mobile"
+                                    placeholderTextColor={tokens.colors.textDim}
+                                    style={styles.searchInput}
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
+                                    returnKeyType="search"
+                                />
                                 {search.length > 0 && (
                                     <TouchableOpacity onPress={() => setSearch('')}><Ionicons name="close-circle" size={18} color={tokens.colors.textFaint} /></TouchableOpacity>
                                 )}
@@ -327,6 +340,7 @@ export default function ManageUsers() {
                 }
                 contentContainerStyle={{ paddingBottom: 140 }}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
             />
             <TouchableOpacity style={styles.fab} onPress={() => setCreateModalVisible(true)}>
                 <Ionicons name="add" size={28} color="#000" />
@@ -367,9 +381,47 @@ export default function ManageUsers() {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalCard}>
                         <Text style={styles.modalTitle}>Edit User</Text>
-                        <View style={styles.fieldBlock}><Text style={styles.fieldLabel}>Username</Text><TextInput value={editUsername} onChangeText={setEditUsername} placeholder="Username" placeholderTextColor={tokens.colors.textDim} style={styles.modalInput} /></View>
-                        <View style={styles.fieldBlock}><Text style={styles.fieldLabel}>Mobile</Text><TextInput value={editMobile} onChangeText={setEditMobile} placeholder="Mobile" placeholderTextColor={tokens.colors.textDim} style={styles.modalInput} keyboardType="phone-pad" /></View>
-                        <View style={styles.fieldBlock}><Text style={styles.fieldLabel}>New Password (optional)</Text><TextInput value={editPassword} onChangeText={setEditPassword} placeholder="New Password" placeholderTextColor={tokens.colors.textDim} style={styles.modalInput} secureTextEntry /></View>
+                        <View style={styles.fieldBlock}>
+                            <Text style={styles.fieldLabel}>Username</Text>
+                            <TextInput
+                                value={editUsername}
+                                onChangeText={setEditUsername}
+                                placeholder="Username"
+                                placeholderTextColor={tokens.colors.textSubtle}
+                                selectionColor={tokens.colors.accent}
+                                onFocus={() => setEditUsernameFocused(true)}
+                                onBlur={() => setEditUsernameFocused(false)}
+                                style={[styles.editModalInput, editUsernameFocused && styles.editModalInputFocused]}
+                            />
+                        </View>
+                        <View style={styles.fieldBlock}>
+                            <Text style={styles.fieldLabel}>Mobile</Text>
+                            <TextInput
+                                value={editMobile}
+                                onChangeText={setEditMobile}
+                                placeholder="Mobile"
+                                placeholderTextColor={tokens.colors.textSubtle}
+                                selectionColor={tokens.colors.accent}
+                                keyboardType="phone-pad"
+                                onFocus={() => setEditMobileFocused(true)}
+                                onBlur={() => setEditMobileFocused(false)}
+                                style={[styles.editModalInput, editMobileFocused && styles.editModalInputFocused]}
+                            />
+                        </View>
+                        <View style={styles.fieldBlock}>
+                            <Text style={styles.fieldLabel}>New Password (optional)</Text>
+                            <TextInput
+                                value={editPassword}
+                                onChangeText={setEditPassword}
+                                placeholder="New Password"
+                                placeholderTextColor={tokens.colors.textSubtle}
+                                selectionColor={tokens.colors.accent}
+                                secureTextEntry
+                                onFocus={() => setEditPasswordFocused(true)}
+                                onBlur={() => setEditPasswordFocused(false)}
+                                style={[styles.editModalInput, editPasswordFocused && styles.editModalInputFocused]}
+                            />
+                        </View>
                         {(() => { const isSelfAdmin = currentUser && editUser && String(currentUser.id) === String(editUser.id) && editUser.role === 'admin'; return !isSelfAdmin; })() ? (
                             <>
                                 <View style={styles.activeRow}>
@@ -462,26 +514,26 @@ export default function ManageUsers() {
 }
 
 const styles = StyleSheet.create({
-    searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: tokens.colors.border },
-    searchInput: { flex: 1, paddingVertical: 10, color: tokens.colors.accent, fontSize: 14 },
+    searchRow: { flexDirection: 'row', alignItems: 'center' },
+    searchInput: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, color: tokens.colors.text, fontSize: 14 },
     filterRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
     filterScrollContent: { alignItems: 'center', paddingRight: 8 },
     filterGroupLabel: { color: tokens.colors.textFaint, fontSize: 12, marginRight: 6, marginLeft: 4 },
-    resetChip: { backgroundColor: '#111' },
-    refreshChip: { backgroundColor: '#111' },
-    filterChip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#111', marginRight: 8, borderWidth: 1, borderColor: tokens.colors.border },
+    resetChip: { backgroundColor: tokens.colors.cardAlt },
+    refreshChip: { backgroundColor: tokens.colors.cardAlt },
+    filterChip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: tokens.colors.cardAlt, marginRight: 8, borderWidth: 1, borderColor: tokens.colors.border },
     filterChipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
     filterChipText: { color: tokens.colors.textDim, fontSize: 13, fontWeight: '500' },
     filterChipTextActive: { color: '#000', fontWeight: '600' },
-    refreshBtn: { marginLeft: 'auto', padding: 8, borderRadius: 12, backgroundColor: '#111', borderWidth: 1, borderColor: tokens.colors.border },
+    refreshBtn: { marginLeft: 'auto', padding: 8, borderRadius: 12, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border },
     userCard: { paddingHorizontal: tokens.space.md, paddingVertical: tokens.space.md },
     rowUpper: { flexDirection: 'row', alignItems: 'center' },
-    avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(200,241,76,0.1)', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     userMain: { flex: 1 },
     username: { color: tokens.colors.text, fontWeight: '600', fontSize: 15 },
     metaText: { color: tokens.colors.textDim, fontSize: 12, marginTop: 2 },
     userTitleRow: { flexDirection: 'row', alignItems: 'center' },
-    roleTag: { marginLeft: 8, backgroundColor: '#111', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, color: tokens.colors.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
+    roleTag: { marginLeft: 8, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, color: tokens.colors.textDim, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
     compactRow: { flexDirection: 'row', alignItems: 'center' },
     compactMain: { flex: 1 },
     compactTitleLine: { flexDirection: 'row', alignItems: 'center' },
@@ -503,7 +555,7 @@ const styles = StyleSheet.create({
     inlineAssignText: { color: tokens.colors.text, fontSize: 13, fontWeight: '600' },
     sectionHeading: { color: tokens.colors.text, fontWeight: '600', marginBottom: 8, fontSize: 15 },
     createRowGroup: {},
-    createInput: { backgroundColor: '#111', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, fontSize: 14, marginBottom: 10 },
+    createInput: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, fontSize: 14, marginBottom: 10 },
     fab: { position: 'absolute', bottom: 30, right: 24, backgroundColor: tokens.colors.accent, width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 },
     roleChipsRow: { flexDirection: 'row', marginBottom: 10 },
     roleChip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#111', marginRight: 8, borderWidth: 1, borderColor: tokens.colors.border },
@@ -516,7 +568,26 @@ const styles = StyleSheet.create({
     modalCard: { backgroundColor: tokens.colors.card, borderRadius: 20, padding: 20, width: '100%', borderWidth: 1, borderColor: tokens.colors.border },
     modalCardWarn: { borderWidth: 2, borderColor: tokens.colors.warning },
     modalTitle: { color: tokens.colors.text, fontSize: 16, fontWeight: '600', marginBottom: 12 },
-    modalInput: { backgroundColor: '#111', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, fontSize: 14, marginBottom: 10 },
+    modalInput: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, fontSize: 14, marginBottom: 10 },
+    // New: dedicated style for Edit modal inputs to ensure consistent color + focus affordance
+    editModalInput: {
+        backgroundColor: tokens.colors.cardAlt || '#0d0d0d',
+        borderWidth: 1,
+        borderColor: tokens.colors.border,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        color: tokens.colors.text,
+        fontSize: 14,
+        marginBottom: 10,
+    },
+    editModalInputFocused: {
+        borderColor: tokens.colors.accent,
+        shadowColor: tokens.colors.accent,
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 0 },
+    },
     fieldBlock: { marginBottom: 4 },
     fieldLabel: { color: tokens.colors.textDim, fontSize: 12, marginBottom: 4, marginLeft: 4 },
     modalButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
@@ -535,7 +606,7 @@ const styles = StyleSheet.create({
     warnText: { color: tokens.colors.textDim, fontSize: 12 },
     warnChipsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 8 },
     warnChip: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12, borderWidth: 1 },
-    warnChipNeutral: { borderColor: tokens.colors.border, backgroundColor: '#111' },
+    warnChipNeutral: { borderColor: tokens.colors.border, backgroundColor: tokens.colors.cardAlt },
     warnChipText: { color: tokens.colors.textDim, fontSize: 11, fontWeight: '600' },
     warnButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
 });

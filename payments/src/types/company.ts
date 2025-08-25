@@ -4,8 +4,11 @@ export interface Company {
   area: string; // Executive name/area
   outbal: string; // Overdue amount (comes as string from backend)
   amount: string; // Total amount to be collected (comes as string from backend)
-  promise_date: string | null; // Promise date
-  credit_date: string | null; // Credit date
+  // Deprecated: company-level promise_date no longer drives UI logic
+  promise_date: string | null;
+  credit_date: string | null; // Credit baseline (dashboard only)
+  // New: earliest pending bill-level date (promise or dynamic due)
+  next_due_date?: string | null;
   location: string | null; // Location
   phone: string | null; // Phone number
   email: string | null; // Email

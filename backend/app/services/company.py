@@ -83,8 +83,25 @@ def recalc_company_totals(db: Session, code: str) -> None:
     if oldest_due is not None:
         new_credit = oldest_due + timedelta(days=s.credit_extension_days)
         comp.credit_date = new_credit
-        if comp.promise_date is None:
-            comp.promise_date = new_credit
+        # Keep invariant: promise_date >= credit_date (DB check enforces this)
+        # Rules:
+        # - If no promise_date, set to auto=new_credit.
+        # - If promise is auto and behind new credit, move it up to credit.
+        # - If promise is manual (exec/admin) and behind, still clamp up to credit to satisfy invariant.
+        try:
+            from app.models.models import Company as CompanyModel
+
+            if comp.promise_date is None:
+                comp.promise_date = new_credit
+                comp.promise_date_source = CompanyModel.PromiseSource.auto
+            elif comp.promise_date < new_credit:
+                comp.promise_date = new_credit
+                # Preserve source flag; do not downgrade manual -> auto
+                if getattr(comp, "promise_date_source", None) is None:
+                    comp.promise_date_source = CompanyModel.PromiseSource.auto
+        except Exception:
+            if comp.promise_date is None or comp.promise_date < new_credit:
+                comp.promise_date = new_credit
     else:
         # No positive outstanding bills -> reset credit/outbal baseline
         comp.credit_date = None

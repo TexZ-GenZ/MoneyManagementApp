@@ -12,6 +12,10 @@ class CompanyBase(BaseModel):
     location: Optional[str] = None
     credit_date: Optional[date] = None  # deprecated in list context
     promise_date: Optional[date] = None  # deprecated in list context
+    promise_date_source: Optional[str] = None
+    # Earliest actionable date from this company's pending bills
+    # Computed as: min(bill.promise_date or (bill.bill_date + credit_days) or bill.due_date)
+    next_due_date: Optional[date] = None
     outbal: Decimal
     amount: Decimal
     # Enriched fields (not persisted directly on companies table)
@@ -42,6 +46,7 @@ class CompanyDashboard(BaseModel):
     area: Optional[str] = None
     credit_date: Optional[date] = None
     promise_date: Optional[date] = None
+    promise_date_source: Optional[str] = None
     outbal: Decimal
     amount: Decimal
     pending_bills: List[BillOut]
