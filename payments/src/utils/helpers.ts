@@ -24,7 +24,10 @@ export const formatDate = (date: string | Date, format: string = DATE_FORMATS.DI
 export const isDateOverdue = (date: string): boolean => {
   const today = new Date();
   const targetDate = new Date(date);
-  return targetDate < today;
+  // Normalize to start of day to avoid time-of-day differences
+  today.setHours(0, 0, 0, 0);
+  targetDate.setHours(0, 0, 0, 0);
+  return targetDate.getTime() <= today.getTime();
 };
 
 export const daysBetween = (date1: string | Date, date2: string | Date): number => {

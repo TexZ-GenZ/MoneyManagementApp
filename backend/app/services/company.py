@@ -38,7 +38,7 @@ def recalc_company_totals(db: Session, code: str) -> None:
 
     Semantics:
     - amount: total positive outstanding residual across all pending, active bills (residual = max(amount-amount_paid, 0)).
-    - outbal: subset of that outstanding which is overdue (due_date < today).
+    - outbal: subset of that outstanding which is overdue (due_date <= today; same-day counts as overdue).
     - credit_date: oldest due_date among positive-residual bills + extension days; cleared if none.
     - Negative residuals (credit notes / overpayments) excluded from sums.
     """
@@ -60,7 +60,7 @@ def recalc_company_totals(db: Session, code: str) -> None:
             Bill.company_code == code,
             Bill.status == BillStatus.pending,
             Bill.is_archived == False,
-            Bill.due_date < today,
+            Bill.due_date <= today,
             (Bill.amount - Bill.amount_paid) > 0,
         )
         .scalar()
@@ -81,6 +81,8 @@ def recalc_company_totals(db: Session, code: str) -> None:
     )
     s = ensure_settings_row(db)
     if oldest_due is not None:
+        # Persist the oldest due date for quick filtering in list APIs/UI
+        comp.oldest_due_date = oldest_due
         new_credit = oldest_due + timedelta(days=s.credit_extension_days)
         comp.credit_date = new_credit
         # Keep invariant: promise_date >= credit_date (DB check enforces this)
@@ -105,6 +107,7 @@ def recalc_company_totals(db: Session, code: str) -> None:
     else:
         # No positive outstanding bills -> reset credit/outbal baseline
         comp.credit_date = None
+        comp.oldest_due_date = None
         # promise_date left untouched (business rule: manual promise stays even if cleared) – adjust if needed
     db.commit()
 
@@ -129,7 +132,7 @@ def recompute_company_amounts(db: Session, code: str) -> None:
             Bill.company_code == code,
             Bill.status == BillStatus.pending,
             Bill.is_archived == False,
-            Bill.due_date < today,
+            Bill.due_date <= today,
             (Bill.amount - Bill.amount_paid) > 0,
         )
         .scalar()
@@ -137,6 +140,18 @@ def recompute_company_amounts(db: Session, code: str) -> None:
     comp = db.get(Company, code)
     comp.amount = amount_sum
     comp.outbal = overdue_sum
+    # Also refresh oldest_due_date to keep it in sync
+    oldest_due = (
+        db.query(func.min(Bill.due_date))
+        .filter(
+            Bill.company_code == code,
+            Bill.status == BillStatus.pending,
+            Bill.is_archived == False,
+            (Bill.amount - Bill.amount_paid) > 0,
+        )
+        .scalar()
+    )
+    comp.oldest_due_date = oldest_due
     db.commit()
 
 
@@ -147,9 +162,9 @@ def resolve_promise_crossed_notifications(db: Session, company: Company) -> None
     """
     today = date.today()
     overdue = False
-    if company.credit_date and company.credit_date < today:
+    if company.credit_date and company.credit_date <= today:
         overdue = True
-    if company.promise_date and company.promise_date < today:
+    if company.promise_date and company.promise_date <= today:
         overdue = True
     existing = (
         db.query(Notification)

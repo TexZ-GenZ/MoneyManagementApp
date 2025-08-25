@@ -69,9 +69,9 @@ def scan_promise_credit_overdue(db: Session, interval_hours: int | None = None):
     companies = db.query(Company).filter(Company.is_archived == False).all()
     for c in companies:
         overdue = False
-        if c.credit_date and c.credit_date < today:
+        if c.credit_date and c.credit_date <= today:
             overdue = True
-        if c.promise_date and c.promise_date < today:
+        if c.promise_date and c.promise_date <= today:
             overdue = True
         existing = (
             db.query(Notification)
@@ -384,7 +384,7 @@ def _send_exec_pending_pushes(db: Session):
 
 
 def _send_executive_overdue_push(db: Session):
-    """Send an aggregated push to each executive summarizing overdue companies (based on pending bills with effective due < today).
+    """Send an aggregated push to each executive summarizing overdue companies (based on pending bills with effective due <= today).
     Respects exec window hours (IST), same as other exec pushes. Runs at notification frequency.
     """
     s = db.get(Setting, 1)
@@ -446,7 +446,7 @@ def _send_executive_overdue_push(db: Session):
             eff_due = due_date
         if eff_due is None:
             continue
-        if eff_due < today:
+        if eff_due <= today:
             sset = exec_overdue_companies.setdefault(exec_id, set())
             sset.add(company_code)
 

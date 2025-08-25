@@ -43,6 +43,8 @@ class Company(Base):
     outbal: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
     credit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     promise_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # New: stores the bill with the oldest due_date among active pending bills (for filtering and UI)
+    oldest_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     class PromiseSource(str, enum.Enum):
         auto = "auto"  # derived from credit_date/extension

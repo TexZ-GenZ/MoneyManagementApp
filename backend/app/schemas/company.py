@@ -16,6 +16,8 @@ class CompanyBase(BaseModel):
     # Earliest actionable date from this company's pending bills
     # Computed as: min(bill.promise_date or (bill.bill_date + credit_days) or bill.due_date)
     next_due_date: Optional[date] = None
+    # Oldest raw due date among pending, active bills (persisted on company)
+    oldest_due_date: Optional[date] = None
     outbal: Decimal
     amount: Decimal
     # Counts (enriched): number of pending and overdue bills

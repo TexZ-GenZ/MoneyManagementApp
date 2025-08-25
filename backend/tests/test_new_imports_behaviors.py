@@ -136,7 +136,7 @@ def test_recalc_ignores_negative_residual(db_session, admin):
     recalc_company_totals(db_session, c.code)
     db_session.refresh(c)
     assert Decimal(str(c.amount)) == Decimal("100.00")  # negative excluded
-    # outbal only counts overdue (due_date < today). Bills due today are not overdue so outbal=0.
+    # outbal only counts overdue (due_date <= today). Bills due today are overdue under new rule.
     assert Decimal(str(c.outbal)) == Decimal("0.00")
 
 

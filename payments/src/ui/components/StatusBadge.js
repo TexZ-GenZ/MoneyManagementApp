@@ -23,6 +23,7 @@ export function StatusBadge({ status, children, variant }) {
 function paletteKey(status) {
     const s = (status || '').toLowerCase();
     // Treat domain-specific statuses
+    if (['overdue'].includes(s)) return 'danger';
     if (['admin_approved'].includes(s)) return 'success';
     if (['declined_by_admin', 'declined_by_accountant', 'declined'].includes(s)) return 'danger';
     if (['submitted', 'accountant_approved', 'pending'].includes(s)) return 'warning';

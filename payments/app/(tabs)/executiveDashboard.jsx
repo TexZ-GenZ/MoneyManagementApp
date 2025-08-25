@@ -64,8 +64,7 @@ export default function ExecutiveDashboard() {
     const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
     const dueMid = new Date(due); dueMid.setHours(0, 0, 0, 0);
     const diffDays = (dueMid - todayMid) / 86400000;
-    if (diffDays < 0) return { bucket: 'overdue', due: dueMid };
-    if (diffDays === 0) return { bucket: 'today', due: dueMid };
+    if (diffDays <= 0) return { bucket: 'overdue', due: dueMid };
     if (diffDays > 0 && diffDays <= 7) return { bucket: 'upcoming', due: dueMid };
     return { bucket: 'later', due: dueMid };
   }, []);

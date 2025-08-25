@@ -238,7 +238,7 @@ def list_companies(
                 .filter(
                     (Bill.status == "pending")
                     & (Bill.is_archived == False)
-                    & (eff_due < func.current_date())
+                    & (eff_due <= func.current_date())
                 )
                 .label("overdue_count"),
             )
@@ -293,7 +293,7 @@ def list_companies(
                 .filter(
                     (Bill.status == "pending")
                     & (Bill.is_archived == False)
-                    & (eff_due < func.current_date())
+                    & (eff_due <= func.current_date())
                 )
                 .label("overdue_count"),
             )
@@ -305,6 +305,20 @@ def list_companies(
             r.code: (int(r.pending_count or 0), int(r.overdue_count or 0))
             for r in cnt_rows
         }
+        # Compute next_due_date (effective earliest due) for this page
+        next_due_rows = (
+            db.query(
+                Bill.company_code.label("code"), func.min(eff_due).label("next_due")
+            )
+            .filter(
+                Bill.company_code.in_(code_list),
+                Bill.status == "pending",
+                Bill.is_archived == False,
+            )
+            .group_by(Bill.company_code)
+            .all()
+        )
+        next_due_by_code = {r.code: r.next_due for r in next_due_rows}
         assignments = (
             db.query(ExecAssignment, User)
             .join(User, User.id == ExecAssignment.executive_id)
@@ -316,6 +330,8 @@ def list_companies(
             pc, oc = counts.get(c.code, (0, 0))
             setattr(c, "pending_count", pc)
             setattr(c, "overdue_count", oc)
+            # Set effective earliest due date for UI sorting
+            setattr(c, "next_due_date", next_due_by_code.get(c.code))
             u = by_code.get(c.code)
             if u:
                 setattr(c, "assigned_executive_id", u.id)
@@ -1224,7 +1240,7 @@ def get_executive_companies(
             if eff_due is None:
                 continue
             pending_counts[company_code] += 1
-            if eff_due < today:
+            if eff_due <= today:
                 overdue_counts[company_code] += 1
             prev = best.get(company_code)
             if prev is None or eff_due < prev:
@@ -1285,7 +1301,7 @@ def my_companies(user: User = Depends(get_current_user), db: Session = Depends(g
             if eff_due is None:
                 continue
             pending_counts[company_code] += 1
-            if eff_due < today:
+            if eff_due <= today:
                 overdue_counts[company_code] += 1
             prev = best.get(company_code)
             if prev is None or eff_due < prev:

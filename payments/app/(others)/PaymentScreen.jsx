@@ -218,12 +218,16 @@ export default function CollectPaymentScreen() {
     // Business rule: next_promise_date must not be earlier than credit_date or existing bill promise_date
     if (!isFullPayment && nextPromiseDate) {
       const minDate = billPromiseDate || companyCreditDate; // bill promise takes precedence when present
-      if (minDate && nextPromiseDate < minDate) {
-        const msg = billPromiseDate
-          ? `Next promise date cannot be earlier than current promise date (${formatDate(billPromiseDate)}).`
-          : `Next promise date cannot be earlier than credit date (${formatDate(companyCreditDate)}).`;
-        Alert.alert('Invalid Next Promise', msg);
-        return false;
+      if (minDate) {
+        const np = new Date(nextPromiseDate); np.setHours(0, 0, 0, 0);
+        const md = new Date(minDate); md.setHours(0, 0, 0, 0);
+        if (np < md) {
+          const msg = billPromiseDate
+            ? `Next promise date cannot be earlier than current promise date (${formatDate(billPromiseDate)}).`
+            : `Next promise date cannot be earlier than credit date (${formatDate(companyCreditDate)}).`;
+          Alert.alert('Invalid Next Promise', msg);
+          return false;
+        }
       }
     }
     if (!location) {

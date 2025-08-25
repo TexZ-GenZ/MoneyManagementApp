@@ -21,7 +21,7 @@ We never reset or erase:
 ## 3. Recalculation Semantics
 After transactions import (or explicitly via `/admin/recalc-all`):
 * `amount`: Sum of positive residuals (`max(amount - amount_paid, 0)`) over active, pending bills.
-* `outbal`: Subset of that sum where `due_date < today` (overdue only).
+* `outbal`: Subset of that sum where `due_date <= today` (overdue only; same-day counts as overdue).
 * `credit_date`: Oldest due date among positive residual bills + `CREDIT_EXTENSION_DAYS`.
 * Negative / credit-note bills (negative amount) reduce neither `amount` nor `outbal`.
 

@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: tokens.colors.cardAlt,
         borderRadius: 12,
-        paddingHorizontal: 12,
+        paddingHorizontal: 14,
         paddingVertical: 10,
         gap: 8,
     },

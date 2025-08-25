@@ -99,7 +99,7 @@ export default function AccountantDashboard() {
   useEffect(() => { const off = onPaymentUpdate(() => fetchRecent()); return off; }, [fetchRecent]);
 
   return (
-    <Screen scroll title="Accountant" subtitle="Quick access & recent activity" hideBackButton hideTopBar contentStyle={{paddingTop: 20}}>
+    <Screen scroll title="Accountant" subtitle="Quick access & recent activity" hideBackButton hideTopBar>
       <Card style={styles.navCard}>
         <FlatList
           data={navItems}
@@ -166,6 +166,7 @@ export default function AccountantDashboard() {
           />
         )}
       </Card>
+      <View style = {{marginBottom:30}}></View>
     </Screen>
   );
 

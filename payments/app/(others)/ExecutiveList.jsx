@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   listFlex: { flex: 1, paddingHorizontal: 4 },
   searchRow: { flexDirection: 'row', alignItems: 'center' },
   searchIcon: { marginRight: 12 },
-  searchInput: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, color: tokens.colors.text, fontSize: 16 },
+  searchInput: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: tokens.colors.text, fontSize: 16 },
   resultsSection: { flex: 1 },
   resultHeader: {
     marginBottom: 10,

@@ -17,7 +17,9 @@ export default function CompanyListScreen() {
   // Executive filter (unique executive names). Fallback to 'area' field if executive name not provided by API.
   const [execFilters, setExecFilters] = useState([]); // multi usernames
   const [sortMode, setSortMode] = useState('OVERDUE_DESC'); // default: overdue high first
+  // Filters are collapsible; default collapsed (prior behavior)
   const [showFilters, setShowFilters] = useState(false);
+  // Removed oldest-due bucket filters; use sort chip "Oldest Due" instead
   const router = useRouter();
 
   useEffect(() => { loadCompanies(); }, []);
@@ -35,6 +37,8 @@ export default function CompanyListScreen() {
     else if (sortMode === 'AMOUNT_ASC') params.set('sort', 'amount_asc');
     else if (sortMode === 'PENDING_DESC') params.set('sort', 'pending_desc');
     else if (sortMode === 'OVERDUE_DESC') params.set('sort', 'overdue_desc');
+    // For OLDEST_DUE_ASC, we sort client-side; keep server sort neutral
+    else if (sortMode === 'OLDEST_DUE_ASC') params.set('sort', 'name_asc');
     else params.set('sort', 'name_asc');
     // Don't include search in this effect - it's handled in handleSearch
     const url = `${API_BASE_URL}/companies?${params.toString()}`;
@@ -97,6 +101,8 @@ export default function CompanyListScreen() {
       else if (sortMode === 'AMOUNT_ASC') params.set('sort', 'amount_asc');
       else if (sortMode === 'PENDING_DESC') params.set('sort', 'pending_desc');
       else if (sortMode === 'OVERDUE_DESC') params.set('sort', 'overdue_desc');
+      // Client-side sort for oldest due
+      else if (sortMode === 'OLDEST_DUE_ASC') params.set('sort', 'name_asc');
       else params.set('sort', 'name_asc');
       const response = await fetch(`${API_BASE_URL}/companies?${params.toString()}`, { method: 'GET', headers: { 'content-type': 'application/json' } });
       if (!response.ok) throw new Error('Search failed');
@@ -133,8 +139,45 @@ export default function CompanyListScreen() {
   // Use the preserved full executive list so options don't disappear when filters are applied
   const executives = useMemo(() => allExecutives, [allExecutives]);
 
-  // finalData now just filtered for local quick search (<2 chars) since server handled main filters
-  const finalData = filtered;
+  // finalData now filtered additionally by oldest due bucket
+  const finalData = useMemo(() => {
+    const base = filtered || [];
+    // Apply client-side sort for oldest due if selected
+    if (sortMode === 'OLDEST_DUE_ASC') {
+      const arr = base.slice();
+      const parseYMDToUTC = (val) => {
+        if (!val || typeof val !== 'string') return null;
+        const m = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (!m) return null;
+        const y = parseInt(m[1], 10);
+        const mo = parseInt(m[2], 10) - 1;
+        const d = parseInt(m[3], 10);
+        const ms = Date.UTC(y, mo, d);
+        return isNaN(ms) ? null : ms;
+      };
+      arr.sort((a, b) => {
+        // Prefer effective earliest due (next_due_date) if present; fallback to raw oldest_due_date
+        const aMs = parseYMDToUTC(a?.next_due_date) ?? parseYMDToUTC(a?.oldest_due_date);
+        const bMs = parseYMDToUTC(b?.next_due_date) ?? parseYMDToUTC(b?.oldest_due_date);
+        // push nulls to bottom
+        if (aMs === null && bMs === null) {
+          // stable-ish tie-breaker to avoid jitter
+          const an = (a?.name || a?.code || '').toString();
+          const bn = (b?.name || b?.code || '').toString();
+          return an.localeCompare(bn);
+        }
+        if (aMs === null) return 1;
+        if (bMs === null) return -1;
+        if (aMs !== bMs) return aMs - bMs;
+        // same date -> tie-break by name/code
+        const an = (a?.name || a?.code || '').toString();
+        const bn = (b?.name || b?.code || '').toString();
+        return an.localeCompare(bn);
+      });
+      return arr;
+    }
+    return base;
+  }, [filtered, sortMode]);
 
   const renderItem = ({ item }) => {
     const outbalNum = Number(item.outbal) || 0;
@@ -181,19 +224,30 @@ export default function CompanyListScreen() {
     );
   };
 
-  const Option = ({ label, active, onPress }) => (
-    <TouchableOpacity onPress={onPress} style={[styles.option, active && styles.optionActive]} activeOpacity={0.7}>
-      <Text style={[styles.optionText, active && styles.optionTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
   const toggleExec = (name) => {
     setExecFilters(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
   };
 
   const clearExec = () => setExecFilters([]);
 
-  // Header moved inline into ListHeaderComponent to keep a stable element and avoid remounting on keystrokes
+  // Chip components (shared look with ExecutiveCompanies)
+  const Chip = ({ active, label, onPress }) => (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={[styles.chip, active && styles.chipActive]}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  const sortChips = [
+    { value: 'OVERDUE_DESC', label: 'Overdue High' },
+    { value: 'PENDING_DESC', label: 'Pending High' },
+    { value: 'OUTBAL_DESC', label: 'Outbal High' },
+    { value: 'OUTBAL_ASC', label: 'Outbal Low' },
+    { value: 'AMOUNT_DESC', label: 'Amount High' },
+    { value: 'AMOUNT_ASC', label: 'Amount Low' },
+    { value: 'OLDEST_DUE_ASC', label: 'Oldest Due' },
+    { value: 'NAME_ASC', label: 'Name' },
+    { value: 'CODE_ASC', label: 'Code' },
+  ];
 
   return (
     <Screen title="Companies" subtitle="Browse all companies">
@@ -209,60 +263,44 @@ export default function CompanyListScreen() {
               <View style={styles.searchWrapper}>
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search by name or code"
+                  placeholder="Search companies"
                   value={search}
                   onChangeText={handleSearch}
                   placeholderTextColor={tokens.colors.textFaint}
                   autoCorrect={false}
                   autoCapitalize='none'
                   returnKeyType='search'
+                  blurOnSubmit={false}
                 />
               </View>
               <View style={styles.toolbar}>
                 <TouchableOpacity style={styles.toolbarBtn} onPress={() => setShowFilters(s => !s)}>
-                  <Text style={styles.toolbarBtnText}>Filters & Sort</Text>
+                  <Text style={styles.toolbarBtnText}>{showFilters ? 'Hide Filters' : 'Filters & Sort'}</Text>
                 </TouchableOpacity>
                 <Text style={styles.toolbarSummary} numberOfLines={1}>
-                  {`${filtered.length} shown · Sort: ${sortMode.toLowerCase()}${execFilters.length ? ' · Execs: ' + execFilters.length : ''}`}
+                  {`${finalData.length} shown · Sort: ${sortMode.toLowerCase()}${execFilters.length ? ' · Execs: ' + execFilters.length : ''}`}
                 </Text>
               </View>
               {showFilters && (
-                <View style={styles.filterPanel}>
-                  <Text style={styles.panelHeading}>Sort By</Text>
-                  <View style={styles.optionsRow}>
-                    <Option label="Outbal High→Low" active={sortMode === 'OUTBAL_DESC'} onPress={() => setSortMode('OUTBAL_DESC')} />
-                    <Option label="Outbal Low→High" active={sortMode === 'OUTBAL_ASC'} onPress={() => setSortMode('OUTBAL_ASC')} />
-                    <Option label="Amount High→Low" active={sortMode === 'AMOUNT_DESC'} onPress={() => setSortMode('AMOUNT_DESC')} />
-                    <Option label="Amount Low→High" active={sortMode === 'AMOUNT_ASC'} onPress={() => setSortMode('AMOUNT_ASC')} />
+                <Card style={styles.filtersContainer}>
+                  <Text style={styles.filtersHeading}>Sort</Text>
+                  <View style={styles.sortWrap}>
+                    {sortChips.map(s => (
+                      <Chip key={s.value} label={s.label} active={sortMode === s.value} onPress={() => setSortMode(s.value)} />
+                    ))}
                   </View>
-                  <View style={styles.optionsRow}>
-                    <Option label="Name" active={sortMode === 'NAME_ASC'} onPress={() => setSortMode('NAME_ASC')} />
-                    <Option label="Code" active={sortMode === 'CODE_ASC'} onPress={() => setSortMode('CODE_ASC')} />
-                    <Option label="Overdue High→Low" active={sortMode === 'OVERDUE_DESC'} onPress={() => setSortMode('OVERDUE_DESC')} />
-                    <Option label="Pending High→Low" active={sortMode === 'PENDING_DESC'} onPress={() => setSortMode('PENDING_DESC')} />
-                  </View>
-                  <Text style={styles.panelHeading}>Executives ({execFilters.length ? execFilters.length : 'all'})</Text>
-                  <View style={styles.execContainer}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {executives.map(e => {
-                        const active = execFilters.includes(e);
-                        return (
-                          <TouchableOpacity key={e} onPress={() => toggleExec(e)} style={[styles.execPill, active && styles.execPillActive]} activeOpacity={0.7}>
-                            <Text style={[styles.execPillText, active && styles.execPillTextActive]}>{e}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                    {execFilters.length > 0 && (
-                      <TouchableOpacity onPress={clearExec} style={styles.clearExecBelow} activeOpacity={0.7}>
-                        <Text style={styles.clearExecBelowText}>Clear</Text>
-                      </TouchableOpacity>
+                  {/* Oldest Due bucket filters removed; use Sort -> Oldest Due */}
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.filtersHeading}>Executives {execFilters.length ? `(${execFilters.length})` : '(all)'}</Text>
+                  <View style={styles.filterWrap}>
+                    {executives.map(e => (
+                      <Chip key={e} label={e} active={execFilters.includes(e)} onPress={() => toggleExec(e)} />
+                    ))}
+                    {executives.length > 0 && execFilters.length > 0 && (
+                      <Chip label={'Clear'} active={false} onPress={clearExec} />
                     )}
                   </View>
-                  <TouchableOpacity style={styles.closePanelBtn} onPress={() => setShowFilters(false)}>
-                    <Text style={styles.closePanelText}>Close</Text>
-                  </TouchableOpacity>
-                </View>
+                </Card>
               )}
             </>
           )}
@@ -277,16 +315,16 @@ export default function CompanyListScreen() {
 }
 
 const styles = StyleSheet.create({
-  searchWrapper: { marginBottom: 16 },
+  searchWrapper: { marginBottom: 12 },
   searchInput: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 15,
+    backgroundColor: tokens.colors.cardAlt,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 16,
     color: tokens.colors.text,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: tokens.colors.border,
   },
   cardTouchable: { marginBottom: 16 },
   card: { paddingVertical: 16, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.04)' },
@@ -303,26 +341,20 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 14, fontWeight: '700', color: tokens.colors.accent },
   dangerValue: { color: tokens.colors.danger },
   // ratio styles removed after metric simplification
+  // Toolbar for collapsible filters
   toolbar: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
   toolbarBtn: { backgroundColor: 'rgba(255,255,255,0.10)', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
   toolbarBtnText: { color: tokens.colors.text, fontSize: 12, fontWeight: '600', letterSpacing: 0.4 },
   toolbarSummary: { flex: 1, color: tokens.colors.textSubtle, fontSize: 11, fontWeight: '500' },
-  filterPanel: { backgroundColor: 'rgba(255,255,255,0.06)', padding: 14, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', marginBottom: 12 },
-  panelHeading: { fontSize: 11, fontWeight: '700', color: tokens.colors.textDim, marginTop: 4, marginBottom: 6, letterSpacing: 0.5 },
-  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
-  option: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  optionActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
-  optionText: { fontSize: 12, fontWeight: '600', color: tokens.colors.textDim },
-  optionTextActive: { color: '#000' },
-  execContainer: { marginTop: 4, marginBottom: 8 },
-  execPill: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  execPillActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
-  execPillText: { fontSize: 12, fontWeight: '600', color: tokens.colors.textDim },
-  execPillTextActive: { color: '#000' },
-  // clearExec styles removed; "Clear" now appears as a trailing pill
-  clearExecBelow: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
-  clearExecBelowText: { fontSize: 12, fontWeight: '600', color: tokens.colors.textSubtle },
-  closePanelBtn: { marginTop: 4, alignSelf: 'flex-end', backgroundColor: 'rgba(255,255,255,0.10)', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
-  closePanelText: { color: tokens.colors.textSubtle, fontSize: 12, fontWeight: '600' },
+  // Shared filter UI with ExecutiveCompanies
+  filtersContainer: { padding: 14, marginBottom: 16 },
+  filtersHeading: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  filterWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
+  sortWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  dividerLine: { height: 1, backgroundColor: tokens.colors.divider, marginVertical: 12 },
+  chip: { backgroundColor: tokens.colors.cardAlt, borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: tokens.colors.border },
+  chipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
+  chipText: { color: tokens.colors.textDim, fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: '#000' },
   empty: { color: tokens.colors.textDim, textAlign: 'center', fontSize: 15, padding: 24 },
 });

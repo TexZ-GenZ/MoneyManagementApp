@@ -19,12 +19,13 @@ export default function CompanyBillsList() {
     const [refreshing, setRefreshing] = useState(false);
     const [searchCode, setSearchCode] = useState('');
     const [sortFilter, setSortFilter] = useState('oldest');
-    const [statusFilter, setStatusFilter] = useState('pending');
+    const [statusFilter, setStatusFilter] = useState('all');
     const router = useRouter();
 
     const statusOptions = [
         { label: 'All', value: 'all' },
         { label: 'Pending', value: 'pending' },
+        { label: 'Overdue', value: 'overdue' },
         { label: 'Paid', value: 'paid' },
     ];
     const sortOptions = [
@@ -61,10 +62,24 @@ export default function CompanyBillsList() {
         return off;
     }, [code, sortFilter, statusFilter]);
 
+    // Helper: determine if a bill is overdue (pending and effective due <= today at 00:00)
+    const isBillOverdue = useCallback((b) => {
+        if (!b || b.status !== 'pending') return false;
+        const d = b?.promise_date || b?.due_date;
+        if (!d) return false;
+        try {
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const target = new Date(d); target.setHours(0, 0, 0, 0);
+            return target.getTime() <= today.getTime();
+        } catch { return false; }
+    }, []);
+
     const fetchBills = async () => {
         setLoading(true); setRefreshing(false);
         try {
-            const statusParam = statusFilter === 'all' ? '' : `status=${statusFilter}&`;
+            // For 'overdue', we fetch pending from API and filter client-side by effective due <= today
+            const apiStatus = statusFilter === 'overdue' ? 'pending' : (statusFilter === 'all' ? '' : statusFilter);
+            const statusParam = apiStatus ? `status=${apiStatus}&` : '';
             const url = `${API_BASE_URL}/companies/${code}/bills?${statusParam}sort=${sortFilter}`;
             const response = await fetch(url);
             if (!response.ok) throw new Error('HTTP error');
@@ -80,36 +95,55 @@ export default function CompanyBillsList() {
     const normalize = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const visibleBills = useMemo(() => {
         const q = normalize(searchCode.trim());
-        if (!q) return bills;
-        return bills.filter(b => normalize(b?.bill_number).includes(q));
-    }, [bills, searchCode]);
+        const base = bills.filter(b => !q || normalize(b?.bill_number).includes(q));
+        if (statusFilter === 'overdue') {
+            // Only overdue pending bills
+            return base.filter(isBillOverdue);
+        }
+        if (statusFilter === 'pending') {
+            // Only pending but NOT overdue
+            return base.filter(b => b?.status === 'pending' && !isBillOverdue(b));
+        }
+        if (statusFilter === 'paid') {
+            return base.filter(b => b?.status === 'paid');
+        }
+        return base;
+    }, [bills, searchCode, statusFilter, isBillOverdue]);
 
     const renderBillItem = ({ item }) => {
-        let overdue = false;
-        const effectiveDue = item?.promise_date ? new Date(item.promise_date) : (item?.due_date ? new Date(item.due_date) : null);
-        if (effectiveDue) {
-            try {
-                const today = new Date();
-                effectiveDue.setHours(0, 0, 0, 0);
-                today.setHours(0, 0, 0, 0);
-                if (effectiveDue < today) overdue = true;
-            } catch (_) { }
-        }
-        const label = item?.promise_date ? 'Promise' : 'Due';
+        const isOverdue = isBillOverdue(item);
+        const label = 'Promise';
+        const isPaid = item?.status === 'paid';
+        const isPending = item?.status === 'pending' && !isOverdue;
+        const amountStyle = [
+            styles.amountMain,
+            isOverdue ? styles.amountOverdue : (isPending ? styles.amountPending : styles.amountFine),
+        ];
+        const promiseStyle = [
+            styles.billMetaPromise,
+            isOverdue ? styles.billMetaOverdue : (isPending ? styles.billMetaPending : null),
+        ];
+        const displayStatus = isOverdue ? 'overdue' : item.status;
         return (
             <TouchableOpacity style={styles.billTouchable} activeOpacity={0.7} onPress={() => router.push({ pathname: './PaymentDetail', params: { name, code, amount, outbal, bill_number: item.bill_number, bill_date: item.bill_date, promise_date: item.promise_date || item.due_date, status: item.status, amount_paid: item.amount_paid, bill_amount: item.amount, bill_id: item.id } })}>
                 <Card style={styles.billCard}>
                     <View style={styles.billRowTop}>
                         <Text style={styles.billNumber}>{item.bill_number}</Text>
-                        <StatusBadge status={item.status} />
+                        <StatusBadge status={displayStatus} />
                     </View>
                     <View style={styles.billMetaRow}>
                         <Text style={styles.billMeta}>Bill: {formatDate(item.bill_date)}</Text>
-                        <Text style={[styles.billMeta, overdue && styles.billMetaOverdue]}>{label}: {formatDate(item.promise_date || item.due_date)}</Text>
+                        <Text style={promiseStyle}>{label}: {formatDate(item.promise_date || item.due_date)}</Text>
                     </View>
-                    <View style={styles.billAmounts}>
-                        <Text style={styles.amountMain}>{formatCurrency(item.amount)}</Text>
-                        <Text style={styles.amountPaidLabel}>Paid <Text style={styles.amountPaid}>{formatCurrency(item.amount_paid)}</Text></Text>
+                    <View style={styles.amountsRow}>
+                        <View style={styles.billAmounts}>
+                            <Text style={amountStyle}>{formatCurrency(item.amount)}</Text>
+                            <Text style={styles.amountPaidLabel}>Paid <Text style={styles.amountPaid}>{formatCurrency(item.amount_paid)}</Text></Text>
+                        </View>
+                        <View style={styles.tapHintRow}>
+                            <Text style={styles.tapHint}>Tap for details</Text>
+                            <Text style={styles.tapHintChevron}>›</Text>
+                        </View>
                     </View>
                 </Card>
             </TouchableOpacity>
@@ -190,13 +224,13 @@ const styles = StyleSheet.create({
     statPillValue: { fontSize: 13, fontWeight: '700', color: tokens.colors.text },
     searchCard: { marginBottom: 12, padding: 12 },
     searchRow: { flexDirection: 'row', alignItems: 'center' },
-    searchInput: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, color: tokens.colors.text },
-    clearBtn: { marginLeft: 8, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
+    searchInput: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: tokens.colors.text, fontSize: 16 },
+    clearBtn: { marginLeft: 8, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
     clearBtnText: { color: tokens.colors.text, fontWeight: '600', fontSize: 12 },
     filtersCard: { marginBottom: 14, paddingVertical: 10, paddingHorizontal: 12 },
     filterChipsWrapper: {},
     chipsRow: { paddingRight: 4, alignItems: 'center' },
-    chip: { backgroundColor: 'rgba(255,255,255,0.08)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, marginRight: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+    chip: { backgroundColor: tokens.colors.cardAlt, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, marginRight: 8, borderWidth: 1, borderColor: tokens.colors.border },
     chipActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
     chipText: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '600' },
     chipTextActive: { color: '#000' },
@@ -210,11 +244,22 @@ const styles = StyleSheet.create({
     billNumber: { fontSize: 15, fontWeight: '700', color: tokens.colors.text, flex: 1 },
     billMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
     billMeta: { fontSize: 12, color: tokens.colors.textDim },
-    billMetaOverdue: { color: tokens.colors.danger, fontWeight: '600' },
-    billAmounts: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    billMetaPromise: { fontSize: 13, color: tokens.colors.text, fontWeight: '700' },
+    billMetaOverdue: { color: tokens.colors.danger, fontWeight: '700' },
+    billMetaPending: { color: (tokens.colors.warning || '#f5b100'), fontWeight: '700' },
+    amountsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    billAmounts: { flexDirection: 'column', alignItems: 'flex-start' },
     amountMain: { fontSize: 16, fontWeight: '700', color: tokens.colors.accent },
-    amountPaidLabel: { fontSize: 12, color: tokens.colors.textDim },
-    amountPaid: { color: tokens.colors.success, fontWeight: '600' },
+    amountOverdue: { color: tokens.colors.danger },
+    amountPending: { color: (tokens.colors.warning || '#f5b100') },
+    amountFine: { color: tokens.colors.text },
+    amountPaidLabel: { fontSize: 15, color: tokens.colors.textDim, fontWeight: '700', marginTop: 2 },
+    amountPaid: { color: tokens.colors.success, fontWeight: '700', fontSize: 17 },
+    tagOverdue: { backgroundColor: tokens.colors.danger, paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10, borderWidth: 1, borderColor: '#000' },
+    tagOverdueText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+    tapHintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6, paddingLeft: 10 },
+    tapHint: { fontSize: 13, color: tokens.colors.textSubtle, fontWeight: '600', letterSpacing: 0.4 },
+    tapHintChevron: { fontSize: 16, lineHeight: 16, color: tokens.colors.accent, fontWeight: '700' },
     emptyContainer: { alignItems: 'center', paddingVertical: 40 },
     empty: { textAlign: 'center', color: tokens.colors.textDim, fontSize: 14 },
     retryButton: { backgroundColor: tokens.colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
