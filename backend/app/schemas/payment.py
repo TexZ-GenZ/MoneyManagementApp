@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime, date
 from decimal import Decimal
@@ -20,6 +20,15 @@ class PaymentSubmit(BaseModel):
     next_promise_date: Optional[date] = None
     bill_allocations: List[BillAllocationIn]
     exec_location_verified: Optional[bool] = None
+
+    @field_validator("method")
+    @classmethod
+    def normalize_method(cls, v: str) -> str:
+        if not isinstance(v, str):
+            return v
+        s = v.strip()
+        # normalize known labels to lower
+        return s.lower()
 
 
 class PaymentOut(BaseModel):

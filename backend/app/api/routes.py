@@ -435,13 +435,12 @@ def set_promise_date(
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
-    # Forward-only rule
-    if c.promise_date and body.promise_date < c.promise_date:
-        raise HTTPException(status_code=400, detail="Cannot move promise_date backward")
-    # Must not be earlier than credit_date
-    if c.credit_date and body.promise_date < c.credit_date:
+    # Allow backward moves, but not before today
+    from datetime import date as _date
+
+    if body.promise_date < _date.today():
         raise HTTPException(
-            status_code=400, detail="promise_date cannot be earlier than credit_date"
+            status_code=400, detail="promise_date cannot be in the past"
         )
     c.promise_date = body.promise_date
     try:
@@ -613,15 +612,12 @@ def admin_update_bill_promise(
     b = db.get(Bill, bill_id)
     if not b or b.is_archived:
         raise HTTPException(status_code=404, detail="Bill not found")
-    # Forward-only for per-bill promise
-    if getattr(b, "promise_date", None) and body.promise_date < b.promise_date:
-        raise HTTPException(status_code=400, detail="Cannot move promise_date backward")
-    # Enforce not earlier than company's credit_date
-    comp = db.get(Company, b.company_code)
-    if comp and comp.credit_date and body.promise_date < comp.credit_date:
+    # Allow backward moves, but not before today
+    from datetime import date as _date
+
+    if body.promise_date < _date.today():
         raise HTTPException(
-            status_code=400,
-            detail="promise_date cannot be earlier than company's credit_date",
+            status_code=400, detail="promise_date cannot be in the past"
         )
     # Apply
     b.promise_date = body.promise_date
@@ -839,6 +835,39 @@ def payments_activity(
             .all()
         )
 
+        # Precompute allocation counts per payment for history display
+        try:
+            pids = [p.id for p in rows]
+            alloc_counts = {}
+            first_bill_by_payment = {}
+            if pids:
+                ac_rows = (
+                    db.query(PaymentAllocation.payment_id, func.count().label("cnt"))
+                    .filter(PaymentAllocation.payment_id.in_(pids))
+                    .group_by(PaymentAllocation.payment_id)
+                    .all()
+                )
+                alloc_counts = {pid: int(cnt) for pid, cnt in ac_rows}
+                # First bill number for display
+                subq = (
+                    db.query(
+                        PaymentAllocation.payment_id.label("pid"),
+                        func.min(PaymentAllocation.bill_id).label("min_bid"),
+                    )
+                    .filter(PaymentAllocation.payment_id.in_(pids))
+                    .group_by(PaymentAllocation.payment_id)
+                    .subquery()
+                )
+                jrows = (
+                    db.query(subq.c.pid, Bill.bill_number)
+                    .join(Bill, Bill.id == subq.c.min_bid)
+                    .all()
+                )
+                first_bill_by_payment = {pid: bn for pid, bn in jrows}
+        except Exception:
+            alloc_counts = {}
+            first_bill_by_payment = {}
+
         items = []
         for p in rows:
             try:
@@ -915,6 +944,34 @@ def payments_activity(
                     "last_activity_at": last_time.isoformat() if last_time else None,
                     "last_activity_type": last_type,
                     "last_comment": last_comment,
+                    # number of bills included in this payment (bulk vs single)
+                    "allocation_count": alloc_counts.get(p.id, 0),
+                    "first_bill_number": first_bill_by_payment.get(p.id),
+                    # convenience aliases used by app front-end (tolerant to None)
+                    "created_at": (
+                        p.collected_at.isoformat() if p.collected_at else None
+                    ),
+                    "updated_at": (
+                        (
+                            p.admin_review_at
+                            or p.accountant_review_at
+                            or p.collected_at
+                        ).isoformat()
+                        if (
+                            p.admin_review_at
+                            or p.accountant_review_at
+                            or p.collected_at
+                        )
+                        else None
+                    ),
+                    "accountant_approved_at": (
+                        p.accountant_review_at.isoformat()
+                        if p.accountant_review_at
+                        else None
+                    ),
+                    "admin_approved_at": (
+                        p.admin_review_at.isoformat() if p.admin_review_at else None
+                    ),
                 }
                 items.append(item_dict)
             except Exception as e:
@@ -986,6 +1043,21 @@ def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
         admin_comment=getattr(p, "admin_comment", None),
         allocations=allocations,
     )
+
+
+# Alias endpoint for bulk payments (same schema/logic as /payments)
+@router.post(
+    "/payments/bulk",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("executive", "admin"))],
+)
+def submit_bulk_payment(
+    body: PaymentSubmit,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    return submit_payment(body, user, db, idempotency_key)
 
 
 @router.post(

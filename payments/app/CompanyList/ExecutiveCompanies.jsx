@@ -175,7 +175,7 @@ export default function ExecutiveCompaniesScreen() {
             </View>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>PENDING</Text>
-              <Text style={styles.metricValue} numberOfLines={1}>{item.pending_count ?? 0}</Text>
+              <Text style={[styles.metricValue, styles.pendingValue]} numberOfLines={1}>{item.pending_count ?? 0}</Text>
             </View>
           </View>
         </Card>
@@ -311,6 +311,7 @@ const styles = StyleSheet.create({
   metricLabel: { fontSize: 10, fontWeight: '600', color: tokens.colors.textSubtle, marginBottom: 4, letterSpacing: 0.5 },
   metricValue: { fontSize: 14, fontWeight: '700', color: tokens.colors.accent },
   dangerValue: { color: tokens.colors.danger },
+  pendingValue: { color: (tokens.colors.warning || '#f5b100') },
   // pending bills styles removed
   empty: { color: tokens.colors.textDim, textAlign: 'center', fontSize: 14, padding: 24 },
   errorCard: { padding: 16, marginTop: 24 },

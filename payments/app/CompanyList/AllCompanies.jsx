@@ -216,7 +216,7 @@ export default function CompanyListScreen() {
             </View>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>PENDING</Text>
-              <Text style={styles.metricValue} numberOfLines={1}>{item.pending_count ?? 0}</Text>
+              <Text style={[styles.metricValue, { color: tokens.colors.warning || '#f5b100' }]} numberOfLines={1}>{item.pending_count ?? 0}</Text>
             </View>
           </View>
         </Card>

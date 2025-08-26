@@ -55,24 +55,32 @@ export default function TabLayout() {
 
   // Get user role for conditional tab rendering
   const userRole = user?.role || 'accountant';
+  // Use a sensible default when inset is 0 (common on Android with 3-button nav)
+  const DEFAULT_BOTTOM_PADDING_IOS = 12;
+  const DEFAULT_BOTTOM_PADDING_ANDROID = 20;
+  // Clamp to avoid over-inflation on gesture devices but never drop below defaults
+  const bottomInsetIOS = Math.min((insets.bottom && insets.bottom > 0 ? insets.bottom : DEFAULT_BOTTOM_PADDING_IOS), 24);
+  const bottomInsetAndroid = Math.min((insets.bottom && insets.bottom > 0 ? insets.bottom : DEFAULT_BOTTOM_PADDING_ANDROID), 28);
+  // Add a tiny symmetric padding to look balanced above & below the icons
+  const EXTRA_BAR_PADDING = 8;
 
   const baseTabBarStyle = Platform.select({
     ios: {
       backgroundColor: '#27323d',
       borderTopColor: '#364350',
-      paddingTop: 8,
-      // Add the bottom safe area explicitly so we never overlap the home indicator
-      paddingBottom: insets.bottom + 12,
-      height: 60 + insets.bottom + 12,
+      paddingTop: EXTRA_BAR_PADDING,
+      // Respect safe area without adding excessive extra padding
+      paddingBottom: bottomInsetIOS + EXTRA_BAR_PADDING,
+      height: 56 + bottomInsetIOS + EXTRA_BAR_PADDING,
     },
     default: {
       backgroundColor: '#27323d',
       borderTopColor: '#364350',
       elevation: 20,
-      paddingTop: 8,
-      // Always lift the bar above gesture/nav area using safe area inset
-      paddingBottom: insets.bottom + 16,
-      height: 70 + insets.bottom,
+      paddingTop: EXTRA_BAR_PADDING,
+      // Ensure we sit above the on-screen nav even when inset is reported as 0
+      paddingBottom: bottomInsetAndroid + EXTRA_BAR_PADDING,
+      height: 60 + bottomInsetAndroid + EXTRA_BAR_PADDING,
       shadowColor: '#000',
       shadowOpacity: 0.3,
       shadowOffset: { width: 0, height: -2 },

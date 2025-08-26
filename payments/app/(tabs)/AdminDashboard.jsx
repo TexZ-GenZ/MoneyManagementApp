@@ -100,12 +100,8 @@ export default function AdminDashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  // Initial + interval refresh
-  useEffect(() => {
-    fetchRecent();
-    const id = setInterval(fetchRecent, 30000); // 30s
-    return () => clearInterval(id);
-  }, [fetchRecent]);
+  // Only refresh on page load or navigation focus (interval removed)
+  useEffect(() => { fetchRecent(); }, [fetchRecent]);
 
   // Refresh when screen regains focus
   useFocusEffect(useCallback(() => {

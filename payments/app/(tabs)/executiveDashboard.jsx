@@ -49,8 +49,7 @@ export default function ExecutiveDashboard() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  // Interval refresh every 60s
-  useEffect(() => { const id = setInterval(fetchData, 60000); return () => clearInterval(id); }, [fetchData]);
+  // Removed interval refresh; only refresh on page load or navigation focus
   // Refresh on focus
   useFocusEffect(useCallback(() => { fetchData(); refreshUnread(); }, [fetchData, refreshUnread]));
   useFocusEffect(useCallback(() => { /* could trigger badge refresh if needed */ }, []));
@@ -155,14 +154,17 @@ export default function ExecutiveDashboard() {
   };
   const renderBillItem = ({ item }) => {
     const dueLike = item?.promise_date || item?.due_date;
+    // Robust fallbacks to ensure we always show the assigned company name/code
+    const companyName = item.__company_name || item.company_name || item.company?.name || item.company || '—';
+    const companyCode = item.__company_code || item.company_code || item.company?.code || item.code || '';
     return (
       <Card style={styles.companyCard}>
         <TouchableOpacity
           style={styles.companyTouchable}
           onPress={() => router.push({
             pathname: '../(others)/PaymentDetail', params: {
-              name: item.__company_name,
-              code: item.__company_code,
+              name: companyName,
+              code: companyCode,
               amount: item.amount, // total bill amount
               outbal: '',
               bill_number: item.bill_number,
@@ -178,11 +180,11 @@ export default function ExecutiveDashboard() {
         >
           <View style={{ flex: 1, paddingRight: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-              <Text style={styles.companyName} numberOfLines={1}>{item.__company_name || '—'}</Text>
+              <Text style={styles.companyName} numberOfLines={1}>{companyName}</Text>
               <Text style={styles.chevron}>›</Text>
             </View>
             <Text style={styles.companyMeta} numberOfLines={2}>
-              {item.__company_code} • Bill {String(item.bill_number)}
+              {companyCode} • Bill {String(item.bill_number)}
             </Text>
             <Text style={styles.companyMetaSecondary} numberOfLines={1}>
               <Text style={styles.overdueLabel}>Overdue</Text> • Due <Text style={styles.metaStrong}>{formatShortDate(dueLike)}</Text> • <Text style={styles.tapHint}>Tap to open</Text>
@@ -245,7 +247,7 @@ export default function ExecutiveDashboard() {
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.primaryCTA} onPress={() => router.push('../CompanyList/ExecutiveCompanies')}>
-          <Text style={styles.primaryCTAText}>View All Companies</Text>
+          <Text style={styles.primaryCTAText}>Collect Payment</Text>
         </TouchableOpacity>
         <Text style={styles.nextHint}>{nextActionableCount === 0 ? 'No overdue bills. Great!' : `${nextActionableCount} bills overdue.`}</Text>
       </Card>
@@ -320,8 +322,8 @@ const styles = StyleSheet.create({
   quickBtnActive: { backgroundColor: tokens.colors.accent, borderColor: tokens.colors.accent },
   quickBtnText: { color: tokens.colors.text, fontSize: 13, fontWeight: '600' },
   quickBtnTextActive: { color: '#000', fontWeight: '800' },
-  primaryCTA: { marginTop: 10, backgroundColor: tokens.colors.accent, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  primaryCTAText: { color: '#000', fontSize: 14, fontWeight: '800' },
+  primaryCTA: { marginTop: 12, backgroundColor: tokens.colors.accent, borderRadius: 12, paddingVertical: 16, alignItems: 'center' },
+  primaryCTAText: { color: '#000', fontSize: 16, fontWeight: '800' },
   nextHint: { marginTop: 10, fontSize: 11, color: tokens.colors.textDim, textAlign: 'center' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   sectionTitle: { fontSize: 17, fontWeight: '800', color: tokens.colors.text },
