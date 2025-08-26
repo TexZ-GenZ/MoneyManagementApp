@@ -201,16 +201,21 @@ export default function UnifiedHistory() {
                             })()}
                         </View>
                     </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={[styles.amount, { color: tokens.colors.accent }]}>
-                            {formatCurrency(item.amount_collected)}
-                        </Text>
-                        <View style={{ marginTop: 6 }}>
-                            <StatusBadge status={item.status}>
-                                {prettyStatus(item.status)}
-                            </StatusBadge>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={[styles.amount, { color: tokens.colors.accent }]}>
+                                {formatCurrency(item.amount_collected)}
+                            </Text>
+                            <View style={{ marginTop: 6 }}>
+                                <StatusBadge status={item.status}>
+                                    {prettyStatus(item.status)}
+                                </StatusBadge>
+                            </View>
+                            {!!item.allocation_count && (
+                                <Text style={styles.bulkHint}>
+                                    {item.allocation_count > 1 ? `${item.allocation_count} bills` : (item.first_bill_number ? `Bill ${item.first_bill_number}` : '1 bill')}
+                                </Text>
+                            )}
                         </View>
-                    </View>
                 </View>
 
                 <View style={styles.metaRow}>
@@ -365,6 +370,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '800'
     },
+    bulkHint: { marginTop: 6, fontSize: 11, fontWeight: '700', color: tokens.colors.textSubtle },
     metaRow: { marginTop: 6 },
     metaPair: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
     metaText: { fontSize: 12, fontWeight: '600', color: tokens.colors.textSubtle },

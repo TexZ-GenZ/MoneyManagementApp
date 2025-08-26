@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Alert, ScrollView, TextInput } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Alert, ScrollView, TextInput, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
@@ -22,6 +22,8 @@ export default function CompanyBillsList() {
     const [sortFilter, setSortFilter] = useState('oldest');
     const [statusFilter, setStatusFilter] = useState('all');
     const router = useRouter();
+    const [multiModalVisible, setMultiModalVisible] = useState(false);
+    const [multiAmount, setMultiAmount] = useState('');
 
     const statusOptions = [
         { label: 'All', value: 'all' },
@@ -220,9 +222,58 @@ export default function CompanyBillsList() {
                 ListEmptyComponent={!loading ? renderEmptyComponent : null}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 100 }}
+                contentContainerStyle={{ paddingBottom: 160 }}
                 keyboardShouldPersistTaps="handled"
             />
+            {/* Floating Multiple Pay button */}
+            <View style={styles.fabWrapper} pointerEvents="box-none">
+                <TouchableOpacity
+                    style={styles.fab}
+                    activeOpacity={0.9}
+                    onPress={() => setMultiModalVisible(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Multiple Pay"
+                >
+                    <Text style={styles.fabText}>Multiple Pay</Text>
+                </TouchableOpacity>
+            </View>
+            {/* Amount entry modal */}
+            <Modal
+                visible={multiModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setMultiModalVisible(false)}
+            >
+                <View style={styles.modalBackdrop}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>Enter Amount</Text>
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="Enter Total Amount"
+                            placeholderTextColor={tokens.colors.textDim}
+                            keyboardType="numeric"
+                            value={multiAmount}
+                            onChangeText={setMultiAmount}
+                        />
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity style={[styles.modalBtn, styles.modalCancel]} onPress={() => setMultiModalVisible(false)}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalBtn, styles.modalDone]}
+                                onPress={() => {
+                                    const v = Number(multiAmount);
+                                    if (!multiAmount || Number.isNaN(v) || v <= 0) { Alert.alert('Invalid', 'Enter a valid amount'); return; }
+                                    setMultiModalVisible(false);
+                                    router.push({ pathname: '/(others)/MultiPayScreen', params: { name, code, outbal, amount: String(v) } });
+                                }}
+                            >
+                                <Text style={styles.modalDoneText}>Done</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </Screen>
     );
 }
@@ -275,4 +326,17 @@ const styles = StyleSheet.create({
     empty: { textAlign: 'center', color: tokens.colors.textDim, fontSize: 14 },
     retryButton: { backgroundColor: tokens.colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
     retryText: { color: '#000', fontSize: 14, fontWeight: '600' },
+    fabWrapper: { position: 'absolute', left: 0, right: 0, bottom: 48, alignItems: 'center' },
+    fab: { backgroundColor: tokens.colors.accent, paddingHorizontal: 28, paddingVertical: 14, borderRadius: 28, borderWidth: 1, borderColor: tokens.colors.border, shadowColor: '#000', shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 6 },
+    fabText: { color: '#000', fontWeight: '900', letterSpacing: 0.4, fontSize: 16 },
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+    modalCard: { width: '100%', maxWidth: 380, backgroundColor: tokens.colors.cardAlt, borderRadius: 12, borderColor: tokens.colors.border, borderWidth: 1, padding: 16 },
+    modalTitle: { fontSize: 16, fontWeight: '800', color: tokens.colors.text, marginBottom: 12 },
+    modalInput: { backgroundColor: '#00000010', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, marginBottom: 16 },
+    modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+    modalBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+    modalCancel: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border },
+    modalCancelText: { color: tokens.colors.text, fontWeight: '700' },
+    modalDone: { backgroundColor: tokens.colors.accent },
+    modalDoneText: { color: '#000', fontWeight: '800' },
 });
