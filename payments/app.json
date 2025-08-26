@@ -5,7 +5,7 @@
     "slug": "payments",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/1024.png",
+    "icon": "./assets/images/appicon.png",
     "scheme": "payments",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,11 +14,11 @@
     },
     "android": {
       "jsEngine": "hermes",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon258.png",
-        "backgroundImage": "./assets/images/icon_adaptive_back.png"
-      },
       "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/appicon.png",
+        "backgroundColor": "#ffffff"
+      },
       "package": "com.skywalker421.payments",
       "googleServicesFile": "./google-services.json"
     },

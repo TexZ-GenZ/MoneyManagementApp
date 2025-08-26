@@ -22,6 +22,7 @@ import { tokens } from '../../src/ui/tokens';
 import { API_BASE_URL } from '../../src/utils/constants';
 import { emitPaymentUpdate } from '../../src/events/paymentEvents';
 import { formatDate, formatDateTime } from '../../src/ui/format';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer"];
 
 // Simple UUID v4 generator
@@ -36,6 +37,7 @@ const generateUUID = () => {
 export default function CollectPaymentScreen() {
   const { company_code, bill_id, bill_number, bill_amount } = useLocalSearchParams();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [collectedAt, setCollectedAt] = useState(new Date()); // auto-updated, readonly
   const [nextPromiseDate, setNextPromiseDate] = useState(null);
@@ -370,7 +372,7 @@ export default function CollectPaymentScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
           scrollEnabled={!locationModalOpen}
           pointerEvents={locationModalOpen ? 'none' : 'auto'}
         >
@@ -478,7 +480,7 @@ export default function CollectPaymentScreen() {
             {location && <Text style={styles.locationHint}>Location captured (coordinates hidden).</Text>}
           </Card>
         </ScrollView>
-        <View style={styles.submitBar}>
+        <View style={[styles.submitBar, { paddingBottom: 16 + insets.bottom }]}>
           <TouchableOpacity style={[styles.submitBtn, (submitting || !location) && styles.disabledBtn]} disabled={submitting || !location} onPress={submitPayment}>
             {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitBtnText}>Submit Payment</Text>}
           </TouchableOpacity>

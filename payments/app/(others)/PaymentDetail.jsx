@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl, ScrollView, Linking } from 'react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StorageService } from '../../src/services/storageService';
 import { useAppSelector } from '../../src/store/hooks';
 import { useRouter } from 'expo-router';
@@ -29,6 +30,7 @@ export default function PaymentDetails() {
     const [company, setCompany] = useState(null); // CompanyBase
     const [showPromisePicker, setShowPromisePicker] = useState(false);
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const userRole = useAppSelector(s => s.auth.user?.role || '');
 
     useEffect(() => { fetchAll(); }, [bill_id]);
@@ -288,12 +290,12 @@ export default function PaymentDetails() {
                 ListHeaderComponent={renderListHeader}
                 ListEmptyComponent={loading ? () => (<View><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>) : renderEmpty}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                contentContainerStyle={{ paddingBottom: 140 }}
+                contentContainerStyle={{ paddingBottom: 140 + insets.bottom }}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             />
             {userRole === 'executive' && (
-                <TouchableOpacity style={styles.fab} onPress={() => router.push({ pathname: './PaymentScreen', params: { company_code: code, bill_id, bill_number, bill_amount: amount } })}>
+                <TouchableOpacity style={[styles.fab, { bottom: 20 + insets.bottom }]} onPress={() => router.push({ pathname: './PaymentScreen', params: { company_code: code, bill_id, bill_number, bill_amount: amount } })}>
                     <Text style={styles.fabText}>Add Payment</Text>
                 </TouchableOpacity>
             )}
