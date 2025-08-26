@@ -79,16 +79,51 @@ export default function UnifiedHistory() {
             });
 
             const toMillis = (v) => {
-                if (!v) return 0;
-                const t = Date.parse(v);
-                return Number.isNaN(t) ? 0 : t;
+                if (v == null) return 0;
+                if (typeof v === 'number') {
+                    // seconds vs ms
+                    return v > 1e12 ? v : (v > 1e9 ? v * 1000 : v);
+                }
+                if (typeof v === 'string') {
+                    let s = v.trim();
+                    // numeric string
+                    if (/^\d+$/.test(s)) {
+                        const n = Number(s);
+                        return n > 1e12 ? n : (n > 1e9 ? n * 1000 : n);
+                    }
+                    // Normalize common 'YYYY-MM-DD HH:mm:ss' to ISO
+                    if (s.length >= 19 && s[10] === ' ' && s.indexOf('T') === -1) {
+                        s = s.slice(0, 10) + 'T' + s.slice(11);
+                        // If no timezone info, assume UTC
+                        if (!/[zZ]|[+\-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+                    }
+                    const t = Date.parse(s);
+                    return Number.isNaN(t) ? 0 : t;
+                }
+                try {
+                    const t = Date.parse(v);
+                    return Number.isNaN(t) ? 0 : t;
+                } catch {
+                    return 0;
+                }
             };
 
             withDisplay.sort((a, b) => {
                 const ta = toMillis(a.display_time);
                 const tb = toMillis(b.display_time);
-                // Always sort newest first (descending) for intuitive recency across roles
-                return tb - ta;
+                if (tb !== ta) return tb - ta;
+                // Tie-breaker 1: last_activity_at
+                const la = toMillis(a.last_activity_at);
+                const lb = toMillis(b.last_activity_at);
+                if (lb !== la) return lb - la;
+                // Tie-breaker 2: submittedAt if present on raw items
+                const sa = toMillis(a.submitted_at || a.created_at);
+                const sb = toMillis(b.submitted_at || b.created_at);
+                if (sb !== sa) return sb - sa;
+                // Tie-breaker 3: by id/payment_id desc
+                const ida = Number(a.payment_id || a.id || 0);
+                const idb = Number(b.payment_id || b.id || 0);
+                return idb - ida;
             });
 
             arr = withDisplay;
