@@ -15,8 +15,8 @@
     "android": {
       "jsEngine": "hermes",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/icon258.png",
+        "backgroundImage": "./assets/images/icon_adaptive_back.png"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.skywalker421.payments",
