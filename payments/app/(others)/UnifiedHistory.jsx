@@ -55,7 +55,7 @@ export default function UnifiedHistory() {
                 });
             }
             // Map items to role-specific interaction timestamp and label, then sort
-            const withDisplay = arr.map((it) => {
+        const withDisplay = arr.map((it) => {
                 // Prefer role-specific timestamps if present; fall back to last_activity_at
                 const submittedAt = it.submitted_at || it.created_at;
                 const accountantAt = it.accountant_reviewed_at || it.accountant_approved_at;
@@ -65,13 +65,13 @@ export default function UnifiedHistory() {
                 let display_type = it.last_activity_type;
 
                 if (userRole === 'executive') {
-                    display_time = submittedAt || it.last_activity_at;
+            display_time = submittedAt || it.last_activity_at;
                     display_type = 'submitted';
                 } else if (userRole === 'accountant') {
-                    display_time = accountantAt || it.last_activity_at;
+            display_time = accountantAt || it.last_activity_at || submittedAt;
                     display_type = 'accountant_review';
                 } else if (userRole === 'admin') {
-                    display_time = adminAt || it.last_activity_at;
+            display_time = adminAt || it.last_activity_at || accountantAt || submittedAt;
                     display_type = 'admin_review';
                 }
 
@@ -87,8 +87,8 @@ export default function UnifiedHistory() {
             withDisplay.sort((a, b) => {
                 const ta = toMillis(a.display_time);
                 const tb = toMillis(b.display_time);
-                // Accountant: earliest first (ascending). Others: latest first (descending).
-                return userRole === 'accountant' ? ta - tb : tb - ta;
+                // Always sort newest first (descending) for intuitive recency across roles
+                return tb - ta;
             });
 
             arr = withDisplay;
