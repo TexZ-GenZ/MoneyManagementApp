@@ -15,6 +15,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI; // unified base
 export default function CompanyBillsList() {
     const { name, code, amount, outbal } = useLocalSearchParams();
     const [bills, setBills] = useState([]);
+    const [totalCount, setTotalCount] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchCode, setSearchCode] = useState('');
@@ -85,8 +86,18 @@ export default function CompanyBillsList() {
             if (!response.ok) throw new Error('HTTP error');
             const data = await response.json();
             setBills(data.items || []);
+            const apiTotal = (
+                typeof data.total === 'number' ? data.total :
+                typeof data.total_count === 'number' ? data.total_count :
+                typeof data.count === 'number' ? data.count :
+                typeof data.items_total === 'number' ? data.items_total :
+                typeof data.totalItems === 'number' ? data.totalItems :
+                typeof data.total_items === 'number' ? data.total_items :
+                null
+            );
+            setTotalCount(apiTotal);
         } catch (e) {
-            console.error(e); Alert.alert('Error', 'Failed to fetch bills.');
+            console.error(e); Alert.alert('Error', 'Failed to fetch bills.'); setTotalCount(null);
         } finally { setLoading(false); setRefreshing(false); }
     };
 
@@ -200,7 +211,7 @@ export default function CompanyBillsList() {
                         <Card style={styles.filtersCard}>
                             {renderFilters()}
                         </Card>
-                        <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{visibleBills.length}</Text></View>
+                        <View style={styles.listHeaderRow}><Text style={styles.sectionTitle}>Bills</Text><Text style={styles.count}>{totalCount ?? visibleBills.length}</Text></View>
                         {loading && (
                             <View style={{ marginTop: 10 }}><SkeletonCard /><SkeletonCard /><SkeletonCard /></View>
                         )}

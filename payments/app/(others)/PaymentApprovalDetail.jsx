@@ -89,6 +89,18 @@ export default function PaymentApprovalDetail() {
         } finally { setApproving(false); }
     };
 
+    // Ask for confirmation before approving
+    const confirmApprove = () => {
+        if (!payment || approving || declining) return;
+        const isAdminStage = payment.status === 'accountant_approved' && currentUser?.role === 'admin';
+        const title = 'Confirm Approval';
+        const subtitle = `${isAdminStage ? 'Admin' : 'Accountant'} approval for ${payment?.company_code || 'payment'} • ${formatCurrency(payment?.amount_collected || 0)}\n\nAre you sure?`;
+        Alert.alert(title, subtitle, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Approve', style: 'default', onPress: () => handleApprove() },
+        ]);
+    };
+
     const handleDecline = () => { setDeclineVisible(true); setDeclineComment(''); };
 
     const submitDecline = async () => {
@@ -211,7 +223,7 @@ export default function PaymentApprovalDetail() {
                             <View style={styles.actionsRow}>
                                 <TouchableOpacity
                                     style={[styles.actionBtn, styles.approveBtn, (approving || declining) && styles.disabledBtn]}
-                                    onPress={handleApprove}
+                                    onPress={confirmApprove}
                                     disabled={approving || declining}
                                 >
                                     {approving ? <ActivityIndicator color="#000" /> : <Text style={styles.actionText}>Approve</Text>}

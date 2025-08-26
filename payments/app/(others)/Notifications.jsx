@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import * as ExpoNotifications from 'expo-notifications';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
@@ -7,6 +9,7 @@ import { StorageService } from '../../src/services/storageService';
 import { API_BASE_URL } from '../../src/utils/constants';
 import { emitBadgeChange } from '../../src/events/notificationsEvents';
 import { Ionicons } from '@expo/vector-icons';
+import { formatDateTime } from '../../src/ui/format';
 
 export default function Notifications() {
     const [items, setItems] = useState([]);
@@ -63,6 +66,13 @@ export default function Notifications() {
 
     useEffect(() => { fetchNotifs({ append: false }); }, []);
 
+    // When this screen gains focus, clear any OS-level notifications so the launcher dot disappears
+    useFocusEffect(
+        useCallback(() => {
+            ExpoNotifications.dismissAllNotificationsAsync().catch(() => {});
+        }, [])
+    );
+
 
     const ackDelivered = async (id) => {
         try {
@@ -83,7 +93,7 @@ export default function Notifications() {
     const renderItem = ({ item }) => {
         // If delivered item shape (title/body)
         if (item.title && item.body) {
-            const created = new Date(item.created_at || item.createdAt);
+            const createdLabel = formatDateTime(item.created_at || item.createdAt);
             const isAck = !!item.acknowledged;
             return (
                 <Card style={styles.itemCard}>
@@ -100,7 +110,7 @@ export default function Notifications() {
                     </View>
                     <Text style={[styles.itemLine]} numberOfLines={4}>{String(item.body)}</Text>
                     <View style={styles.footerRow}>
-                        <Text style={styles.createdAt}>{created.toLocaleString()}</Text>
+                        <Text style={styles.createdAt}>{createdLabel}</Text>
                         {!isAck && (
                             <TouchableOpacity style={styles.ackBtn} onPress={() => ackDelivered(item.id)}>
                                 <Text style={styles.ackText}>Mark read</Text>

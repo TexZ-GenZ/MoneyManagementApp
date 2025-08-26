@@ -19,6 +19,8 @@ export default function ExecutiveDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('overdue'); // overdue | upcoming
+  const [overdueBills, setOverdueBills] = useState([]);
+  const [loadingBills, setLoadingBills] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
@@ -53,6 +55,60 @@ export default function ExecutiveDashboard() {
   useFocusEffect(useCallback(() => { fetchData(); refreshUnread(); }, [fetchData, refreshUnread]));
   useFocusEffect(useCallback(() => { /* could trigger badge refresh if needed */ }, []));
 
+  // Helper: determine if a bill is overdue (pending and effective due date <= today)
+  const isBillOverdue = useCallback((b) => {
+    if (!b || b.status !== 'pending') return false;
+    const d = b?.promise_date || b?.due_date;
+    if (!d) return false;
+    try {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const target = new Date(d); target.setHours(0, 0, 0, 0);
+      return target.getTime() <= today.getTime();
+    } catch { return false; }
+  }, []);
+
+  // After companies load, fetch overdue bills across assigned companies (only those with any overdue_count)
+  useEffect(() => {
+    const fetchOverdue = async () => {
+      if (!companies || companies.length === 0) { setOverdueBills([]); return; }
+      setLoadingBills(true);
+      try {
+        const token = await StorageService.getToken();
+        const base = API_BASE_URL;
+        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` };
+        const targets = (companies || []).filter(c => (c?.overdue_count || 0) > 0);
+        // Cap to a reasonable number to avoid too many parallel requests
+        const limited = targets.slice(0, 30);
+        const results = await Promise.allSettled(limited.map(async (c) => {
+          try {
+            const r = await fetch(`${base}/companies/${encodeURIComponent(c.code)}/bills?status=pending&sort=oldest`, { headers });
+            if (!r.ok) return [];
+            const data = await r.json().catch(() => ({}));
+            const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+            return items
+              .filter(isBillOverdue)
+              .map(b => ({
+                ...b,
+                __company_code: c.code,
+                __company_name: c.name,
+                __company_area: c.area,
+              }));
+          } catch { return []; }
+        }));
+        const flat = results.flatMap(res => res.status === 'fulfilled' ? res.value : []);
+        // Sort by effective due date ascending
+        const getDue = (b) => {
+          const d = b?.promise_date || b?.due_date; const dt = d ? new Date(d) : null; if (!dt) return 0; dt.setHours(0,0,0,0); return dt.getTime();
+        };
+        flat.sort((a, b) => getDue(a) - getDue(b));
+        setOverdueBills(flat);
+      } catch {
+        setOverdueBills([]);
+      } finally { setLoadingBills(false); }
+    };
+    fetchOverdue();
+  }, [companies, isBillOverdue]);
+
   const today = useMemo(() => new Date(), []);
   const parseDate = (d) => { try { return d ? new Date(d) : null; } catch { return null; } };
   const money = (v) => {
@@ -86,9 +142,9 @@ export default function ExecutiveDashboard() {
     , [enriched]);
 
   const activeList = viewMode === 'upcoming' ? upcomingCompanies : overdueCompanies;
-  const previewList = activeList.slice(0, 8);
+  const previewBills = (overdueBills || []).slice(0, 8);
 
-  const nextActionableCount = overdueCompanies.length;
+  const nextActionableCount = overdueBills.length;
 
   const formatShortDate = (d) => d ? formatDate(d) : '—';
   const badgeFor = (it) => {
@@ -97,25 +153,40 @@ export default function ExecutiveDashboard() {
     if (bucket === 'upcoming') return <Text style={[styles.badge, styles.badgeUpcoming]}>{formatShortDate(it.__cls.due)}</Text>;
     return null;
   };
-  const renderItem = ({ item }) => {
-    const pending = typeof item.pending_count === 'number' ? item.pending_count : 0;
-    const overdue = typeof item.overdue_count === 'number' ? item.overdue_count : 0;
+  const renderBillItem = ({ item }) => {
+    const dueLike = item?.promise_date || item?.due_date;
     return (
       <Card style={styles.companyCard}>
-        <TouchableOpacity style={styles.companyTouchable} onPress={() => router.push({ pathname: '../(others)/BiilsScreen', params: { name: item.name, code: item.code, outbal: item.outbal } })} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.companyTouchable}
+          onPress={() => router.push({ pathname: '../(others)/PaymentDetail', params: {
+            name: item.__company_name,
+            code: item.__company_code,
+            amount: item.amount, // total bill amount
+            outbal: '',
+            bill_number: item.bill_number,
+            bill_date: item.bill_date,
+            promise_date: item.promise_date || item.due_date,
+            status: 'overdue',
+            amount_paid: item.amount_paid,
+            bill_amount: item.amount,
+            bill_id: item.id,
+          } })}
+          activeOpacity={0.8}
+        >
           <View style={{ flex: 1, paddingRight: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-              <Text style={styles.companyName} numberOfLines={1}>{item.name || '—'}</Text>
+              <Text style={styles.companyName} numberOfLines={1}>{item.__company_name || '—'}</Text>
               <Text style={styles.chevron}>›</Text>
             </View>
             <Text style={styles.companyMeta} numberOfLines={2}>
-              {item.code} • Oldest Due <Text style={styles.metaStrong}>{formatShortDate(item.__cls?.due)}</Text>
+              {item.__company_code} • Bill {String(item.bill_number)}
             </Text>
             <Text style={styles.companyMetaSecondary} numberOfLines={1}>
-              <Text style={styles.overdueLabel}>Overdue</Text> <Text style={[styles.metaStrong, styles.overdueCount]}>{overdue}</Text> • <Text style={styles.tapHint}>Tap to open</Text>
+              <Text style={styles.overdueLabel}>Overdue</Text> • Due <Text style={styles.metaStrong}>{formatShortDate(dueLike)}</Text> • <Text style={styles.tapHint}>Tap to open</Text>
             </Text>
           </View>
-          {badgeFor(item)}
+          <Text style={[styles.badge, styles.badgeOverdue]}>BILL</Text>
         </TouchableOpacity>
       </Card>
     );
@@ -151,8 +222,8 @@ export default function ExecutiveDashboard() {
             <Text style={styles.summaryValue}>{companies.length}</Text>
           </View>
           <View style={styles.summaryBox}>
-            <Text style={styles.summaryLabel}>Overdue</Text>
-            <Text style={[styles.summaryValue, { color: tokens.colors.danger }]}>{overdueCompanies.length}</Text>
+            <Text style={styles.summaryLabel}>Overdue Bills</Text>
+            <Text style={[styles.summaryValue, { color: tokens.colors.danger }]}>{overdueBills.length}</Text>
           </View>
           <View style={styles.summaryBox}>
             <Text style={styles.summaryLabel}>Upcoming 7d</Text>
@@ -174,15 +245,15 @@ export default function ExecutiveDashboard() {
         <TouchableOpacity style={styles.primaryCTA} onPress={() => router.push('../CompanyList/ExecutiveCompanies')}>
           <Text style={styles.primaryCTAText}>View All Companies</Text>
         </TouchableOpacity>
-        <Text style={styles.nextHint}>{nextActionableCount === 0 ? 'No overdue companies. Great!' : `${nextActionableCount} companies overdue.`}</Text>
+  <Text style={styles.nextHint}>{nextActionableCount === 0 ? 'No overdue bills. Great!' : `${nextActionableCount} bills overdue.`}</Text>
       </Card>
       <View style={{ height: 24 }} />
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
-          {viewMode === 'overdue' && `Overdue (Top ${previewList.length})`}
-          {viewMode === 'upcoming' && `Upcoming 7 Days (Top ${previewList.length})`}
+          {viewMode === 'overdue' && `Overdue Bills (Top ${previewBills.length})`}
+          {viewMode === 'upcoming' && `Upcoming 7 Days (Top ${activeList.slice(0,8).length})`}
         </Text>
-        {!loading && activeList.length > 8 && (
+        {!loading && viewMode === 'upcoming' && activeList.length > 8 && (
           <TouchableOpacity onPress={() => router.push('../CompanyList/ExecutiveCompanies')}><Text style={styles.viewAll}>See All</Text></TouchableOpacity>
         )}
       </View>
@@ -191,10 +262,37 @@ export default function ExecutiveDashboard() {
           <View style={styles.loadingWrap}><ActivityIndicator color={tokens.colors.accent} /></View>
         ) : error ? (
           <View style={styles.loadingWrap}><Text style={styles.errorText}>{error}</Text></View>
-        ) : previewList.length === 0 ? (
-          <Text style={styles.empty}>{viewMode === 'overdue' ? 'No overdue companies. Good job.' : 'No upcoming promises in next 7 days.'}</Text>
+        ) : viewMode === 'overdue' ? (
+          loadingBills ? (
+            <View style={styles.loadingWrap}><ActivityIndicator color={tokens.colors.accent} /></View>
+          ) : (
+            previewBills.length === 0 ? (
+              <Text style={styles.empty}>No overdue bills. Good job.</Text>
+            ) : (
+              <FlatList data={previewBills} keyExtractor={(item, i) => `${item.__company_code}-${item.bill_number}-${i}`} renderItem={renderBillItem} scrollEnabled={false} />
+            )
+          )
         ) : (
-          <FlatList data={previewList} keyExtractor={(item, i) => item.code + i} renderItem={renderItem} scrollEnabled={false} />
+          activeList.slice(0, 8).length === 0 ? (
+            <Text style={styles.empty}>No upcoming promises in next 7 days.</Text>
+          ) : (
+            <FlatList data={activeList.slice(0, 8)} keyExtractor={(item, i) => item.code + i} renderItem={({ item }) => (
+              <Card style={styles.companyCard}>
+                <TouchableOpacity style={styles.companyTouchable} onPress={() => router.push({ pathname: '../(others)/BiilsScreen', params: { name: item.name, code: item.code, outbal: item.outbal } })} activeOpacity={0.8}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <Text style={styles.companyName} numberOfLines={1}>{item.name || '—'}</Text>
+                      <Text style={styles.chevron}>›</Text>
+                    </View>
+                    <Text style={styles.companyMeta} numberOfLines={2}>
+                      {item.code} • Oldest Due <Text style={styles.metaStrong}>{formatShortDate(item.__cls?.due)}</Text>
+                    </Text>
+                  </View>
+                  {badgeFor(item)}
+                </TouchableOpacity>
+              </Card>
+            )} scrollEnabled={false} />
+          )
         )}
       </Card>
       <View style={{ marginBottom: 30 }} ></View>
