@@ -39,6 +39,23 @@ DEFAULT_RESEND_INTERVAL_HOURS = 6  # fallback only if settings missing
 log = get_logger(__name__)
 
 
+def compute_unread_badge(db: Session, user_id: int, since_hours: int = 24) -> int:
+    """Return count of unacknowledged delivered notifications for user within since_hours window."""
+    try:
+        since = datetime.utcnow() - timedelta(hours=since_hours)
+        return (
+            db.query(UserNotification)
+            .filter(
+                UserNotification.user_id == user_id,
+                UserNotification.acknowledged == False,
+                UserNotification.created_at >= since,
+            )
+            .count()
+        )
+    except Exception:
+        return 0
+
+
 def _should_resend(n: Notification, now: datetime, interval_hours: int) -> bool:
     """
     Determine if a notification should be resent based on status and cadence.
@@ -339,6 +356,7 @@ def _send_role_pending_pushes(db: Session):
             ):
                 continue
             try:
+                badge = compute_unread_badge(db, t.user_id, 24)
                 resp = httpx.post(
                     "https://exp.host/--/api/v2/push/send",
                     json={
@@ -352,6 +370,7 @@ def _send_role_pending_pushes(db: Session):
                         },
                         "priority": "high",
                         "sound": "default",
+                        "badge": badge,
                     },
                     timeout=10,
                 )
@@ -431,6 +450,7 @@ def _send_exec_pending_pushes(db: Session):
         )
         for tk in tok_map.get(r.executive_id, []):
             try:
+                badge = compute_unread_badge(db, r.executive_id, 24)
                 httpx.post(
                     "https://exp.host/--/api/v2/push/send",
                     json={
@@ -440,6 +460,7 @@ def _send_exec_pending_pushes(db: Session):
                         "data": {"stage": "exec_pending_bills", "screen": "BillsList"},
                         "priority": "high",
                         "sound": "default",
+                        "badge": badge,
                     },
                     timeout=8,
                 )
@@ -539,6 +560,7 @@ def _send_executive_overdue_push(db: Session):
         )
         for tk in tok_map.get(exec_id, []):
             try:
+                badge = compute_unread_badge(db, exec_id, 24)
                 httpx.post(
                     "https://exp.host/--/api/v2/push/send",
                     json={
@@ -548,6 +570,7 @@ def _send_executive_overdue_push(db: Session):
                         "data": {"stage": "exec_overdue", "screen": "Overdue"},
                         "priority": "high",
                         "sound": "default",
+                        "badge": badge,
                     },
                     timeout=8,
                 )

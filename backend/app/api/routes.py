@@ -77,7 +77,7 @@ from app.models.models import (
     UserNotification,
 )
 from app.core.logging_config import get_logger
-from app.services.notifications import _record_user_notification
+from app.services.notifications import _record_user_notification, compute_unread_badge
 
 log = get_logger(__name__)
 

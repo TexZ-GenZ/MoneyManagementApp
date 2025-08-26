@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 import httpx
 from app.models.models import Role, User, PushToken
 from app.core.logging_config import get_logger
-from app.services.notifications import _record_user_notification
+from app.services.notifications import _record_user_notification, compute_unread_badge
 
 log = get_logger(__name__)
 
@@ -259,6 +259,7 @@ def create_payment_with_allocations(
                         )
                     except Exception:
                         pass
+                    badge = compute_unread_badge(db, t.user_id, 24)
                     httpx.post(
                         "https://exp.host/--/api/v2/push/send",
                         json={
@@ -266,6 +267,7 @@ def create_payment_with_allocations(
                             "title": "Payment Submitted",
                             "body": body,
                             "data": {"payment_id": p.id, "stage": "accountant"},
+                            "badge": badge,
                         },
                         timeout=8,
                     )
