@@ -356,7 +356,6 @@ def _send_role_pending_pushes(db: Session):
             ):
                 continue
             try:
-                badge = compute_unread_badge(db, t.user_id, 24)
                 resp = httpx.post(
                     "https://exp.host/--/api/v2/push/send",
                     json={
@@ -370,7 +369,6 @@ def _send_role_pending_pushes(db: Session):
                         },
                         "priority": "high",
                         "sound": "default",
-                        "badge": badge,
                     },
                     timeout=10,
                 )
@@ -450,7 +448,6 @@ def _send_exec_pending_pushes(db: Session):
         )
         for tk in tok_map.get(r.executive_id, []):
             try:
-                badge = compute_unread_badge(db, r.executive_id, 24)
                 httpx.post(
                     "https://exp.host/--/api/v2/push/send",
                     json={
@@ -460,7 +457,6 @@ def _send_exec_pending_pushes(db: Session):
                         "data": {"stage": "exec_pending_bills", "screen": "BillsList"},
                         "priority": "high",
                         "sound": "default",
-                        "badge": badge,
                     },
                     timeout=8,
                 )
@@ -560,7 +556,6 @@ def _send_executive_overdue_push(db: Session):
         )
         for tk in tok_map.get(exec_id, []):
             try:
-                badge = compute_unread_badge(db, exec_id, 24)
                 httpx.post(
                     "https://exp.host/--/api/v2/push/send",
                     json={
@@ -570,7 +565,6 @@ def _send_executive_overdue_push(db: Session):
                         "data": {"stage": "exec_overdue", "screen": "Overdue"},
                         "priority": "high",
                         "sound": "default",
-                        "badge": badge,
                     },
                     timeout=8,
                 )

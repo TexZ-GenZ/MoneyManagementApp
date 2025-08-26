@@ -38,7 +38,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification_icon.png",
-          "color": "#ffffff",
+          "color": "#A0E01B",
           "defaultChannel": "default"
         }
       ],
@@ -58,9 +58,7 @@
           "channelId": "default",
           "color": "@color/notification_icon_color"
         }
-      ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      ]
     ],
     "experiments": {
       "typedRoutes": true

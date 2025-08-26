@@ -2020,7 +2020,7 @@ def send_push(payload: SendPushIn, db: Session = Depends(get_db)):
         "to": target_token,
         "title": title,
         "body": message,
-        "data": {"message": message},
+    "data": {"message": message},
     }
 
     try:
