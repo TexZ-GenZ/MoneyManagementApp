@@ -26,6 +26,7 @@ export default function Screen({
     showTopBarTitle = false,
     topBarTitle = undefined,
     hideBackButton = false,
+    rightActions = null,
 }) {
     const insets = useSafeAreaInsets();
     const Container = scroll ? ScrollView : View;
@@ -67,7 +68,7 @@ export default function Screen({
                             <View style={styles.backPlaceholder} />
                         )}
                         <Text style={styles.topBarTitle} numberOfLines={1}>{showTopBarTitle ? (topBarTitle || title || (typeof header === 'string' ? header : '')) : ' '}</Text>
-                        <View style={styles.rightActionsPlaceholder} />
+                        <View style={styles.rightActionsPlaceholder}>{rightActions}</View>
                     </View>
                 )}
                 <Container

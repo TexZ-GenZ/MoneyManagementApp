@@ -74,8 +74,10 @@ from app.models.models import (
     NotificationType,
     NotificationStatus,
     PushToken,
+    UserNotification,
 )
 from app.core.logging_config import get_logger
+from app.services.notifications import _record_user_notification
 
 log = get_logger(__name__)
 
@@ -896,6 +898,20 @@ def payments_activity(
                     "amount_collected": amount_val,
                     "method": str(p.method or ""),
                     "status": status_str,
+                    # expose role-specific interaction times
+                    "submitted_at": (
+                        p.collected_at.isoformat() if p.collected_at else None
+                    ),
+                    "accountant_review_at": (
+                        p.accountant_review_at.isoformat()
+                        if getattr(p, "accountant_review_at", None)
+                        else None
+                    ),
+                    "admin_review_at": (
+                        p.admin_review_at.isoformat()
+                        if getattr(p, "admin_review_at", None)
+                        else None
+                    ),
                     "last_activity_at": last_time.isoformat() if last_time else None,
                     "last_activity_type": last_type,
                     "last_comment": last_comment,
@@ -994,35 +1010,85 @@ def accountant_approve(
         p.accountant_comment = comment
     db.commit()
     db.refresh(p)
+    # Create or ensure a pending notification exists for admin stage (immediate persistence)
+    try:
+        existing = (
+            db.query(Notification)
+            .filter(
+                Notification.payment_id == p.id,
+                Notification.type == NotificationType.payment_review,
+                Notification.status == NotificationStatus.pending,
+            )
+            .first()
+        )
+        if not existing:
+            comp = db.get(Company, p.company_code)
+            comp_part = p.company_code + (
+                f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+            )
+            try:
+                amt = f"{float(p.amount_collected):,.2f}"
+            except Exception:
+                amt = str(p.amount_collected)
+            msg = f"#{p.id} • {comp_part} • INR {amt} via {p.method} • Collected {p.collected_at.date().isoformat()} • Awaiting admin approval"
+            db.add(
+                Notification(
+                    company_code=p.company_code,
+                    payment_id=p.id,
+                    type=NotificationType.payment_review,
+                    status=NotificationStatus.pending,
+                    message=msg,
+                )
+            )
+            db.commit()
+    except Exception:
+        # Do not block on notification persistence
+        pass
     # Immediate push to admins for next approval stage
     try:
         admin_users = (
             db.query(User).filter(User.role == Role.admin, User.is_active == True).all()
         )
         if admin_users:
+            # Build richer body for admin stage ONCE, then reuse for recording and push
+            comp = db.get(Company, p.company_code)
+            comp_part = p.company_code + (
+                f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+            )
+            try:
+                amt = f"{float(p.amount_collected):,.2f}"
+            except Exception:
+                amt = str(p.amount_collected)
+            body = f"📝 {comp_part}\n₹{amt} via {p.method} • Collected {p.collected_at.date().isoformat()}\nTap to review payment #{p.id}"
+
             tokens = (
                 db.query(PushToken)
                 .filter(PushToken.user_id.in_([u.id for u in admin_users]))
                 .all()
             )
+
+            # Record delivered for each admin user
+            for u in admin_users:
+                try:
+                    _record_user_notification(
+                        db,
+                        u.id,
+                        "Needs Admin Approval",
+                        body,
+                        {"payment_id": p.id, "stage": "admin", "screen": "NotifyAdmin"},
+                    )
+                except Exception:
+                    pass
+
+            # Send pushes
             for t in tokens:
-                if not t.token.startswith("ExponentPushToken"):
+                if not isinstance(t.token, str) or not t.token.startswith(
+                    "ExponentPushToken"
+                ):
                     continue
                 try:
                     import httpx
 
-                    # Build richer body for admin stage
-                    comp = db.get(Company, p.company_code)
-                    comp_part = p.company_code + (
-                        f" ({comp.name})"
-                        if comp and getattr(comp, "name", None)
-                        else ""
-                    )
-                    try:
-                        amt = f"{float(p.amount_collected):,.2f}"
-                    except Exception:
-                        amt = str(p.amount_collected)
-                    body = f"#{p.id} • {comp_part} • INR {amt} via {p.method} • Collected {p.collected_at.date().isoformat()} • Awaiting admin approval"
                     try:
                         log.info(
                             "Sending admin push payment_id=%s body=%s",
@@ -1035,9 +1101,15 @@ def accountant_approve(
                         "https://exp.host/--/api/v2/push/send",
                         json={
                             "to": t.token,
-                            "title": "Payment Ready",
+                            "title": "Needs Admin Approval",
                             "body": body,
-                            "data": {"payment_id": p.id, "stage": "admin"},
+                            "data": {
+                                "payment_id": p.id,
+                                "stage": "admin",
+                                "screen": "NotifyAdmin",
+                            },
+                            "priority": "high",
+                            "sound": "default",
                         },
                         timeout=8,
                     )
@@ -1412,9 +1484,9 @@ def admin_activate_user(user_id: int, db: Session = Depends(get_db)):
     db.refresh(u)
     return UserOut(
         id=u.id,
-        username=u.username,
         role=u.role,
         area=u.area,
+        username=u.username,
         mobile=u.mobile,
         is_active=u.is_active,
     )
@@ -1496,7 +1568,13 @@ def list_notifications(
     status: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
     company_code: Optional[str] = Query(None),
+    since_hours: Optional[int] = Query(24, description="Default 24h window"),
+    skip: int = Query(0, ge=0),
     limit: int = 200,
+    aggregate: Optional[bool] = Query(
+        True,
+        description="Aggregate payment_review items for admin/accountant into a single summary",
+    ),
 ):
     q = db.query(Notification)
     if user.role == Role.executive:
@@ -1510,6 +1588,11 @@ def list_notifications(
         if not codes:
             return {"items": [], "total": 0}
         q = q.filter(Notification.company_code.in_(codes))
+    elif user.role == Role.admin:
+        # Admin should see only admin-relevant notifications (awaiting admin approval)
+        q = q.filter(Notification.type == NotificationType.payment_review)
+        q = q.join(Payment, Payment.id == Notification.payment_id)
+        q = q.filter(Payment.status == PaymentStatus.accountant_approved)
     if status:
         try:
             st = NotificationStatus(status)
@@ -1524,8 +1607,83 @@ def list_notifications(
             raise HTTPException(status_code=400, detail="Invalid type")
     if company_code:
         q = q.filter(Notification.company_code == company_code)
-    items = q.order_by(Notification.created_at.desc()).limit(min(limit, 500)).all()
-    return {"items": items, "total": len(items)}
+    # Optional time-window filter (e.g., last 48 hours)
+    if since_hours is not None:
+        try:
+            hrs = int(since_hours)
+            if hrs > 0:
+                cutoff = datetime.utcnow() - timedelta(hours=hrs)
+                q = q.filter(Notification.created_at >= cutoff)
+        except Exception:
+            pass
+    # Aggregate mode for approvals: return a single synthesized summary item
+    try:
+        wants_payment_review = (type is None) or (
+            type == NotificationType.payment_review.value
+        )
+    except Exception:
+        wants_payment_review = type is None
+    if (
+        aggregate
+        and wants_payment_review
+        and user.role in (Role.admin, Role.accountant)
+    ):
+        # Count based on payment status to avoid mixing declines/other stages
+        if user.role == Role.admin:
+            count = (
+                db.query(Payment)
+                .filter(Payment.status == PaymentStatus.accountant_approved)
+                .count()
+            )
+            role_stage = "admin"
+        else:
+            count = (
+                db.query(Payment)
+                .filter(Payment.status == PaymentStatus.submitted)
+                .count()
+            )
+            role_stage = "accountant"
+        if count > 0:
+            noun = "payment" if count == 1 else "payments"
+            summary = {
+                "id": f"agg:{role_stage}:payment_review",
+                "type": NotificationType.payment_review.value,
+                "status": NotificationStatus.sent.value,
+                "message": f"{count} {noun} awaiting {role_stage} approval\nTap to review.",
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            return {"items": [summary], "total": 1, "next_skip": 1}
+
+    items = (
+        q.order_by(Notification.created_at.desc())
+        .offset(skip)
+        .limit(min(limit, 500))
+        .all()
+    )
+    return {"items": items, "total": len(items), "next_skip": skip + len(items)}
+
+
+@router.get("/notifications/unread-count")
+def notifications_unread_count(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    company_code: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    since_hours: Optional[int] = Query(24),
+):
+    # Delivered-only unread count (verbatim history); ignore legacy notifications table
+    delivered_q = db.query(UserNotification).filter(
+        UserNotification.user_id == user.id, UserNotification.acknowledged == False
+    )
+    if since_hours is not None:
+        try:
+            hrs = int(since_hours)
+            if hrs > 0:
+                cutoff = datetime.utcnow() - timedelta(hours=hrs)
+                delivered_q = delivered_q.filter(UserNotification.created_at >= cutoff)
+        except Exception:
+            pass
+    return {"unread": delivered_q.count()}
 
 
 @router.post("/notifications/{notification_id}/ack")
@@ -1536,6 +1694,47 @@ def acknowledge_notification(notification_id: int, db: Session = Depends(get_db)
     if n.status != NotificationStatus.pending:
         raise HTTPException(status_code=400, detail="Notification not pending")
     n.status = NotificationStatus.sent
+    db.commit()
+    db.refresh(n)
+    return n
+
+
+# Delivered notifications (verbatim pushes)
+@router.get("/notifications/delivered")
+def list_delivered_notifications(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    since_hours: int = Query(24, ge=1, le=720),
+):
+    from datetime import datetime, timedelta
+
+    cutoff = datetime.utcnow() - timedelta(hours=since_hours)
+    q = (
+        db.query(UserNotification)
+        .filter(UserNotification.user_id == user.id)
+        .filter(UserNotification.created_at >= cutoff)
+        .order_by(UserNotification.created_at.desc())
+    )
+    total = q.count()
+    items = q.offset(skip).limit(limit).all()
+    return {"items": items, "total": total, "next_skip": skip + len(items)}
+
+
+@router.post("/notifications/delivered/{delivered_id}/ack")
+def ack_delivered_notification(
+    delivered_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    n = db.get(UserNotification, delivered_id)
+    if not n or n.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if n.acknowledged:
+        return n
+    n.acknowledged = True
+    db.add(n)
     db.commit()
     db.refresh(n)
     return n
@@ -1598,6 +1797,115 @@ def accountant_decline(
     )
     db.commit()
     db.refresh(p)
+    # Persist a history notification for decline (so it shows in in-app list)
+    try:
+        comp = db.get(Company, p.company_code)
+        comp_part = p.company_code + (
+            f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+        )
+        try:
+            amt = f"{float(p.amount_collected):,.2f}"
+        except Exception:
+            amt = str(p.amount_collected)
+        reason = (
+            comment or getattr(p, "accountant_comment", None) or "No reason provided"
+        )
+        msg = (
+            f"#{p.id} • {comp_part} • INR {amt} via {p.method} • Collected {p.collected_at.date().isoformat()} • "
+            f"Declined by Accountant • Reason: {reason}"
+        )
+        db.add(
+            Notification(
+                company_code=p.company_code,
+                payment_id=p.id,
+                type=NotificationType.payment_review,
+                status=NotificationStatus.pending,
+                message=msg,
+            )
+        )
+        db.commit()
+    except Exception:
+        pass
+    # Push notification to assigned executive with detailed decline message
+    try:
+        # Find assigned executive for this company
+        assignment = (
+            db.query(ExecAssignment)
+            .filter(ExecAssignment.company_code == p.company_code)
+            .first()
+        )
+        if assignment:
+            exec_user = db.get(User, assignment.executive_id)
+        else:
+            exec_user = None
+
+        if exec_user and exec_user.is_active:
+            tokens = db.query(PushToken).filter(PushToken.user_id == exec_user.id).all()
+            if tokens:
+                import httpx
+
+                comp = db.get(Company, p.company_code)
+                comp_part = p.company_code + (
+                    f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+                )
+                try:
+                    amt = f"{float(p.amount_collected):,.2f}"
+                except Exception:
+                    amt = str(p.amount_collected)
+                reason = (
+                    comment
+                    or getattr(p, "accountant_comment", None)
+                    or "No reason provided"
+                )
+                body = (
+                    f"🧾 {comp_part}\n₹{amt} via {p.method} • Collected {p.collected_at.date().isoformat()}\n"
+                    f"Declined by Accountant • Reason: {reason}"
+                )
+                # Record delivered for the executive
+                try:
+                    _record_user_notification(
+                        db,
+                        exec_user.id,
+                        "Payment Declined by Accountant",
+                        body,
+                        {
+                            "payment_id": p.id,
+                            "action": "declined",
+                            "by": "accountant",
+                            "screen": "PaymentDetails",
+                        },
+                    )
+                except Exception:
+                    pass
+                for t in tokens:
+                    # Send only to Expo push tokens (managed workflow). FCM direct requires service account; skipped here.
+                    if not isinstance(t.token, str) or not t.token.startswith(
+                        "ExponentPushToken"
+                    ):
+                        continue
+                    try:
+                        httpx.post(
+                            "https://exp.host/--/api/v2/push/send",
+                            json={
+                                "to": t.token,
+                                "title": "Payment Declined by Accountant",
+                                "body": body,
+                                "data": {
+                                    "payment_id": p.id,
+                                    "action": "declined",
+                                    "by": "accountant",
+                                    "screen": "PaymentDetails",
+                                },
+                                "priority": "high",
+                                "sound": "default",
+                            },
+                            timeout=8,
+                        )
+                    except Exception:
+                        continue
+    except Exception:
+        # Never block decline flow on push failures
+        pass
     return p
 
 
@@ -1807,6 +2115,119 @@ def admin_decline(
     )
     db.commit()
     db.refresh(p)
+    # Persist a history notification for decline (so it shows in in-app list)
+    try:
+        comp = db.get(Company, p.company_code)
+        comp_part = p.company_code + (
+            f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+        )
+        try:
+            amt = f"{float(p.amount_collected):,.2f}"
+        except Exception:
+            amt = str(p.amount_collected)
+        reason = comment or getattr(p, "admin_comment", None) or "No reason provided"
+        msg = (
+            f"#{p.id} • {comp_part} • INR {amt} via {p.method} • Collected {p.collected_at.date().isoformat()} • "
+            f"Declined by Admin • Reason: {reason}"
+        )
+        db.add(
+            Notification(
+                company_code=p.company_code,
+                payment_id=p.id,
+                type=NotificationType.payment_review,
+                status=NotificationStatus.pending,
+                message=msg,
+            )
+        )
+        db.commit()
+    except Exception:
+        pass
+    # Push notifications to accountant(s) and assigned executive with detailed decline message
+    try:
+        import httpx
+
+        # Build common message body
+        comp = db.get(Company, p.company_code)
+        comp_part = p.company_code + (
+            f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+        )
+        try:
+            amt = f"{float(p.amount_collected):,.2f}"
+        except Exception:
+            amt = str(p.amount_collected)
+        reason = comment or getattr(p, "admin_comment", None) or "No reason provided"
+        body = (
+            f"🧾 {comp_part}\n₹{amt} via {p.method} • Collected {p.collected_at.date().isoformat()}\n"
+            f"Declined by Admin • Reason: {reason}"
+        )
+
+        # Collect recipients: all active accountants + assigned executive (if any)
+        accountant_users = (
+            db.query(User)
+            .filter(User.role == Role.accountant, User.is_active == True)
+            .all()
+        )
+        exec_user = None
+        assignment = (
+            db.query(ExecAssignment)
+            .filter(ExecAssignment.company_code == p.company_code)
+            .first()
+        )
+        if assignment:
+            eu = db.get(User, assignment.executive_id)
+            if eu and eu.is_active:
+                exec_user = eu
+
+        user_ids = [u.id for u in accountant_users]
+        if exec_user:
+            user_ids.append(exec_user.id)
+        if user_ids:
+            tokens = db.query(PushToken).filter(PushToken.user_id.in_(user_ids)).all()
+            # Record delivered for each recipient
+            for uid in user_ids:
+                try:
+                    _record_user_notification(
+                        db,
+                        uid,
+                        "Payment Declined by Admin",
+                        body,
+                        {
+                            "payment_id": p.id,
+                            "action": "declined",
+                            "by": "admin",
+                            "screen": "PaymentDetails",
+                        },
+                    )
+                except Exception:
+                    pass
+            for t in tokens:
+                if not isinstance(t.token, str) or not t.token.startswith(
+                    "ExponentPushToken"
+                ):
+                    continue
+                try:
+                    httpx.post(
+                        "https://exp.host/--/api/v2/push/send",
+                        json={
+                            "to": t.token,
+                            "title": "Payment Declined by Admin",
+                            "body": body,
+                            "data": {
+                                "payment_id": p.id,
+                                "action": "declined",
+                                "by": "admin",
+                                "screen": "PaymentDetails",
+                            },
+                            "priority": "high",
+                            "sound": "default",
+                        },
+                        timeout=8,
+                    )
+                except Exception:
+                    continue
+    except Exception:
+        # Silent on push errors
+        pass
     return p
 
 

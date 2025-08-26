@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, FlatList, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
@@ -8,9 +9,12 @@ import { tokens } from '../../src/ui/tokens';
 import { StorageService } from '../../src/services/storageService';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '../../src/utils/constants';
+import { useNotificationsBadge } from '../../src/ui/hooks/useNotificationsBadge';
+import { onBadgeChange } from '../../src/events/notificationsEvents';
 
 export default function ExecutiveDashboard() {
   const router = useRouter();
+  const { unread, refreshUnread } = useNotificationsBadge();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -46,7 +50,8 @@ export default function ExecutiveDashboard() {
   // Interval refresh every 60s
   useEffect(() => { const id = setInterval(fetchData, 60000); return () => clearInterval(id); }, [fetchData]);
   // Refresh on focus
-  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
+  useFocusEffect(useCallback(() => { fetchData(); refreshUnread(); }, [fetchData, refreshUnread]));
+  useFocusEffect(useCallback(() => { /* could trigger badge refresh if needed */ }, []));
 
   const today = useMemo(() => new Date(), []);
   const parseDate = (d) => { try { return d ? new Date(d) : null; } catch { return null; } };
@@ -117,7 +122,28 @@ export default function ExecutiveDashboard() {
   };
 
   return (
-    <Screen title="Dashboard" subtitle="Collections Priority" scroll hideBackButton hideTopBar>
+    <Screen
+      title={null}
+      scroll
+      hideBackButton
+      hideTopBar={true}
+      header={(
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerTitle}>Dashboard</Text>
+            <Text style={styles.headerSubtitle}>Collections Priority</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('../(others)/Notifications')} style={styles.bellWrap} accessibilityRole="button" accessibilityLabel="Notifications">
+            <Ionicons name="notifications-outline" size={22} color={tokens.colors.text} />
+            {unread > 0 && (
+              <View style={styles.bellBadge} pointerEvents="none">
+                <Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+    >
       <Card style={styles.summaryCard}>
         <View style={styles.summaryRow}>
           <View style={styles.summaryBox}>
@@ -177,6 +203,12 @@ export default function ExecutiveDashboard() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  headerTitle: { fontSize: 30, fontWeight: '800', color: tokens.colors.text },
+  headerSubtitle: { fontSize: 14, color: tokens.colors.textDim, marginTop: 4 },
+  bellWrap: { position: 'relative', padding: 8, marginLeft: 12 },
+  bellBadge: { position: 'absolute', top: 2, right: 2, backgroundColor: tokens.colors.accent, borderRadius: 10, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#000' },
+  bellBadgeText: { color: '#000', fontSize: 10, fontWeight: '800' },
   summaryCard: {},
   summaryRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   summaryBox: { width: '48%', backgroundColor: tokens.colors.cardAlt, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: tokens.colors.border, marginBottom: 10 },

@@ -9,6 +9,8 @@ import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { API_BASE_URL } from '../../src/utils/constants';
+import { useNotificationsBadge } from '../../src/ui/hooks/useNotificationsBadge';
+import { onBadgeChange } from '../../src/events/notificationsEvents';
 
 export default function AccountantDashboard() {
   const [recentPayments, setRecentPayments] = useState([]);
@@ -16,6 +18,7 @@ export default function AccountantDashboard() {
   const [pendingTotal, setPendingTotal] = useState(0);
   const router = useRouter();
   const BASE = API_BASE_URL;
+  const { unread, refreshUnread } = useNotificationsBadge();
 
   const navItems = [
     { label: 'Approve pending payments', icon: 'checkmark', route: '../(others)/NotifyAccountant' },
@@ -94,12 +97,38 @@ export default function AccountantDashboard() {
     return () => clearInterval(id);
   }, [fetchRecent]);
 
-  useFocusEffect(useCallback(() => { fetchRecent(); }, [fetchRecent]));
+  useFocusEffect(useCallback(() => { fetchRecent(); refreshUnread(); }, [fetchRecent, refreshUnread]));
+  useFocusEffect(useCallback(() => { /* refresh badge on focus */ }, []));
 
-  useEffect(() => { const off = onPaymentUpdate(() => fetchRecent()); return off; }, [fetchRecent]);
+  useEffect(() => {
+    const off = onPaymentUpdate(() => fetchRecent());
+    const offBadge = onBadgeChange(() => { refreshUnread(); });
+    return () => { off(); offBadge(); };
+  }, [fetchRecent, refreshUnread]);
 
   return (
-    <Screen scroll title="Accountant" subtitle="Quick access & recent activity" hideBackButton hideTopBar>
+    <Screen
+      scroll
+      title={null}
+      hideBackButton
+      hideTopBar={true}
+      header={(
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerTitle}>Accountant</Text>
+            <Text style={styles.headerSubtitle}>Quick access & recent activity</Text>
+          </View>
+          <TouchableOpacity onPress={() => router.push('../(others)/Notifications')} style={styles.bellWrap} accessibilityRole="button" accessibilityLabel="Notifications">
+            <Ionicons name="notifications-outline" size={22} color={tokens.colors.text} />
+            {unread > 0 && (
+              <View style={styles.bellBadge} pointerEvents="none">
+                <Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+    >
       <Card style={styles.navCard}>
         <FlatList
           data={navItems}
@@ -166,13 +195,19 @@ export default function AccountantDashboard() {
           />
         )}
       </Card>
-      <View style = {{marginBottom:30}}></View>
+      <View style={{ marginBottom: 30 }}></View>
     </Screen>
   );
 
 }
 
 const styles = StyleSheet.create({
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  headerTitle: { fontSize: 30, fontWeight: '800', color: tokens.colors.text },
+  headerSubtitle: { fontSize: 14, color: tokens.colors.textDim, marginTop: 4 },
+  bellWrap: { position: 'relative', padding: 8, marginLeft: 12 },
+  bellBadge: { position: 'absolute', top: 2, right: 2, backgroundColor: tokens.colors.accent, borderRadius: 10, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#000' },
+  bellBadgeText: { color: '#000', fontSize: 10, fontWeight: '800' },
   navCard: { paddingVertical: 20, paddingHorizontal: 10 },
   navRow: { justifyContent: 'space-between', marginBottom: 18 },
   navItem: { width: '32%', alignItems: 'center', paddingVertical: 14, borderRadius: 18, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border },

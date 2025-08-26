@@ -10,6 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import StatusBadge from '../../src/ui/components/StatusBadge';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
+import { useAppSelector } from '../../src/store/hooks';
 
 // Use central API base configured via EXPO_PUBLIC_API_BASE_URL
 
@@ -21,6 +22,7 @@ export default function UnifiedHistory() {
     const [refreshing, setRefreshing] = useState(false);
     const debounceRef = useRef(null);
     const router = useRouter();
+    const userRole = useAppSelector(s => s.auth.user?.role || 'accountant');
 
     const fetchData = useCallback(async (q, status = statusFilter) => {
         setLoading(true);
@@ -52,6 +54,44 @@ export default function UnifiedHistory() {
                     return true;
                 });
             }
+            // Map items to role-specific interaction timestamp and label, then sort
+            const withDisplay = arr.map((it) => {
+                // Prefer role-specific timestamps if present; fall back to last_activity_at
+                const submittedAt = it.submitted_at || it.created_at;
+                const accountantAt = it.accountant_reviewed_at || it.accountant_approved_at;
+                const adminAt = it.admin_reviewed_at || it.admin_approved_at;
+
+                let display_time = it.last_activity_at;
+                let display_type = it.last_activity_type;
+
+                if (userRole === 'executive') {
+                    display_time = submittedAt || it.last_activity_at;
+                    display_type = 'submitted';
+                } else if (userRole === 'accountant') {
+                    display_time = accountantAt || it.last_activity_at;
+                    display_type = 'accountant_review';
+                } else if (userRole === 'admin') {
+                    display_time = adminAt || it.last_activity_at;
+                    display_type = 'admin_review';
+                }
+
+                return { ...it, display_time, display_type };
+            });
+
+            const toMillis = (v) => {
+                if (!v) return 0;
+                const t = Date.parse(v);
+                return Number.isNaN(t) ? 0 : t;
+            };
+
+            withDisplay.sort((a, b) => {
+                const ta = toMillis(a.display_time);
+                const tb = toMillis(b.display_time);
+                // Accountant: earliest first (ascending). Others: latest first (descending).
+                return userRole === 'accountant' ? ta - tb : tb - ta;
+            });
+
+            arr = withDisplay;
             setItems(arr);
         } catch (e) {
             console.error('Fetch error:', e);
@@ -136,7 +176,7 @@ export default function UnifiedHistory() {
                 <View style={styles.metaRow}>
                     <View style={styles.metaPair}>
                         <Ionicons name="time-outline" size={14} color={tokens.colors.textSubtle} style={{ marginRight: 6 }} />
-                        <Text style={styles.metaText}>{formatDateTime(item.last_activity_at)} • {labelForType(item.last_activity_type)}</Text>
+                        <Text style={styles.metaText}>{formatDateTime(item.display_time || item.last_activity_at)} • {labelForType(item.display_type || item.last_activity_type)}</Text>
                     </View>
                     {!!item.method && (
                         <View style={styles.metaPair}>

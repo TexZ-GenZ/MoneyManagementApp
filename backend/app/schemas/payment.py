@@ -106,6 +106,10 @@ class PaymentActivityItem(BaseModel):
     amount_collected: Decimal
     method: str
     status: str
+    # Role-specific interaction timestamps (optional)
+    submitted_at: Optional[datetime] = None
+    accountant_review_at: Optional[datetime] = None
+    admin_review_at: Optional[datetime] = None
     last_activity_at: datetime
     last_activity_type: str  # 'submitted' | 'accountant_review' | 'admin_review'
     last_comment: Optional[str] = None

@@ -13,9 +13,11 @@ from app.models.models import (
     User,
     Role,
     PushToken,
+    UserNotification,
 )
 import httpx
 import os
+import json
 
 
 def ensure_setting(db: Session) -> Setting:
@@ -166,22 +168,22 @@ def scan_payment_review(db: Session, interval_hours: int | None = None):
                 p.id,
                 msg,
             )
-    else:
-        # Update message as payment advances, keep details consistent
-        existing.message = build_payment_review_message(db, p)
-        log.info(
-            "Updated payment_review notification payment=%s message=%s",
-            p.id,
-            existing.message,
-        )
-        if _should_resend(existing, now, interval_hours):
-            existing.last_sent_at = now
-            existing.next_send_at = now + timedelta(hours=interval_hours)
+        else:
+            # Update message as payment advances, keep details consistent
+            existing.message = build_payment_review_message(db, p)
             log.info(
-                "Resent payment_review notification payment=%s message=%s",
+                "Updated payment_review notification payment=%s message=%s",
                 p.id,
                 existing.message,
             )
+            if _should_resend(existing, now, interval_hours):
+                existing.last_sent_at = now
+                existing.next_send_at = now + timedelta(hours=interval_hours)
+                log.info(
+                    "Resent payment_review notification payment=%s message=%s",
+                    p.id,
+                    existing.message,
+                )
     if payments.count() == 0:
         db.query(Notification).filter(
             Notification.type == NotificationType.payment_review,
@@ -257,6 +259,27 @@ def run_notification_scan(db: Session):
         log.warning("Exec pending push failed: %s", e)
 
 
+def _record_user_notification(
+    db: Session, user_id: int, title: str, body: str, data: dict | None = None
+):
+    """Persist a delivered push payload for a specific user (verbatim for in-app history)."""
+    try:
+        rec = UserNotification(
+            user_id=user_id,
+            title=title,
+            body=body,
+            data_json=(json.dumps(data) if data else None),
+        )
+        db.add(rec)
+        db.commit()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        log.warning("Failed to record user notification user_id=%s err=%s", user_id, e)
+
+
 def _send_role_pending_pushes(db: Session):
     """Send a single aggregated push to accountant(s) and admin(s) if they have pending approvals.
     Cadence piggybacks on run_notification_scan invocation (interval+daily). We avoid spamming by
@@ -294,10 +317,26 @@ def _send_role_pending_pushes(db: Session):
         log.debug("Role=%s users=%s tokens=%s", role, len(users), len(tokens))
         if not tokens:
             return
-        title = "Approvals Pending"
-        body = f"{count} payment(s) awaiting {stage} approval"
+        title = (
+            "Needs Accountant Approval"
+            if stage == "accountant"
+            else "Needs Admin Approval"
+        )
+        noun = "payment" if count == 1 else "payments"
+        body = f"{count} {noun} awaiting {stage} approval\nTap to review."
+        # Record once per user (not per token)
+        for u in users:
+            _record_user_notification(
+                db,
+                u.id,
+                title,
+                body,
+                {"pending_count": count, "stage": stage, "screen": "Approvals"},
+            )
         for t in tokens:
-            if not t.token.startswith("ExponentPushToken"):
+            if not isinstance(t.token, str) or not t.token.startswith(
+                "ExponentPushToken"
+            ):
                 continue
             try:
                 resp = httpx.post(
@@ -306,7 +345,13 @@ def _send_role_pending_pushes(db: Session):
                         "to": t.token,
                         "title": title,
                         "body": body,
-                        "data": {"pending_count": count, "stage": stage},
+                        "data": {
+                            "pending_count": count,
+                            "stage": stage,
+                            "screen": "Approvals",
+                        },
+                        "priority": "high",
+                        "sound": "default",
                     },
                     timeout=10,
                 )
@@ -371,12 +416,31 @@ def _send_exec_pending_pushes(db: Session):
         if bills <= 0:
             continue
         companies = r.companies
-        msg = f"{bills} pending bill(s) across {companies} company(s)"
+        bill_noun = "bill" if bills == 1 else "bills"
+        comp_noun = "company" if companies == 1 else "companies"
+        msg = (
+            f"{bills} pending {bill_noun} across {companies} {comp_noun}\nTap to view."
+        )
+        # Record once per exec user
+        _record_user_notification(
+            db,
+            r.executive_id,
+            "Pending Bills",
+            msg,
+            {"stage": "exec_pending_bills", "screen": "BillsList"},
+        )
         for tk in tok_map.get(r.executive_id, []):
             try:
                 httpx.post(
                     "https://exp.host/--/api/v2/push/send",
-                    json={"to": tk, "title": "Pending Bills", "body": msg},
+                    json={
+                        "to": tk,
+                        "title": "Pending Bills",
+                        "body": msg,
+                        "data": {"stage": "exec_pending_bills", "screen": "BillsList"},
+                        "priority": "high",
+                        "sound": "default",
+                    },
                     timeout=8,
                 )
             except Exception as e:
@@ -467,12 +531,24 @@ def _send_executive_overdue_push(db: Session):
         if count <= 0:
             continue
         title = "Overdue Companies"
-        body = f"{count} companie(s) overdue. Collect soon."
+        comp_noun2 = "company" if count == 1 else "companies"
+        body = f"{count} {comp_noun2} overdue. Collect soon."
+        # Record once per exec user
+        _record_user_notification(
+            db, exec_id, title, body, {"stage": "exec_overdue", "screen": "Overdue"}
+        )
         for tk in tok_map.get(exec_id, []):
             try:
                 httpx.post(
                     "https://exp.host/--/api/v2/push/send",
-                    json={"to": tk, "title": title, "body": body},
+                    json={
+                        "to": tk,
+                        "title": title,
+                        "body": body,
+                        "data": {"stage": "exec_overdue", "screen": "Overdue"},
+                        "priority": "high",
+                        "sound": "default",
+                    },
                     timeout=8,
                 )
             except Exception as e:

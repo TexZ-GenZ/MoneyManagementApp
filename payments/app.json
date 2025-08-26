@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Paymt",
-    "owner": "greenpig69",
+    "owner": "greenpig69", 
     "slug": "payments",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,22 +13,14 @@
       "supportsTablet": true
     },
     "android": {
+      "jsEngine": "hermes",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon_adaptive_fore.png",
         "backgroundImage": "./assets/images/icon_adaptive_back.png"
       },
-      "notification": {
-        "icon": "./assets/images/notification_icon.png",
-        "color": "#523BF5"
-      },
       "edgeToEdgeEnabled": true,
       "package": "com.skywalker421.payments",
       "googleServicesFile": "./google-services.json"
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -42,7 +34,22 @@
         }
       ],
       "expo-font",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification_icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "abiFilters": ["arm64-v8a"]
+          }
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/messaging"
     ],

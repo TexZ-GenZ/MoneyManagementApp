@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 import httpx
 from app.models.models import Role, User, PushToken
 from app.core.logging_config import get_logger
+from app.services.notifications import _record_user_notification
 
 log = get_logger(__name__)
 
@@ -214,29 +215,42 @@ def create_payment_with_allocations(
             .all()
         )
         if accountant_users:
+            # Compose message once
+            def _fmt_amount(x):
+                try:
+                    return f"{float(x):,.2f}"
+                except Exception:
+                    return str(x)
+
+            comp = db.get(Company, p.company_code)
+            comp_part = p.company_code + (
+                f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+            )
+            body = (
+                f"#{p.id} • {comp_part} • INR {_fmt_amount(p.amount_collected)} via {p.method} • "
+                f"Collected {p.collected_at.date().isoformat()} • Awaiting accountant approval"
+            )
             tokens = (
                 db.query(PushToken)
                 .filter(PushToken.user_id.in_([u.id for u in accountant_users]))
                 .all()
             )
+            # Record delivered for each accountant user
+            for u in accountant_users:
+                try:
+                    _record_user_notification(
+                        db,
+                        u.id,
+                        "Payment Submitted",
+                        body,
+                        {"payment_id": p.id, "stage": "accountant"},
+                    )
+                except Exception:
+                    pass
             for t in tokens:
                 if not t.token.startswith("ExponentPushToken"):
                     continue
                 try:
-                    # Compose a richer, concise message for accountants
-                    def _fmt_amount(x):
-                        try:
-                            return f"{float(x):,.2f}"
-                        except Exception:
-                            return str(x)
-
-                    comp = db.get(Company, p.company_code)
-                    comp_part = p.company_code + (
-                        f" ({comp.name})"
-                        if comp and getattr(comp, "name", None)
-                        else ""
-                    )
-                    body = f"#{p.id} • {comp_part} • INR {_fmt_amount(p.amount_collected)} via {p.method} • Collected {p.collected_at.date().isoformat()} • Awaiting accountant approval"
                     try:
                         log.info(
                             "Sending accountant push payment_id=%s body=%s",

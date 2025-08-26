@@ -4,7 +4,7 @@ import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 
 import { initializeAuth, logoutUser } from '../../src/store/authSlice';
 import { useAppDispatch, useAppSelector } from '../../src/store/hooks';
-import { Platform, Alert, Text } from 'react-native';
+import { Platform, Alert, Text, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
@@ -92,6 +92,19 @@ export default function TabLayout() {
         headerTitleStyle: {
           fontWeight: '600',
           color: '#ffffff'
+        },
+        // Ensure consistent Android ripple splash color on all tabs
+        tabBarButton: (props) => {
+          const { children, style, ...rest } = props;
+          return (
+            <Pressable
+              android_ripple={{ color: 'rgba(159,223,86,0.25)', borderless: false }}
+              style={style}
+              {...rest}
+            >
+              {children}
+            </Pressable>
+          );
         },
         // tabBarItemStyle: {
         //   paddingVertical: 6,

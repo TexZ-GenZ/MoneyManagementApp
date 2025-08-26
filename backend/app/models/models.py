@@ -218,3 +218,16 @@ class PushToken(Base):
     token: Mapped[str] = mapped_column(String(500), nullable=False)
     platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class UserNotification(Base):
+    """Exact record of notifications delivered to a user (mirrors push payload)."""
+
+    __tablename__ = "user_notifications"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(String(500))
+    data_json: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
