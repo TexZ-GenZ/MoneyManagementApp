@@ -69,7 +69,7 @@ export default function Notifications() {
     // When this screen gains focus, clear any OS-level notifications so the launcher dot disappears
     useFocusEffect(
         useCallback(() => {
-            ExpoNotifications.dismissAllNotificationsAsync().catch(() => {});
+            ExpoNotifications.dismissAllNotificationsAsync().catch(() => { });
         }, [])
     );
 

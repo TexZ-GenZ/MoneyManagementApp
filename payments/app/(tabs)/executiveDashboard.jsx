@@ -98,7 +98,7 @@ export default function ExecutiveDashboard() {
         const flat = results.flatMap(res => res.status === 'fulfilled' ? res.value : []);
         // Sort by effective due date ascending
         const getDue = (b) => {
-          const d = b?.promise_date || b?.due_date; const dt = d ? new Date(d) : null; if (!dt) return 0; dt.setHours(0,0,0,0); return dt.getTime();
+          const d = b?.promise_date || b?.due_date; const dt = d ? new Date(d) : null; if (!dt) return 0; dt.setHours(0, 0, 0, 0); return dt.getTime();
         };
         flat.sort((a, b) => getDue(a) - getDue(b));
         setOverdueBills(flat);
@@ -159,19 +159,21 @@ export default function ExecutiveDashboard() {
       <Card style={styles.companyCard}>
         <TouchableOpacity
           style={styles.companyTouchable}
-          onPress={() => router.push({ pathname: '../(others)/PaymentDetail', params: {
-            name: item.__company_name,
-            code: item.__company_code,
-            amount: item.amount, // total bill amount
-            outbal: '',
-            bill_number: item.bill_number,
-            bill_date: item.bill_date,
-            promise_date: item.promise_date || item.due_date,
-            status: 'overdue',
-            amount_paid: item.amount_paid,
-            bill_amount: item.amount,
-            bill_id: item.id,
-          } })}
+          onPress={() => router.push({
+            pathname: '../(others)/PaymentDetail', params: {
+              name: item.__company_name,
+              code: item.__company_code,
+              amount: item.amount, // total bill amount
+              outbal: '',
+              bill_number: item.bill_number,
+              bill_date: item.bill_date,
+              promise_date: item.promise_date || item.due_date,
+              status: 'overdue',
+              amount_paid: item.amount_paid,
+              bill_amount: item.amount,
+              bill_id: item.id,
+            }
+          })}
           activeOpacity={0.8}
         >
           <View style={{ flex: 1, paddingRight: 8 }}>
@@ -245,13 +247,13 @@ export default function ExecutiveDashboard() {
         <TouchableOpacity style={styles.primaryCTA} onPress={() => router.push('../CompanyList/ExecutiveCompanies')}>
           <Text style={styles.primaryCTAText}>View All Companies</Text>
         </TouchableOpacity>
-  <Text style={styles.nextHint}>{nextActionableCount === 0 ? 'No overdue bills. Great!' : `${nextActionableCount} bills overdue.`}</Text>
+        <Text style={styles.nextHint}>{nextActionableCount === 0 ? 'No overdue bills. Great!' : `${nextActionableCount} bills overdue.`}</Text>
       </Card>
       <View style={{ height: 24 }} />
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
           {viewMode === 'overdue' && `Overdue Bills (Top ${previewBills.length})`}
-          {viewMode === 'upcoming' && `Upcoming 7 Days (Top ${activeList.slice(0,8).length})`}
+          {viewMode === 'upcoming' && `Upcoming 7 Days (Top ${activeList.slice(0, 8).length})`}
         </Text>
         {!loading && viewMode === 'upcoming' && activeList.length > 8 && (
           <TouchableOpacity onPress={() => router.push('../CompanyList/ExecutiveCompanies')}><Text style={styles.viewAll}>See All</Text></TouchableOpacity>

@@ -88,12 +88,12 @@ export default function CompanyBillsList() {
             setBills(data.items || []);
             const apiTotal = (
                 typeof data.total === 'number' ? data.total :
-                typeof data.total_count === 'number' ? data.total_count :
-                typeof data.count === 'number' ? data.count :
-                typeof data.items_total === 'number' ? data.items_total :
-                typeof data.totalItems === 'number' ? data.totalItems :
-                typeof data.total_items === 'number' ? data.total_items :
-                null
+                    typeof data.total_count === 'number' ? data.total_count :
+                        typeof data.count === 'number' ? data.count :
+                            typeof data.items_total === 'number' ? data.items_total :
+                                typeof data.totalItems === 'number' ? data.totalItems :
+                                    typeof data.total_items === 'number' ? data.total_items :
+                                        null
             );
             setTotalCount(apiTotal);
         } catch (e) {
