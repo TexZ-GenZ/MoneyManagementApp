@@ -54,30 +54,7 @@ export default function UnifiedHistory() {
                     return true;
                 });
             }
-            // Map items to role-specific interaction timestamp and label, then sort
-        const withDisplay = arr.map((it) => {
-                // Prefer role-specific timestamps if present; fall back to last_activity_at
-                const submittedAt = it.submitted_at || it.created_at;
-                const accountantAt = it.accountant_reviewed_at || it.accountant_approved_at;
-                const adminAt = it.admin_reviewed_at || it.admin_approved_at;
-
-                let display_time = it.last_activity_at;
-                let display_type = it.last_activity_type;
-
-                if (userRole === 'executive') {
-            display_time = submittedAt || it.last_activity_at;
-                    display_type = 'submitted';
-                } else if (userRole === 'accountant') {
-            display_time = accountantAt || it.last_activity_at || submittedAt;
-                    display_type = 'accountant_review';
-                } else if (userRole === 'admin') {
-            display_time = adminAt || it.last_activity_at || accountantAt || submittedAt;
-                    display_type = 'admin_review';
-                }
-
-                return { ...it, display_time, display_type };
-            });
-
+            // Time parser first (used below)
             const toMillis = (v) => {
                 if (v == null) return 0;
                 if (typeof v === 'number') {
@@ -108,22 +85,50 @@ export default function UnifiedHistory() {
                 }
             };
 
+            // Map items to a simple role-specific display_time, then sort newest-first
+            const withDisplay = arr.map((it) => {
+                const submittedAt = it.submitted_at || it.created_at;
+                let display_time = null;
+                let display_type = 'submitted';
+
+                if (userRole === 'executive') {
+                    display_time = submittedAt || it.last_activity_at || it.updated_at;
+                    display_type = 'submitted';
+                } else if (userRole === 'accountant') {
+                    display_time = (
+                        it.accountant_approved_at ||
+                        it.accountant_declined_at ||
+                        it.accountant_reviewed_at ||
+                        it.last_accountant_activity_at ||
+                        it.last_activity_at ||
+                        it.updated_at ||
+                        submittedAt
+                    );
+                    display_type = 'accountant_review';
+                } else if (userRole === 'admin') {
+                    display_time = (
+                        it.admin_approved_at ||
+                        it.admin_declined_at ||
+                        it.admin_reviewed_at ||
+                        it.last_admin_activity_at ||
+                        it.last_activity_at ||
+                        it.updated_at ||
+                        it.accountant_approved_at ||
+                        submittedAt
+                    );
+                    display_type = 'admin_review';
+                }
+
+                return { ...it, display_time, display_type };
+            });
+
             withDisplay.sort((a, b) => {
-                const ta = toMillis(a.display_time);
-                const tb = toMillis(b.display_time);
-                if (tb !== ta) return tb - ta;
-                // Tie-breaker 1: last_activity_at
-                const la = toMillis(a.last_activity_at);
-                const lb = toMillis(b.last_activity_at);
-                if (lb !== la) return lb - la;
-                // Tie-breaker 2: submittedAt if present on raw items
-                const sa = toMillis(a.submitted_at || a.created_at);
-                const sb = toMillis(b.submitted_at || b.created_at);
-                if (sb !== sa) return sb - sa;
-                // Tie-breaker 3: by id/payment_id desc
+                const ta = toMillis(a.display_time || a.last_activity_at || a.updated_at || a.submitted_at || a.created_at);
+                const tb = toMillis(b.display_time || b.last_activity_at || b.updated_at || b.submitted_at || b.created_at);
+                if (tb !== ta) return tb - ta; // newest first
                 const ida = Number(a.payment_id || a.id || 0);
                 const idb = Number(b.payment_id || b.id || 0);
-                return idb - ida;
+                return idb - ida; // stable tie-break
             });
 
             arr = withDisplay;
