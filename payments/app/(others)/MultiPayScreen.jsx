@@ -109,8 +109,7 @@ export default function MultiPayScreen() {
     if (JSON.stringify(nextSel) !== JSON.stringify(selected)) setSelected(nextSel);
   }, [bills, initialTotal, selected]);
 
-  const EPS = 0.005; // ~half a paisa buffer for float noise
-  const canSubmit = Math.abs(remaining) < EPS && Object.keys(selected).length > 0 && (!needsPromise() || !!promiseDate);
+  const canSubmit = remaining === 0 && Object.keys(selected).length > 0 && (!needsPromise() || !!promiseDate);
 
   function needsPromise() {
     // Needs promise if any allocation is partial on that bill
@@ -127,15 +126,14 @@ export default function MultiPayScreen() {
     setSubmitting(true);
     try {
       const tok = await StorageService.getToken();
-      const round2 = (x) => Number((Math.round(Number(x) * 100) / 100).toFixed(2));
       const payload = {
         company_code: code,
         collected_at: new Date().toISOString(),
-        amount_collected: round2(initialTotal),
+        amount_collected: initialTotal,
         method: method,
         comments: comment || undefined,
         next_promise_date: promiseDate ? promiseDate.toISOString().slice(0,10) : undefined,
-        bill_allocations: Object.entries(selected).map(([bill_id, amount]) => ({ bill_id: Number(bill_id), amount: round2(amount) })),
+        bill_allocations: Object.entries(selected).map(([bill_id, amount]) => ({ bill_id: Number(bill_id), amount: Number(amount) })),
       };
       if (location?.latitude && location?.longitude) {
         payload.exec_lat = location.latitude; payload.exec_lng = location.longitude;
@@ -146,22 +144,13 @@ export default function MultiPayScreen() {
         headers: { 'Content-Type': 'application/json', 'Authorization': tok ? `Bearer ${tok.access_token}` : '' },
         body: JSON.stringify(payload)
       });
-      const respText = await r.text();
-      if (!r.ok) {
-        let msg = respText || 'Request failed';
-        try {
-          const j = JSON.parse(respText);
-          if (j && j.detail) msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
-        } catch {}
-        throw new Error(msg);
-      }
-      // consume JSON if present
-      try { respText && JSON.parse(respText); } catch {}
+      if (!r.ok) throw new Error(await r.text());
+      await r.json().catch(()=>null);
       Alert.alert('Success', 'Bulk payment submitted');
       emitPaymentUpdate({ type: 'submitted' });
       router.back();
     } catch (e) {
-      Alert.alert('Error', String(e?.message || e) || 'Failed to submit bulk payment');
+      Alert.alert('Error', 'Failed to submit bulk payment');
     } finally { setSubmitting(false); }
   };
 
@@ -238,7 +227,7 @@ export default function MultiPayScreen() {
                           onChangeText={setQuery}
                           style={styles.search}
                         />
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortRow}>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortRow}>
                           {[
                             { k: 'oldest', label: 'Oldest' },
                             { k: 'newest', label: 'Newest' },
@@ -249,7 +238,7 @@ export default function MultiPayScreen() {
                               <Text style={[styles.sortChipText, sortBy===opt.k && styles.sortChipTextActive]}>{opt.label}</Text>
                             </TouchableOpacity>
                           ))}
-                        </ScrollView>
+                          </ScrollView>
                       </>
                     ) : null}
                   </Card>

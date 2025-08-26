@@ -839,6 +839,39 @@ def payments_activity(
             .all()
         )
 
+        # Precompute allocation counts per payment for history display
+        try:
+            pids = [p.id for p in rows]
+            alloc_counts = {}
+            first_bill_by_payment = {}
+            if pids:
+                ac_rows = (
+                    db.query(PaymentAllocation.payment_id, func.count().label("cnt"))
+                    .filter(PaymentAllocation.payment_id.in_(pids))
+                    .group_by(PaymentAllocation.payment_id)
+                    .all()
+                )
+                alloc_counts = {pid: int(cnt) for pid, cnt in ac_rows}
+                # First bill number for display
+                subq = (
+                    db.query(
+                        PaymentAllocation.payment_id.label("pid"),
+                        func.min(PaymentAllocation.bill_id).label("min_bid"),
+                    )
+                    .filter(PaymentAllocation.payment_id.in_(pids))
+                    .group_by(PaymentAllocation.payment_id)
+                    .subquery()
+                )
+                jrows = (
+                    db.query(subq.c.pid, Bill.bill_number)
+                    .join(Bill, Bill.id == subq.c.min_bid)
+                    .all()
+                )
+                first_bill_by_payment = {pid: bn for pid, bn in jrows}
+        except Exception:
+            alloc_counts = {}
+            first_bill_by_payment = {}
+
         items = []
         for p in rows:
             try:
@@ -915,6 +948,9 @@ def payments_activity(
                     "last_activity_at": last_time.isoformat() if last_time else None,
                     "last_activity_type": last_type,
                     "last_comment": last_comment,
+                    # number of bills included in this payment (bulk vs single)
+                    "allocation_count": alloc_counts.get(p.id, 0),
+                    "first_bill_number": first_bill_by_payment.get(p.id),
                 }
                 items.append(item_dict)
             except Exception as e:
@@ -986,6 +1022,21 @@ def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
         admin_comment=getattr(p, "admin_comment", None),
         allocations=allocations,
     )
+
+
+# Alias endpoint for bulk payments (same schema/logic as /payments)
+@router.post(
+    "/payments/bulk",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("executive", "admin"))],
+)
+def submit_bulk_payment(
+    body: PaymentSubmit,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    return submit_payment(body, user, db, idempotency_key)
 
 
 @router.post(
