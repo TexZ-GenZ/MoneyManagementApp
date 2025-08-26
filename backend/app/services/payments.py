@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import List
 from sqlalchemy.orm import Session
@@ -39,6 +39,10 @@ def create_payment_with_allocations(
     allocations: List[dict],
     idempotency_key: str | None = None,
 ) -> Payment:
+    # Work in cents precision consistently
+    from decimal import Decimal, ROUND_HALF_UP
+
+    TWO_DP = Decimal("0.01")
     # If idempotency key provided, quick lookup to short-circuit
     if idempotency_key:
         existing = (
@@ -51,9 +55,9 @@ def create_payment_with_allocations(
     if not company:
         raise ValueError("Company not found")
     if next_promise_date:
-        # Must not be earlier than company's credit_date
-        if company.credit_date and next_promise_date < company.credit_date:
-            raise ValueError("next_promise_date cannot be earlier than credit_date")
+        # Allow moving backward, but not into the past
+        if next_promise_date < date.today():
+            raise ValueError("next_promise_date cannot be in the past")
     # Validate allocations before creating the payment
     if amount_collected is None or amount_collected <= 0:
         raise ValueError("amount_collected must be > 0")
@@ -81,11 +85,19 @@ def create_payment_with_allocations(
         .group_by(PaymentAllocation.bill_id)
         .all()
     )
-    reserved_by_bill = {bid: Decimal(str(total)) for bid, total in reserved_rows}
+    reserved_by_bill = {
+        bid: Decimal(str(total)).quantize(TWO_DP, rounding=ROUND_HALF_UP)
+        for bid, total in reserved_rows
+    }
     total_alloc = Decimal(0)
     for a in allocations:
         bid = a["bill_id"]
         amt = Decimal(str(a["amount"]))
+        # normalize to 2 decimal places
+        try:
+            amt = amt.quantize(TWO_DP, rounding=ROUND_HALF_UP)
+        except Exception:
+            pass
         if amt <= 0:
             raise ValueError("Allocation amount must be > 0")
         b = bills.get(bid)
@@ -101,14 +113,29 @@ def create_payment_with_allocations(
         effective_remaining = (
             Decimal(b.amount) - Decimal(b.amount_paid) - already_reserved
         )
+        # Compare with cents precision
+        try:
+            effective_remaining = effective_remaining.quantize(
+                TWO_DP, rounding=ROUND_HALF_UP
+            )
+        except Exception:
+            pass
         if amt > effective_remaining:
             raise ValueError("Allocation exceeds bill remaining amount")
-        # Forward-only per-bill promise rule
-        if next_promise_date and getattr(b, "promise_date", None):
-            if next_promise_date < b.promise_date:
-                raise ValueError("next_promise_date cannot move backward for this bill")
+        # Allow backward updates; no per-bill forward-only restriction
         total_alloc += amt
+    # Normalize totals to 2dp for a robust equality comparison
+    try:
+        total_alloc = total_alloc.quantize(TWO_DP, rounding=ROUND_HALF_UP)
+    except Exception:
+        pass
     amount_collected_dec = Decimal(str(amount_collected))
+    try:
+        amount_collected_dec = amount_collected_dec.quantize(
+            TWO_DP, rounding=ROUND_HALF_UP
+        )
+    except Exception:
+        pass
     if total_alloc > amount_collected_dec:
         raise ValueError("Total allocations exceed amount_collected")
     if total_alloc != amount_collected_dec:
@@ -149,9 +176,13 @@ def create_payment_with_allocations(
                 return existing_after
         raise
     for a in allocations:
-        db.add(
-            PaymentAllocation(payment_id=p.id, bill_id=a["bill_id"], amount=a["amount"])
-        )
+        # persist normalized amount
+        amt = Decimal(str(a["amount"]))
+        try:
+            amt = amt.quantize(TWO_DP, rounding=ROUND_HALF_UP)
+        except Exception:
+            pass
+        db.add(PaymentAllocation(payment_id=p.id, bill_id=a["bill_id"], amount=amt))
     # Create a notification for accountant review
     # Guarantee at most one pending review notification: lock existing pending rows and reuse or stop extras
     pending_reviews = (
@@ -305,11 +336,10 @@ def admin_approve_payment(db: Session, payment_id: int) -> Payment:
         db.add(b)
     # update per-bill promise date if provided (do not set company-wide)
     if p.next_promise_date:
-        # Enforce not earlier than company credit_date
-        comp = db.get(Company, p.company_code)
+        # Apply the provided next_promise_date to allocated bills (not earlier than today)
         target_date = p.next_promise_date
-        if comp and comp.credit_date and target_date < comp.credit_date:
-            target_date = comp.credit_date
+        if target_date < date.today():
+            target_date = date.today()
         # Apply to all allocated bills in this payment
         for a in allocs:
             b = (
@@ -319,10 +349,6 @@ def admin_approve_payment(db: Session, payment_id: int) -> Payment:
                 .one_or_none()
             )
             if not b:
-                continue
-            # Forward only
-            if getattr(b, "promise_date", None) and target_date < b.promise_date:
-                # skip backward moves for this bill
                 continue
             b.promise_date = target_date
             try:

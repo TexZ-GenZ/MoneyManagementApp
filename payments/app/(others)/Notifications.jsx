@@ -146,6 +146,8 @@ export default function Notifications() {
                             <ActivityIndicator color={tokens.colors.accent} />
                         </View>
                     )}
+                    contentContainerStyle={{ paddingBottom: 32 }}
+                    showsVerticalScrollIndicator={false}
                 />
             )}
         </Screen>

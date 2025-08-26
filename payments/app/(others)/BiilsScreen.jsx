@@ -234,7 +234,7 @@ export default function CompanyBillsList() {
                     accessibilityRole="button"
                     accessibilityLabel="Multiple Pay"
                 >
-                    <Text style={styles.fabText}>Multiple Pay</Text>
+                    <Text style={styles.fabText}>Bulk Payment</Text>
                 </TouchableOpacity>
             </View>
             {/* Amount entry modal */}
@@ -261,9 +261,27 @@ export default function CompanyBillsList() {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.modalBtn, styles.modalDone]}
-                                onPress={() => {
+                                onPress={async () => {
                                     const v = Number(multiAmount);
                                     if (!multiAmount || Number.isNaN(v) || v <= 0) { Alert.alert('Invalid', 'Enter a valid amount'); return; }
+                                    // Compute max allowed = total outstanding across all pending bills (pending includes overdue)
+                                    const calcPendingOutstanding = (list) => (Array.isArray(list) ? list : []).filter(b => (b?.status === 'pending')).reduce((sum, b) => {
+                                        const amt = Number(b?.amount) || 0; const paid = Number(b?.amount_paid) || 0; const out = Math.max(0, amt - paid);
+                                        return sum + out;
+                                    }, 0);
+                                    let cap = calcPendingOutstanding(bills);
+                                    // If we don't have pending bills in current dataset (e.g., viewing paid), fetch pending to validate
+                                    if (cap <= 0) {
+                                        try {
+                                            const pendingUrl = `${API_BASE_URL}/companies/${code}/bills?status=pending&sort=oldest`;
+                                            const r = await fetch(pendingUrl);
+                                            if (r.ok) { const data = await r.json(); cap = calcPendingOutstanding(data?.items || data); }
+                                        } catch { }
+                                    }
+                                    if (v > cap) {
+                                        Alert.alert('Amount too large', `The entered amount exceeds total outstanding across pending bills (${formatCurrency(cap)}).`);
+                                        return;
+                                    }
                                     setMultiModalVisible(false);
                                     router.push({ pathname: '/(others)/MultiPayScreen', params: { name, code, outbal, amount: String(v) } });
                                 }}
@@ -326,17 +344,17 @@ const styles = StyleSheet.create({
     empty: { textAlign: 'center', color: tokens.colors.textDim, fontSize: 14 },
     retryButton: { backgroundColor: tokens.colors.accent, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
     retryText: { color: '#000', fontSize: 14, fontWeight: '600' },
-    fabWrapper: { position: 'absolute', left: 0, right: 0, bottom: 48, alignItems: 'center' },
-    fab: { backgroundColor: tokens.colors.accent, paddingHorizontal: 28, paddingVertical: 14, borderRadius: 28, borderWidth: 1, borderColor: tokens.colors.border, shadowColor: '#000', shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 6 },
+    fabWrapper: { position: 'absolute', left: 0, right: 0, bottom: 64, alignItems: 'center' },
+    fab: { backgroundColor: tokens.colors.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 28, borderWidth: 1, borderColor: tokens.colors.border, shadowColor: '#000', shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 6 },
     fabText: { color: '#000', fontWeight: '900', letterSpacing: 0.4, fontSize: 16 },
-    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-    modalCard: { width: '100%', maxWidth: 380, backgroundColor: tokens.colors.cardAlt, borderRadius: 12, borderColor: tokens.colors.border, borderWidth: 1, padding: 16 },
-    modalTitle: { fontSize: 16, fontWeight: '800', color: tokens.colors.text, marginBottom: 12 },
-    modalInput: { backgroundColor: '#00000010', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, marginBottom: 16 },
-    modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
-    modalBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
-    modalCancel: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border },
-    modalCancelText: { color: tokens.colors.text, fontWeight: '700' },
-    modalDone: { backgroundColor: tokens.colors.accent },
-    modalDoneText: { color: '#000', fontWeight: '800' },
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+    modalCard: { width: '100%', maxWidth: 420, backgroundColor: tokens.colors.cardAlt, borderRadius: 14, borderColor: tokens.colors.border, borderWidth: 1, padding: 20, shadowColor: '#000', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12, elevation: 12 },
+    modalTitle: { fontSize: 18, fontWeight: '900', color: tokens.colors.text, marginBottom: 10, textAlign: 'center' },
+    modalInput: { backgroundColor: '#00000014', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: tokens.colors.text, marginBottom: 16, fontSize: 18, textAlign: 'center' },
+    modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+    modalBtn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, flex: 1, alignItems: 'center' },
+    modalCancel: { backgroundColor: 'transparent', borderWidth: 1, borderColor: tokens.colors.border },
+    modalCancelText: { color: tokens.colors.textSubtle, fontWeight: '700' },
+    modalDone: { backgroundColor: tokens.colors.accent, borderWidth: 0 },
+    modalDoneText: { color: '#000', fontWeight: '900' },
 });

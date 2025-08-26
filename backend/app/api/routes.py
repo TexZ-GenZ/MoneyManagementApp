@@ -435,13 +435,12 @@ def set_promise_date(
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
-    # Forward-only rule
-    if c.promise_date and body.promise_date < c.promise_date:
-        raise HTTPException(status_code=400, detail="Cannot move promise_date backward")
-    # Must not be earlier than credit_date
-    if c.credit_date and body.promise_date < c.credit_date:
+    # Allow backward moves, but not before today
+    from datetime import date as _date
+
+    if body.promise_date < _date.today():
         raise HTTPException(
-            status_code=400, detail="promise_date cannot be earlier than credit_date"
+            status_code=400, detail="promise_date cannot be in the past"
         )
     c.promise_date = body.promise_date
     try:
@@ -613,15 +612,12 @@ def admin_update_bill_promise(
     b = db.get(Bill, bill_id)
     if not b or b.is_archived:
         raise HTTPException(status_code=404, detail="Bill not found")
-    # Forward-only for per-bill promise
-    if getattr(b, "promise_date", None) and body.promise_date < b.promise_date:
-        raise HTTPException(status_code=400, detail="Cannot move promise_date backward")
-    # Enforce not earlier than company's credit_date
-    comp = db.get(Company, b.company_code)
-    if comp and comp.credit_date and body.promise_date < comp.credit_date:
+    # Allow backward moves, but not before today
+    from datetime import date as _date
+
+    if body.promise_date < _date.today():
         raise HTTPException(
-            status_code=400,
-            detail="promise_date cannot be earlier than company's credit_date",
+            status_code=400, detail="promise_date cannot be in the past"
         )
     # Apply
     b.promise_date = body.promise_date
@@ -951,6 +947,31 @@ def payments_activity(
                     # number of bills included in this payment (bulk vs single)
                     "allocation_count": alloc_counts.get(p.id, 0),
                     "first_bill_number": first_bill_by_payment.get(p.id),
+                    # convenience aliases used by app front-end (tolerant to None)
+                    "created_at": (
+                        p.collected_at.isoformat() if p.collected_at else None
+                    ),
+                    "updated_at": (
+                        (
+                            p.admin_review_at
+                            or p.accountant_review_at
+                            or p.collected_at
+                        ).isoformat()
+                        if (
+                            p.admin_review_at
+                            or p.accountant_review_at
+                            or p.collected_at
+                        )
+                        else None
+                    ),
+                    "accountant_approved_at": (
+                        p.accountant_review_at.isoformat()
+                        if p.accountant_review_at
+                        else None
+                    ),
+                    "admin_approved_at": (
+                        p.admin_review_at.isoformat() if p.admin_review_at else None
+                    ),
                 }
                 items.append(item_dict)
             except Exception as e:

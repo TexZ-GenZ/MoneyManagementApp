@@ -91,11 +91,8 @@ export default function AccountantDashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    fetchRecent();
-    const id = setInterval(fetchRecent, 30000);
-    return () => clearInterval(id);
-  }, [fetchRecent]);
+  // Only refresh on page load or navigation focus (interval removed)
+  useEffect(() => { fetchRecent(); }, [fetchRecent]);
 
   useFocusEffect(useCallback(() => { fetchRecent(); refreshUnread(); }, [fetchRecent, refreshUnread]));
   useFocusEffect(useCallback(() => { /* refresh badge on focus */ }, []));
