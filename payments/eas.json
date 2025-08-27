@@ -40,6 +40,21 @@
         "EXPO_PUBLIC_APP_VERSION": "1.0.0"
       },
       "channel": "production"
+    },
+    "prod-arm64": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=arm64-v8a"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://moneymanagementapp-production.up.railway.app",
+        "EXPO_PUBLIC_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_DEBUG_MODE": "false",
+        "EXPO_PUBLIC_PROJECT_ID": "payments-5c6bd",
+        "EXPO_PUBLIC_APP_VERSION": "1.0.0"
+      },
+      "channel": "production"
     }
   },
   "submit": {
