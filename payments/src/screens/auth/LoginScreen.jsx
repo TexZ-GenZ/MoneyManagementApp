@@ -212,7 +212,13 @@ const LoginScreen = () => {
       return;
     }
 
-    const validationResults = validateForm(formData, {
+    // Trim spaces from username and password
+    const trimmedFormData = {
+      username: formData.username.trim(),
+      password: formData.password.trim(),
+    };
+
+    const validationResults = validateForm(trimmedFormData, {
       username: VALIDATION_RULES.username,
       password: VALIDATION_RULES.password,
     });
@@ -231,20 +237,17 @@ const LoginScreen = () => {
 
     try {
       const result = await dispatch(loginUser({
-        username: formData.username,
-        password: formData.password,
+        username: trimmedFormData.username,
+        password: trimmedFormData.password,
       }));
 
       if (loginUser.fulfilled.match(result)) {
-
         // Now the user is authenticated. Register for push notifications and send token once.
         const expoPushToken = await registerForPushNotifications();
         if (expoPushToken) {
           await sendPushTokenToBackend(expoPushToken);
         }
-
         router.replace('/(tabs)');
-
       } else {
         Alert.alert('Login Failed', getErrorMessage(result.payload) || 'Please check your credentials and try again.');
       }

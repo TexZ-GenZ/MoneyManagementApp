@@ -94,6 +94,7 @@ export default function Notifications() {
         // If delivered item shape (title/body)
         if (item.title && item.body) {
             const createdLabel = formatDateTime(item.created_at || item.createdAt);
+
             const isAck = !!item.acknowledged;
             return (
                 <Card style={styles.itemCard}>
@@ -110,7 +111,7 @@ export default function Notifications() {
                     </View>
                     <Text style={[styles.itemLine]} numberOfLines={4}>{String(item.body)}</Text>
                     <View style={styles.footerRow}>
-                        <Text style={styles.createdAt}>{createdLabel}</Text>
+                        <Text style={styles.createdAt} numberOfLines={1} ellipsizeMode="tail">{createdLabel}</Text>
                         {!isAck && (
                             <TouchableOpacity style={styles.ackBtn} onPress={() => ackDelivered(item.id)}>
                                 <Text style={styles.ackText}>Mark read</Text>
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
     itemStatusAccent: { color: tokens.colors.accent },
     itemStatusNeutral: { color: tokens.colors.textDim },
     footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-    createdAt: { color: tokens.colors.textDim, fontSize: 11 },
+    createdAt: { color: tokens.colors.textDim, fontSize: 11, flex: 1 },
     unreadPill: { backgroundColor: tokens.colors.accent, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#000' },
     unreadText: { color: '#000', fontSize: 10, fontWeight: '800' },
     ackBtn: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10 },

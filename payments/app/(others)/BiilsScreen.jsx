@@ -9,11 +9,13 @@ import StatusBadge from '../../src/ui/components/StatusBadge';
 import { formatCurrency, formatDate } from '../../src/ui/format';
 import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
+import { useAppSelector } from '../../src/store/hooks';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI; // unified base
 
 export default function CompanyBillsList() {
     const { name, code, amount, outbal } = useLocalSearchParams();
+    const userRole = useAppSelector(s => s.auth.user?.role || '');
     const [bills, setBills] = useState([]);
     const [totalCount, setTotalCount] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -226,17 +228,19 @@ export default function CompanyBillsList() {
                 keyboardShouldPersistTaps="handled"
             />
             {/* Floating Multiple Pay button */}
-            <View style={styles.fabWrapper} pointerEvents="box-none">
-                <TouchableOpacity
-                    style={styles.fab}
-                    activeOpacity={0.9}
-                    onPress={() => setMultiModalVisible(true)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Multiple Pay"
-                >
-                    <Text style={styles.fabText}>Bulk Payment</Text>
-                </TouchableOpacity>
-            </View>
+            {userRole !== 'admin' && userRole !== 'accountant' && (
+                <View style={styles.fabWrapper} pointerEvents="box-none">
+                    <TouchableOpacity
+                        style={styles.fab}
+                        activeOpacity={0.9}
+                        onPress={() => setMultiModalVisible(true)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Multiple Pay"
+                    >
+                        <Text style={styles.fabText}>Bulk Payment</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
             {/* Amount entry modal */}
             <Modal
                 visible={multiModalVisible}

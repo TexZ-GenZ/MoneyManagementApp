@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, ActivityIndicator, ScrollView, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
@@ -27,6 +27,7 @@ export default function PaymentApprovalDetail() {
     const [approveComment, setApproveComment] = useState('');
     const [showMap, setShowMap] = useState(true);
     const [outerScrollEnabled, setOuterScrollEnabled] = useState(true);
+    const scrollViewRef = useRef(null);
     const router = useRouter();
     const currentUser = useSelector(state => state.auth?.user);
 
@@ -131,10 +132,26 @@ export default function PaymentApprovalDetail() {
     const canAccountantAct = currentUser?.role === 'accountant' && isAccountantStage;
     const canAct = !isReadOnly && (canAdminAct || canAccountantAct);
 
+    // Scroll to 70% of content height when approval comment input is focused
+    const handleApproveInputFocus = () => {
+        if (scrollViewRef.current) {
+            scrollViewRef.current.measure?.((x, y, width, height, pageX, pageY) => {
+                // fallback if measure is not available
+            });
+            scrollViewRef.current.scrollTo?.({ y: scrollViewContentHeight * 0.7, animated: true });
+        }
+    };
+    const [scrollViewContentHeight, setScrollViewContentHeight] = useState(0);
     return (
         <Screen title={company?.name || (payment ? payment.company_code : 'Payment')}>
             {loading ? <ActivityIndicator color={tokens.colors.accent} style={{ marginTop: 40 }} /> : (
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} scrollEnabled={outerScrollEnabled}>
+                <ScrollView
+                    ref={scrollViewRef}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 120 }}
+                    scrollEnabled={outerScrollEnabled}
+                    onContentSizeChange={(w, h) => setScrollViewContentHeight(h)}
+                >
                     <Card style={[styles.card, styles.headerCard]}>
                         <View style={styles.headerTopLine}>
                             <View style={{ flex: 1 }}>
@@ -219,6 +236,7 @@ export default function PaymentApprovalDetail() {
                                 value={approveComment}
                                 onChangeText={setApproveComment}
                                 editable={!approving && !declining}
+                                onFocus={handleApproveInputFocus}
                             />
                             <View style={styles.actionsRow}>
                                 <TouchableOpacity
