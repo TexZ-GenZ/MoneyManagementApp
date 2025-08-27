@@ -19,31 +19,31 @@ log = get_logger(__name__)
 def _scan_job():
     db = SessionLocal()
     try:
-        # Gate entire scan by exec window (IST) to avoid unnecessary DB work
+        # Check exec window using IST time (no UTC conversion needed since CronTrigger uses IST)
+        from zoneinfo import ZoneInfo
         s = db.get(Setting, 1)
         if s:
             start_h = s.exec_window_start_hour or 6
             end_h = s.exec_window_end_hour or 22
-
-            # Convert IST start/end to UTC hour as in notifications service
-            def ist_to_utc(h: int) -> int:
-                return int((h - 5.5) % 24)
-
-            utc_start = ist_to_utc(start_h)
-            utc_end = ist_to_utc(end_h)
-            nowh = datetime.utcnow().hour
-            if utc_start < utc_end:
-                in_window = utc_start <= nowh <= utc_end
+            
+            # Get current IST hour directly (no conversion needed)
+            ist_now = datetime.now(ZoneInfo("Asia/Kolkata")).hour
+            
+            if start_h <= end_h:
+                in_window = start_h <= ist_now <= end_h
             else:
-                in_window = nowh >= utc_start or nowh <= utc_end
+                # Handle overnight window (e.g., 22-6)
+                in_window = ist_now >= start_h or ist_now <= end_h
+                
             if not in_window:
                 log.debug(
-                    "Scan skipped (outside exec window) utc_hour=%s window=%s-%s",
-                    nowh,
-                    utc_start,
-                    utc_end,
+                    "Scan skipped (outside exec window) ist_hour=%s window=%s-%s",
+                    ist_now,
+                    start_h,
+                    end_h,
                 )
                 return
+                
         run_notification_scan(db)
         db.commit()
     except Exception as e:
