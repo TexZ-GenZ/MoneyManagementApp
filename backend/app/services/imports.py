@@ -9,6 +9,13 @@ from sqlalchemy import select
 import re, random, string
 from app.services.company import recalc_company_totals
 import logging, os, datetime
+import csv
+from typing import Iterable, Iterator, Dict, Tuple, List, Any, Optional
+
+try:
+    from openpyxl import load_workbook  # type: ignore
+except Exception:  # pragma: no cover
+    load_workbook = None  # optional at runtime; tests may not require xlsx
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 CHUNK_SIZE = 500  # flush every chunk
@@ -17,6 +24,9 @@ log = logging.getLogger(__name__)
 
 ALLOWED_MASTER_FILES = {"master.dbf", "MASRMN25.DBF"}
 ALLOWED_TX_FILES = {"transactions.dbf", "BOOKSALE.DBF"}
+
+SUPPORTED_MASTER_EXTS = {".dbf", ".csv", ".xlsx"}
+SUPPORTED_TX_EXTS = {".dbf", ".csv", ".xlsx"}
 PLACEHOLDER_AREAS = {"", "-", "--", "N/A", "NA", "NULL", "NONE"}
 
 # Required minimal columns (case-insensitive) – keep deliberately small / non-strict.
@@ -28,6 +38,115 @@ REQUIRED_TX_COLS = {"CODE", "BILL", "DATE", "DEBIT"}
 def _lock_path(kind: str) -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     return DATA_DIR / f".{kind}.import.lock"
+
+
+# --- File readers ---------------------------------------------------------------
+
+def _open_table(path_str: str) -> tuple[Iterable[dict], set[str]]:
+    """
+    Open a tabular file (dbf/csv/xlsx) and return an iterable of dict rows and the header set (uppercased).
+    Dict rows use original header keys as present in the file.
+    """
+    p = Path(path_str)
+    ext = p.suffix.lower()
+    if ext == ".dbf":
+        table = DBF(path_str, load=True, char_decode_errors="ignore")
+        headers: set[str] = set()
+        if hasattr(table, "field_names"):
+            headers = {str(h).upper() for h in list(getattr(table, "field_names", []))}
+        return table, headers
+    if ext == ".csv":
+        f = open(path_str, "r", encoding="utf-8-sig", newline="")
+        reader = csv.DictReader(f)
+        hdrs = {str(h).upper() for h in (reader.fieldnames or [])}
+
+        def gen():
+            try:
+                for row in reader:
+                    yield row
+            finally:
+                f.close()
+
+        return gen(), hdrs
+    if ext == ".xlsx":
+        if load_workbook is None:
+            raise ValueError("XLSX support is not available (openpyxl missing)")
+        wb = load_workbook(path_str, read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        header: list[str] | None = None
+        for row in rows_iter:
+            if not row:
+                continue
+            if any(cell is not None and str(cell).strip() != "" for cell in row):
+                header = [str(c).strip() if c is not None else "" for c in row]
+                break
+        if not header:
+            try:
+                wb.close()
+            except Exception:
+                pass
+            return [], set()
+
+        def gen():
+            try:
+                for row in rows_iter:
+                    if row is None:
+                        continue
+                    values = list(row)
+                    if len(values) < len(header):
+                        values += [None] * (len(header) - len(values))
+                    yield {header[i]: values[i] for i in range(len(header))}
+            finally:
+                try:
+                    wb.close()
+                except Exception:
+                    pass
+
+        return gen(), {h.upper() for h in header}
+    raise ValueError(f"Unsupported file type: {ext}")
+
+
+def _parse_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, str):
+        txt = value.strip()
+        # try ISO
+        try:
+            return datetime.date.fromisoformat(txt)
+        except Exception:
+            pass
+        # common alternates
+        for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%m-%d-%Y"):
+            try:
+                return datetime.datetime.strptime(txt, fmt).date()
+            except Exception:
+                continue
+    return None
+
+
+def _to_decimal(val) -> Decimal:
+    if val is None:
+        return Decimal(0)
+    if isinstance(val, (int, Decimal)):
+        return Decimal(val)
+    if isinstance(val, float):
+        return Decimal(str(val))
+    # assume string-like
+    s = str(val).strip()
+    if s == "":
+        return Decimal(0)
+    # remove commas in numbers like 1,234.56
+    s = s.replace(",", "")
+    try:
+        return Decimal(s)
+    except Exception:
+        return Decimal(0)
 
 
 def _acquire_lock(kind: str) -> bool:
@@ -159,10 +278,10 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                         chosen = ap
                         break
             if not chosen:
-                return {"error": "no usable master dbf file present"}
+                return {"error": "no usable master file present"}
             path_str = str(chosen)
         else:
-            # Bypass allowlist (test injection path) – path may not exist; DBF will be monkeypatched anyway.
+            # Bypass allowlist (uploaded arbitrary name) – use as-is (absolute or relative)
             path_str = filename
         started = time.time()
         inserted = updated = skipped = 0
@@ -177,29 +296,13 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
         seen_codes: set[str] = set()
         # Preload existing to allow change detection without hitting ORM attribute history per row.
         existing_count = db.query(Company).count()
-        # Open table (may be monkeypatched in tests)
+        # Open table (dbf/csv/xlsx). Tests may monkeypatch DBF; keep ValueError surface for corrupt cases.
         try:
-            table = DBF(path_str, load=True, char_decode_errors="ignore")
+            table, headers = _open_table(path_str)
         except Exception as e:
-            # For corrupt simulation tests we must raise ValueError to satisfy expectations
-            raise ValueError(f"Corrupt or unreadable master DBF: {e}")
-        # Basic header validation (ignore case)
-        # Derive headers (support monkeypatched simple list objects without field_names)
-        raw_fields = []
-        if hasattr(table, "field_names"):
-            raw_fields = list(getattr(table, "field_names", []))
-        else:
-            # Safe, len() free peek for dict-style row if indexing available; swallow any errors (tests may inject iterator-only objects)
-            try:
-                first = None
-                if hasattr(table, "__getitem__"):
-                    first = table[0]  # type: ignore[index]
-                if isinstance(first, dict):
-                    raw_fields = list(first.keys())
-            except Exception:
-                raw_fields = []
-        if raw_fields:
-            headers = {str(h).upper() for h in raw_fields}
+            raise ValueError(f"Corrupt or unreadable master table: {e}")
+        # Basic header validation (ignore case) if headers known
+        if headers:
             missing = [c for c in REQUIRED_MASTER_COLS if c not in headers]
             if missing:
                 return {"error": f"missing required columns: {missing}"}
@@ -224,8 +327,8 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                         )
                         continue
                     seen_codes.add(code)
-                    name = str(r.get("account_n") or r.get("name") or code).strip()
-                    area_raw = str(r.get("area") or "").strip()
+                    name = str(r.get("account_n") or r.get("name") or r.get("account") or code).strip()
+                    area_raw = str(r.get("area") or r.get("zone") or r.get("region") or "").strip()
                     area_norm = area_raw.upper()
                     if area_norm in PLACEHOLDER_AREAS or area_raw.strip() == "":
                         if area_raw:
@@ -375,10 +478,10 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                         chosen = p
                         break
             if not chosen:
-                return {"error": "no usable transactions dbf file present"}
+                return {"error": "no usable transactions file present"}
             path = chosen
         else:
-            path = DATA_DIR / filename
+            path = Path(filename)
         started = time.time()
         inserted = updated = skipped = 0
         zero_debit_skipped = 0
@@ -388,26 +491,18 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
         touched_codes: set[str] = set()
         existing_count = db.query(Bill).count()
         try:
-            table = DBF(str(path), load=True, char_decode_errors="ignore")
+            table, headers = _open_table(str(path))
         except Exception as e:
-            raise ValueError(f"Corrupt or unreadable transactions DBF: {e}")
-        raw_fields = []
-        if hasattr(table, "field_names"):
-            raw_fields = list(getattr(table, "field_names", []))
-        else:
-            try:
-                first = None
-                if hasattr(table, "__getitem__"):
-                    first = table[0]  # type: ignore[index]
-                if isinstance(first, dict):
-                    raw_fields = list(first.keys())
-            except Exception:
-                raw_fields = []
-        if raw_fields:
-            headers = {str(h).upper() for h in raw_fields}
-            missing = [c for c in REQUIRED_TX_COLS if c not in headers]
-            if missing:
-                return {"error": f"missing required columns: {missing}"}
+            raise ValueError(f"Corrupt or unreadable transactions table: {e}")
+        if headers:
+            # Flexible header validation: must have CODE and BILL, plus a date column (DATE or BILL_DATE)
+            # and an amount column (DEBIT or AMOUNT)
+            need_code = "CODE" in headers
+            need_bill = "BILL" in headers or "BILL_NUMBER" in headers
+            has_date = ("DATE" in headers) or ("BILL_DATE" in headers)
+            has_amount = ("DEBIT" in headers) or ("AMOUNT" in headers)
+            if not (need_code and need_bill and has_date and has_amount):
+                return {"error": "missing required columns: need CODE, BILL, and date (DATE|BILL_DATE) and amount (DEBIT|AMOUNT)"}
         try:
             with db.begin_nested():
                 for idx, row in enumerate(table):
@@ -418,12 +513,10 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                         continue
                     seen_numbers.add(f"{code}::{bill_no}")
                     touched_codes.add(code)
-                    bill_date = r.get("date")
-                    due_date = r.get("due_date") or r.get("duedate") or r.get("due")
+                    bill_date = _parse_date(r.get("date") or r.get("bill_date"))
+                    due_date = _parse_date(r.get("due_date") or r.get("duedate") or r.get("due"))
                     debit = r.get("debit") or r.get("amount")
-                    if debit is None:
-                        debit = 0
-                    raw_amount = Decimal(debit)
+                    raw_amount = _to_decimal(debit)
                     if raw_amount == 0:
                         zero_debit_skipped += 1
                         continue
