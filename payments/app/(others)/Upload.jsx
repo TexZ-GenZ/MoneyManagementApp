@@ -20,6 +20,8 @@ export default function UploadScreen() {
   const [transactionsProgress, setTransactionsProgress] = useState(0);
   const [masterSuccess, setMasterSuccess] = useState(false);
   const [transactionsSuccess, setTransactionsSuccess] = useState(false);
+  const [masterResult, setMasterResult] = useState(null);
+  const [transactionsResult, setTransactionsResult] = useState(null);
   const timers = useRef([]);
 
   useEffect(() => () => timers.current.forEach(t => clearInterval(t)), []);
@@ -36,7 +38,9 @@ export default function UploadScreen() {
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
       if (result.canceled || !result.assets?.length) return;
       const file = result.assets[0];
-      if (!file.name.toLowerCase().endsWith('.dbf')) { Alert.alert('Invalid File', 'Select a .dbf file.'); return; }
+      const lower = (file.name || '').toLowerCase();
+      const allowed = lower.endsWith('.dbf') || lower.endsWith('.csv') || lower.endsWith('.xlsx');
+      if (!allowed) { Alert.alert('Invalid File', 'Select a .dbf, .csv, or .xlsx file.'); return; }
       if (file.size > 15 * 1024 * 1024) { Alert.alert('Too Large', 'Max 15MB.'); return; }
       if (type === 'master') { setMasterFile(file); setMasterSuccess(false); setMasterProgress(0); }
       else { setTransactionsFile(file); setTransactionsSuccess(false); setTransactionsProgress(0); }
@@ -58,7 +62,7 @@ export default function UploadScreen() {
 
     // Use XMLHttpRequest to get real upload progress in React Native
     const url = getApiUrl(endpoint);
-    const ok = await new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', url);
       // Set only auth header; let RN set multipart boundary automatically
@@ -87,7 +91,12 @@ export default function UploadScreen() {
           const status = xhr.status || 0;
           if (status >= 200 && status < 300) {
             progressSetter(100);
-            resolve(true);
+            try {
+              const json = JSON.parse(xhr.responseText || '{}');
+              resolve(json);
+            } catch {
+              resolve(true);
+            }
           } else {
             // Try to parse error message
             let msg = 'Upload failed';
@@ -110,12 +119,12 @@ export default function UploadScreen() {
       }
     });
 
-    return ok === true;
+    return result;
   };
 
   const uploadBoth = async () => {
     if (!masterFile || !transactionsFile) {
-      Alert.alert('Both files required', 'Please select both Master and Transactions DBF files before uploading.');
+      Alert.alert('Both files required', 'Please select both Master and Transactions files (.dbf/.csv/.xlsx) before uploading.');
       return;
     }
     // Prevent double-submission
@@ -128,12 +137,17 @@ export default function UploadScreen() {
 
     try {
       // Upload sequentially to keep predictable UI; both must succeed.
-      const okMaster = await doUpload(masterFile, '/uploads/master', setMasterProgress);
-      const okTxn = await doUpload(transactionsFile, '/uploads/transactions', setTransactionsProgress);
+      const masterResp = await doUpload(masterFile, '/uploads/master', setMasterProgress);
+      const txnResp = await doUpload(transactionsFile, '/uploads/transactions', setTransactionsProgress);
+
+      const okMaster = !!masterResp && masterResp.ok !== false;
+      const okTxn = !!txnResp && txnResp.ok !== false;
 
       if (okMaster && okTxn) {
         setMasterSuccess(true);
         setTransactionsSuccess(true);
+        setMasterResult(masterResp);
+        setTransactionsResult(txnResp);
         Alert.alert('Success', 'Both Master and Transactions files uploaded successfully.');
       } else {
         throw new Error('Both files must be uploaded successfully.');
@@ -147,6 +161,8 @@ export default function UploadScreen() {
       setTransactionsSuccess(false);
       setMasterProgress(0);
       setTransactionsProgress(0);
+      setMasterResult(null);
+      setTransactionsResult(null);
     } finally {
       setMasterUploading(false);
       setTransactionsUploading(false);
@@ -166,7 +182,7 @@ export default function UploadScreen() {
       {!file && (
         <TouchableOpacity style={styles.pickZone} activeOpacity={0.75} onPress={() => pickFile(type)}>
           <Ionicons name="cloud-upload-outline" size={42} color={tokens.colors.textDim} />
-          <Text style={styles.pickZoneText}>Tap to choose .dbf file</Text>
+          <Text style={styles.pickZoneText}>Tap to choose .dbf/.csv/.xlsx file</Text>
           <Text style={styles.pickZoneHint}>Max 15MB</Text>
         </TouchableOpacity>
       )}
@@ -200,9 +216,9 @@ export default function UploadScreen() {
   const anyUploading = masterUploading || transactionsUploading;
 
   return (
-    <Screen title="Uploads" subtitle="Master & Transactions DBF" scroll>
-      <UploadSection title="Master DBF" subtitle="Company + account data" file={masterFile} uploading={masterUploading} progress={masterProgress} success={masterSuccess} type="master" />
-      <UploadSection title="Transactions DBF" subtitle="Billing & payment records" file={transactionsFile} uploading={transactionsUploading} progress={transactionsProgress} success={transactionsSuccess} type="transactions" />
+    <Screen title="Uploads" subtitle="Master & Transactions (DBF/CSV/XLSX)" scroll>
+      <UploadSection title="Master File" subtitle="Company + account data (.dbf/.csv/.xlsx)" file={masterFile} uploading={masterUploading} progress={masterProgress} success={masterSuccess} type="master" />
+      <UploadSection title="Transactions File" subtitle="Billing & payment records (.dbf/.csv/.xlsx)" file={transactionsFile} uploading={transactionsUploading} progress={transactionsProgress} success={transactionsSuccess} type="transactions" />
 
       <Card style={styles.bannerCard}>
         <View style={styles.bannerRow}>
@@ -230,12 +246,34 @@ export default function UploadScreen() {
             <Ionicons name="checkmark-circle" size={20} color={tokens.colors.success} />
             <Text style={styles.bannerText}>Both files uploaded successfully</Text>
           </View>
+          {(masterResult || transactionsResult) && (
+            <View style={{ marginTop: 10 }}>
+              {masterResult && (
+                <View style={{ marginBottom: 8 }}>
+                  <Text style={styles.summaryTitle}>Master Summary</Text>
+                  <Text style={styles.summaryItem}>Inserted: {masterResult.inserted ?? '-'}</Text>
+                  <Text style={styles.summaryItem}>Updated: {masterResult.updated ?? '-'}</Text>
+                  <Text style={styles.summaryItem}>Skipped: {masterResult.skipped ?? '-'}</Text>
+                  {'archived' in masterResult && <Text style={styles.summaryItem}>Archived: {masterResult.archived}</Text>}
+                </View>
+              )}
+              {transactionsResult && (
+                <View>
+                  <Text style={styles.summaryTitle}>Transactions Summary</Text>
+                  <Text style={styles.summaryItem}>Inserted: {transactionsResult.inserted ?? '-'}</Text>
+                  <Text style={styles.summaryItem}>Updated: {transactionsResult.updated ?? '-'}</Text>
+                  <Text style={styles.summaryItem}>Skipped: {transactionsResult.skipped ?? '-'}</Text>
+                  {'archived' in transactionsResult && <Text style={styles.summaryItem}>Archived: {transactionsResult.archived}</Text>}
+                </View>
+              )}
+            </View>
+          )}
         </Card>
       )}
 
       <Card style={styles.infoCard}>
         <View style={styles.infoHeader}><Ionicons name="information-circle-outline" size={18} color={tokens.colors.accent} /><Text style={styles.infoTitle}>Guidelines</Text></View>
-        <Text style={styles.tip}>• Only .dbf files (max 15MB)</Text>
+        <Text style={styles.tip}>• Allowed formats: .dbf, .csv, .xlsx (max 15MB)</Text>
         <Text style={styles.tip}>• Master: company & account metadata</Text>
         <Text style={styles.tip}>• Transactions: billing & payments</Text>
         <Text style={styles.tip}>• You must upload Master and Transactions together</Text>
@@ -270,6 +308,8 @@ const styles = StyleSheet.create({
   bannerCard: { marginBottom: 16, padding: 14, borderLeftWidth: 4, borderLeftColor: tokens.colors.accent },
   bannerRow: { flexDirection: 'row', alignItems: 'center' },
   bannerText: { color: tokens.colors.text, fontWeight: '700', marginLeft: 8, fontSize: 13 },
+  summaryTitle: { color: tokens.colors.text, fontWeight: '700', fontSize: 13, marginBottom: 4 },
+  summaryItem: { color: tokens.colors.textDim, fontSize: 12 },
   infoCard: { padding: 16 },
   infoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   infoTitle: { color: tokens.colors.text, fontSize: 13, fontWeight: '700', marginLeft: 8 },

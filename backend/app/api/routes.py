@@ -1607,15 +1607,18 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 @router.post("/uploads/master", dependencies=[Depends(require_roles("accountant"))])
 def upload_master(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    dest = DATA_DIR / "master.dbf"
+    # Save under original filename to support arbitrary names and formats (dbf/csv/xlsx)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    orig_name = (file.filename or "master_upload").strip()
+    dest = DATA_DIR / orig_name
     content = file.file.read()
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=413, detail=f"File too large; max {MAX_UPLOAD_SIZE} bytes"
         )
     dest.write_bytes(content)
-    metrics = do_import_master(db)
+    # Pass the saved path directly so the import layer can detect extension
+    metrics = do_import_master(db, filename=str(dest))
     return {"ok": True, "saved": str(dest), **metrics}
 
 
@@ -1623,15 +1626,18 @@ def upload_master(file: UploadFile = File(...), db: Session = Depends(get_db)):
     "/uploads/transactions", dependencies=[Depends(require_roles("accountant"))]
 )
 def upload_transactions(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    dest = DATA_DIR / "transactions.dbf"
+    # Save under original filename to support arbitrary names and formats (dbf/csv/xlsx)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    orig_name = (file.filename or "transactions_upload").strip()
+    dest = DATA_DIR / orig_name
     content = file.file.read()
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=413, detail=f"File too large; max {MAX_UPLOAD_SIZE} bytes"
         )
     dest.write_bytes(content)
-    metrics = do_import_transactions(db)
+    # Pass the saved path directly so the import layer can detect extension
+    metrics = do_import_transactions(db, filename=str(dest))
     return {"ok": True, "saved": str(dest), **metrics}
 
 

@@ -3,7 +3,7 @@
 Lean documentation of how master & transactions file uploads behave. Focus only on what is absolutely needed for a real-world deployment without extra complexity.
 
 ## 1. Snapshot Model
-Each upload (master / transactions) is treated as the new authoritative snapshot for that dataset.
+Each upload (master / transactions) is treated as the new authoritative snapshot for that dataset. Uploads may be .dbf, .csv, or .xlsx with arbitrary filenames from the frontend; the backend detects the format by extension.
 
 | File Type | Entities Affected | Identity Key | Archive Rule |
 |-----------|------------------|--------------|--------------|
