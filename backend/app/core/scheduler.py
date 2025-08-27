@@ -1,4 +1,5 @@
 import logging
+import os
 from app.core.logging_config import get_logger
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -31,9 +32,9 @@ def _scan_job():
             utc_end = ist_to_utc(end_h)
             nowh = datetime.utcnow().hour
             if utc_start < utc_end:
-                in_window = utc_start <= nowh < utc_end
+                in_window = utc_start <= nowh <= utc_end
             else:
-                in_window = nowh >= utc_start or nowh < utc_end
+                in_window = nowh >= utc_start or nowh <= utc_end
             if not in_window:
                 log.debug(
                     "Scan skipped (outside exec window) utc_hour=%s window=%s-%s",
@@ -64,11 +65,67 @@ def _configure_jobs():
     db = SessionLocal()
     try:
         s = db.get(Setting, 1)
-        interval_hours = s.notif_every_hours if s and s.notif_every_hours else 2
-    # daily digest removed
+        if not s:
+            interval_hours = 2
+            start_h = 6
+            end_h = 22
+        else:
+            interval_hours = s.notif_every_hours if s.notif_every_hours else 2
+            start_h = s.exec_window_start_hour or 6
+            end_h = s.exec_window_end_hour or 22
     finally:
         db.close()
-    trigger = IntervalTrigger(hours=interval_hours)
+
+    # For testing: allow minute-level cadence when NOTIF_TEST_MINUTES is set
+    test_minutes = os.environ.get("NOTIF_TEST_MINUTES")
+    if test_minutes:
+        try:
+            m = int(test_minutes)
+            if m >= 1:
+                # Override trigger to every m minutes regardless of window
+                trigger = IntervalTrigger(minutes=m)
+                scheduler.add_job(
+                    _scan_job,
+                    trigger,
+                    id="notif_interval",
+                    max_instances=1,
+                    coalesce=True,
+                    replace_existing=True,
+                    misfire_grace_time=300,
+                )
+                log.info("Notification scheduler TEST mode minutes=%s", m)
+                return
+        except Exception:
+            pass
+
+    # Compute discrete run hours aligned to [start, end] inclusive, every X hours (IST -> UTC)
+    def ist_to_utc(h: int) -> int:
+        # Keep existing integer-hour mapping used elsewhere to avoid half-hour complications
+        return int((h - 5.5) % 24)
+
+    def compute_utc_hours(start_h: int, end_h: int, step: int) -> list[int]:
+        if step <= 0:
+            step = 1
+        ist_hours: list[int] = []
+        if start_h <= end_h:
+            ist_hours = list(range(start_h, end_h + 1, step))
+        else:
+            # wrap across midnight; build on extended range and wrap
+            ist_hours = [h % 24 for h in range(start_h, end_h + 24 + 1, step)]
+        # Map to UTC hours, unique and sorted
+        utc_hours = sorted({ist_to_utc(h) for h in ist_hours})
+        return utc_hours
+
+    utc_hours = compute_utc_hours(start_h, end_h, interval_hours)
+
+    # Schedule at minute 0 for each computed UTC hour
+    if not utc_hours:
+        # Fallback: if somehow no hours were computed, run every interval_hours as a safe default
+        trigger = IntervalTrigger(hours=interval_hours)
+    else:
+        # CronTrigger expects expressions; provide a comma-separated list of hours
+        hour_expr = ",".join(str(h) for h in utc_hours)
+        trigger = CronTrigger(hour=hour_expr, minute=0)
     scheduler.add_job(
         _scan_job,
         trigger,
@@ -78,7 +135,13 @@ def _configure_jobs():
         replace_existing=True,
         misfire_grace_time=300,
     )
-    log.info("Notification scheduler interval configured hours=%s", interval_hours)
+    log.info(
+        "Notification scheduler configured at hours=%s (UTC) step=%s window(IST)=%s-%s",
+        utc_hours,
+        interval_hours,
+        start_h,
+        end_h,
+    )
     # daily cron removed
 
 

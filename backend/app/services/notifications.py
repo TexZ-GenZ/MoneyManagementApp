@@ -305,6 +305,13 @@ def _send_role_pending_pushes(db: Session):
     Admin: payments with status accountant_approved.
     """
     now = datetime.utcnow()
+    s = db.get(Setting, 1)
+    interval_hours = (
+        s.notif_every_hours
+        if s and s.notif_every_hours
+        else DEFAULT_RESEND_INTERVAL_HOURS
+    )
+    
     # Gather counts
     accountant_cnt = (
         db.query(Payment).filter(Payment.status == PaymentStatus.submitted).count()
@@ -323,6 +330,7 @@ def _send_role_pending_pushes(db: Session):
     def _send_to_role(role: Role, count: int, stage: str):
         if count <= 0:
             return
+        
         users = db.query(User).filter(User.role == role, User.is_active == True).all()
         if not users:
             return
@@ -334,6 +342,7 @@ def _send_role_pending_pushes(db: Session):
         log.debug("Role=%s users=%s tokens=%s", role, len(users), len(tokens))
         if not tokens:
             return
+            
         title = (
             "Needs Accountant Approval"
             if stage == "accountant"
@@ -341,8 +350,25 @@ def _send_role_pending_pushes(db: Session):
         )
         noun = "payment" if count == 1 else "payments"
         body = f"{count} {noun} awaiting {stage} approval\nTap to review."
-        # Record once per user (not per token)
+        
+        # Per-user dedupe based on delivered history within interval window
+        cutoff = now - timedelta(hours=interval_hours)
+        user_ids = [u.id for u in users]
+        recent = (
+            db.query(UserNotification.user_id)
+            .filter(
+                UserNotification.user_id.in_(user_ids),
+                UserNotification.created_at >= cutoff,
+                UserNotification.title == title,
+            )
+            .all()
+        )
+        recently_sent = {uid for (uid,) in recent}
+        
+        # Record and push only to users not recently notified
         for u in users:
+            if u.id in recently_sent:
+                continue
             _record_user_notification(
                 db,
                 u.id,
@@ -351,6 +377,8 @@ def _send_role_pending_pushes(db: Session):
                 {"pending_count": count, "stage": stage, "screen": "Approvals"},
             )
         for t in tokens:
+            if t.user_id in recently_sent:
+                continue
             if not isinstance(t.token, str) or not t.token.startswith(
                 "ExponentPushToken"
             ):
@@ -397,6 +425,11 @@ def _send_exec_pending_pushes(db: Session):
         return
     start_h = s.exec_window_start_hour or 6
     end_h = s.exec_window_end_hour or 22
+    interval_hours = (
+        s.notif_every_hours
+        if s.notif_every_hours
+        else DEFAULT_RESEND_INTERVAL_HOURS
+    )
 
     def ist_to_utc(h: int) -> int:
         return int((h - 5.5) % 24)
@@ -404,21 +437,24 @@ def _send_exec_pending_pushes(db: Session):
     utc_start = ist_to_utc(start_h)
     utc_end = ist_to_utc(end_h)
     if utc_start < utc_end:
-        in_window = utc_start <= now.hour < utc_end
+        in_window = utc_start <= now.hour <= utc_end
     else:
-        in_window = now.hour >= utc_start or now.hour < utc_end
+        in_window = now.hour >= utc_start or now.hour <= utc_end
     if not in_window:
         return
     # Pending bills per executive based on assignments (bills.status = pending)
+    from sqlalchemy import text as _text
     rows = db.execute(
-        """
-        SELECT ea.executive_id, COUNT(b.id) AS bills, COUNT(DISTINCT b.company_code) AS companies
-        FROM bills b
-        JOIN exec_assignments ea ON ea.company_code = b.company_code
-        JOIN users u ON u.id = ea.executive_id AND u.is_active = TRUE
-        WHERE b.status = 'pending'
-        GROUP BY ea.executive_id
-        """
+        _text(
+            """
+            SELECT ea.executive_id, COUNT(b.id) AS bills, COUNT(DISTINCT b.company_code) AS companies
+            FROM bills b
+            JOIN exec_assignments ea ON ea.company_code = b.company_code
+            JOIN users u ON u.id = ea.executive_id AND u.is_active = TRUE
+            WHERE b.status = 'pending'
+            GROUP BY ea.executive_id
+            """
+        )
     ).fetchall()
     if not rows:
         return
@@ -428,6 +464,20 @@ def _send_exec_pending_pushes(db: Session):
     for t in tokens:
         if t.token.startswith("ExponentPushToken"):
             tok_map.setdefault(t.user_id, []).append(t.token)
+    # Build per-user recent map to avoid duplicates within interval
+    cutoff = now - timedelta(hours=interval_hours)
+    exec_ids = [r.executive_id for r in rows]
+    recent_rows = (
+        db.query(UserNotification.user_id)
+        .filter(
+            UserNotification.user_id.in_(exec_ids),
+            UserNotification.created_at >= cutoff,
+            UserNotification.title == "Pending Bills",
+        )
+        .all()
+    )
+    recently_sent = {uid for (uid,) in recent_rows}
+
     for r in rows:
         bills = r.bills
         if bills <= 0:
@@ -435,9 +485,12 @@ def _send_exec_pending_pushes(db: Session):
         companies = r.companies
         bill_noun = "bill" if bills == 1 else "bills"
         comp_noun = "company" if companies == 1 else "companies"
-        msg = (
-            f"{bills} pending {bill_noun} across {companies} {comp_noun}\nTap to view."
-        )
+        msg = f"{bills} pending {bill_noun} across {companies} {comp_noun}\nTap to view."
+
+        # Skip if we've sent recently to this exec
+        if r.executive_id in recently_sent:
+            continue
+
         # Record once per exec user
         _record_user_notification(
             db,
@@ -474,6 +527,11 @@ def _send_executive_overdue_push(db: Session):
     # Window check (IST -> UTC)
     start_h = s.exec_window_start_hour or 6
     end_h = s.exec_window_end_hour or 22
+    interval_hours = (
+        s.notif_every_hours
+        if s.notif_every_hours
+        else DEFAULT_RESEND_INTERVAL_HOURS
+    )
 
     def ist_to_utc(h: int) -> int:
         return int((h - 5.5) % 24)
@@ -482,9 +540,9 @@ def _send_executive_overdue_push(db: Session):
     utc_start = ist_to_utc(start_h)
     utc_end = ist_to_utc(end_h)
     if utc_start < utc_end:
-        in_window = utc_start <= now.hour < utc_end
+        in_window = utc_start <= now.hour <= utc_end
     else:
-        in_window = now.hour >= utc_start or now.hour < utc_end
+        in_window = now.hour >= utc_start or now.hour <= utc_end
     if not in_window:
         return
 
@@ -542,6 +600,19 @@ def _send_executive_overdue_push(db: Session):
         if t.token.startswith("ExponentPushToken"):
             tok_map.setdefault(t.user_id, []).append(t.token)
 
+    # Build recent map to avoid duplicates within interval
+    cutoff = now - timedelta(hours=interval_hours)
+    recent_rows = (
+        db.query(UserNotification.user_id)
+        .filter(
+            UserNotification.user_id.in_(exec_ids),
+            UserNotification.created_at >= cutoff,
+            UserNotification.title == "Overdue Companies",
+        )
+        .all()
+    )
+    recently_sent = {uid for (uid,) in recent_rows}
+
     # Send pushes
     for exec_id, companies in exec_overdue_companies.items():
         count = len(companies)
@@ -550,6 +621,11 @@ def _send_executive_overdue_push(db: Session):
         title = "Overdue Companies"
         comp_noun2 = "company" if count == 1 else "companies"
         body = f"{count} {comp_noun2} overdue. Collect soon."
+
+        # Skip if recently sent to this user
+        if exec_id in recently_sent:
+            continue
+        
         # Record once per exec user
         _record_user_notification(
             db, exec_id, title, body, {"stage": "exec_overdue", "screen": "Overdue"}

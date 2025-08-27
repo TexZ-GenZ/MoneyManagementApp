@@ -6,7 +6,7 @@ import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { StorageService } from '../../src/services/storageService';
-import { API_BASE_URL } from '../../src/utils/constants';
+import { getApiUrl } from '../../src/utils/config';
 import { emitBadgeChange } from '../../src/events/notificationsEvents';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDateTime } from '../../src/ui/format';
@@ -30,11 +30,10 @@ export default function Notifications() {
         }
         try {
             const token = await StorageService.getToken();
-            const base = API_BASE_URL;
             const useSkip = opts.append ? skipRef.current : 0;
             const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` };
             // Delivered-only endpoint
-            const resp = await fetch(`${base}/notifications/delivered?since_hours=24&limit=${pageSize}&skip=${useSkip}&_t=${Date.now()}`, { headers });
+            const resp = await fetch(`${getApiUrl('/notifications/delivered')}?since_hours=24&limit=${pageSize}&skip=${useSkip}&_t=${Date.now()}`, { headers });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok || !Array.isArray(data?.items)) {
                 throw new Error((data && data.detail) || 'Failed to load');
@@ -77,8 +76,7 @@ export default function Notifications() {
     const ackDelivered = async (id) => {
         try {
             const token = await StorageService.getToken();
-            const base = API_BASE_URL;
-            const r = await fetch(`${base}/notifications/delivered/${id}/ack`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` } });
+            const r = await fetch(`${getApiUrl('/notifications/delivered')}/${id}/ack`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` } });
             if (r.ok) {
                 setItems(prev => prev.map(it => it.id === id ? { ...it, acknowledged: true } : it));
                 try { emitBadgeChange(); } catch (_) { }

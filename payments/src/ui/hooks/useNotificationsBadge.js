@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { StorageService } from '../../services/storageService';
-import { API_BASE_URL } from '../../utils/constants';
+import { getApiUrl } from '../../utils/config';
 
 export function useNotificationsBadge() {
     const [unread, setUnread] = useState(0);
@@ -8,9 +8,7 @@ export function useNotificationsBadge() {
     const refreshUnread = useCallback(async () => {
         try {
             const token = await StorageService.getToken();
-            const base = API_BASE_URL;
-            // Use lightweight count endpoint
-            const r = await fetch(`${base}/notifications/unread-count?since_hours=24&_t=${Date.now()}`, {
+            const r = await fetch(`${getApiUrl('/notifications/unread-count')}?since_hours=24&_t=${Date.now()}`, {
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` },
             });
             if (!r.ok) { setUnread(0); return; }
