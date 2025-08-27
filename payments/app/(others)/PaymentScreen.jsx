@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,8 @@ const generateUUID = () => {
 };
 
 export default function CollectPaymentScreen() {
+  const scrollViewRef = useRef(null);
+  const inputRef = useRef(null);
   const { company_code, bill_id, bill_number, bill_amount } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -369,12 +371,18 @@ export default function CollectPaymentScreen() {
           </View>
         </View>
       )}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={insets.top + 95} // tweak so last field clears keyboard
+      >
         <ScrollView
+          ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
           scrollEnabled={!locationModalOpen}
           pointerEvents={locationModalOpen ? 'none' : 'auto'}
+          keyboardShouldPersistTaps="handled"
         >
           {(company_code || bill_number) && (
             <Card style={styles.cardSection}>
@@ -455,7 +463,15 @@ export default function CollectPaymentScreen() {
               value={comments}
               onChangeText={setComments}
               editable={!submitting}
+              onFocus={() => {
+                if (scrollViewRef.current) {
+                  scrollViewRef.current.measure?.((x, y, width, height) => {
+                    scrollViewRef.current.scrollTo({ y: height * 0.7, animated: true });
+                  });
+                }
+              }}
             />
+
           </Card>
 
           <Card style={styles.cardSection}>

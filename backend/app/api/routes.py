@@ -660,7 +660,7 @@ def admin_update_bill_promise(
 @router.post(
     "/payments",
     response_model=PaymentOut,
-    dependencies=[Depends(require_roles("executive", "admin"))],
+    dependencies=[Depends(require_roles("executive"))],
 )
 def submit_payment(
     body: PaymentSubmit,
@@ -668,6 +668,8 @@ def submit_payment(
     db: Session = Depends(get_db),
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
+    if user.role == Role.admin:
+        raise HTTPException(status_code=403, detail="Admin cannot collect payment")
     # Treat blank header values as absent so they don't collide on unique index as "".
     if idempotency_key is not None and not idempotency_key.strip():
         idempotency_key = None

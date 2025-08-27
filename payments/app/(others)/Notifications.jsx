@@ -6,7 +6,7 @@ import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { StorageService } from '../../src/services/storageService';
-import { API_BASE_URL } from '../../src/utils/constants';
+import { getApiUrl } from '../../src/utils/config';
 import { emitBadgeChange } from '../../src/events/notificationsEvents';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDateTime } from '../../src/ui/format';
@@ -30,11 +30,10 @@ export default function Notifications() {
         }
         try {
             const token = await StorageService.getToken();
-            const base = API_BASE_URL;
             const useSkip = opts.append ? skipRef.current : 0;
             const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` };
             // Delivered-only endpoint
-            const resp = await fetch(`${base}/notifications/delivered?since_hours=24&limit=${pageSize}&skip=${useSkip}&_t=${Date.now()}`, { headers });
+            const resp = await fetch(`${getApiUrl('/notifications/delivered')}?since_hours=24&limit=${pageSize}&skip=${useSkip}&_t=${Date.now()}`, { headers });
             const data = await resp.json().catch(() => ({}));
             if (!resp.ok || !Array.isArray(data?.items)) {
                 throw new Error((data && data.detail) || 'Failed to load');
@@ -77,8 +76,7 @@ export default function Notifications() {
     const ackDelivered = async (id) => {
         try {
             const token = await StorageService.getToken();
-            const base = API_BASE_URL;
-            const r = await fetch(`${base}/notifications/delivered/${id}/ack`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` } });
+            const r = await fetch(`${getApiUrl('/notifications/delivered')}/${id}/ack`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` } });
             if (r.ok) {
                 setItems(prev => prev.map(it => it.id === id ? { ...it, acknowledged: true } : it));
                 try { emitBadgeChange(); } catch (_) { }
@@ -94,6 +92,7 @@ export default function Notifications() {
         // If delivered item shape (title/body)
         if (item.title && item.body) {
             const createdLabel = formatDateTime(item.created_at || item.createdAt);
+
             const isAck = !!item.acknowledged;
             return (
                 <Card style={styles.itemCard}>
@@ -110,7 +109,7 @@ export default function Notifications() {
                     </View>
                     <Text style={[styles.itemLine]} numberOfLines={4}>{String(item.body)}</Text>
                     <View style={styles.footerRow}>
-                        <Text style={styles.createdAt}>{createdLabel}</Text>
+                        <Text style={styles.createdAt} numberOfLines={1} ellipsizeMode="tail">{createdLabel}</Text>
                         {!isAck && (
                             <TouchableOpacity style={styles.ackBtn} onPress={() => ackDelivered(item.id)}>
                                 <Text style={styles.ackText}>Mark read</Text>
@@ -166,7 +165,7 @@ const styles = StyleSheet.create({
     itemStatusAccent: { color: tokens.colors.accent },
     itemStatusNeutral: { color: tokens.colors.textDim },
     footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-    createdAt: { color: tokens.colors.textDim, fontSize: 11 },
+    createdAt: { color: tokens.colors.textDim, fontSize: 11, flex: 1 },
     unreadPill: { backgroundColor: tokens.colors.accent, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#000' },
     unreadText: { color: '#000', fontSize: 10, fontWeight: '800' },
     ackBtn: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10 },

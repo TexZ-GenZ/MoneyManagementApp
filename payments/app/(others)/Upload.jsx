@@ -6,8 +6,10 @@ import { StorageService } from '../../src/services/storageService';
 import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
+import { getApiUrl } from '../../src/utils/config';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
+// NOTE: This screen previously allowed uploading files individually.
+// It now requires uploading BOTH Master and Transactions together using a single button.
 
 export default function UploadScreen() {
   const [masterFile, setMasterFile] = useState(null);
@@ -46,41 +48,112 @@ export default function UploadScreen() {
     else { setTransactionsFile(null); setTransactionsProgress(0); setTransactionsSuccess(false); }
   };
 
-  const uploadFile = async (file, endpoint, type) => {
-    if (!file) return;
+  const doUpload = async (file, endpoint, progressSetter) => {
     const formData = new FormData();
     formData.append('file', { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' });
-    if (type === 'master') { setMasterUploading(true); setMasterProgress(0); }
-    else { setTransactionsUploading(true); setTransactionsProgress(0); }
+    const tok = await StorageService.getToken();
+    if (!tok?.access_token) { throw new Error('Login required'); }
+
+    progressSetter(0);
+
+    // Use XMLHttpRequest to get real upload progress in React Native
+    const url = getApiUrl(endpoint);
+    const ok = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      // Set only auth header; let RN set multipart boundary automatically
+      xhr.setRequestHeader('Authorization', `Bearer ${tok.access_token}`);
+
+      // Track progress
+      if (xhr.upload && typeof xhr.upload.addEventListener === 'function') {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.max(0, Math.min(100, Math.round((e.loaded / e.total) * 98)));
+            progressSetter(pct);
+          }
+        });
+      } else if (xhr.upload) {
+        // Fallback handler in environments without addEventListener
+        xhr.upload.onprogress = (e) => {
+          if (e && e.total) {
+            const pct = Math.max(0, Math.min(100, Math.round((e.loaded / e.total) * 98)));
+            progressSetter(pct);
+          }
+        };
+      }
+
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 4) {
+          const status = xhr.status || 0;
+          if (status >= 200 && status < 300) {
+            progressSetter(100);
+            resolve(true);
+          } else {
+            // Try to parse error message
+            let msg = 'Upload failed';
+            try {
+              const json = JSON.parse(xhr.responseText || '{}');
+              if (json && (json.message || json.detail)) msg = json.message || json.detail;
+            } catch {}
+            reject(new Error(msg));
+          }
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.onabort = () => reject(new Error('Upload aborted'));
+
+      try {
+        xhr.send(formData);
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    return ok === true;
+  };
+
+  const uploadBoth = async () => {
+    if (!masterFile || !transactionsFile) {
+      Alert.alert('Both files required', 'Please select both Master and Transactions DBF files before uploading.');
+      return;
+    }
+    // Prevent double-submission
+    if (masterUploading || transactionsUploading) return;
+
+    // Reset state
+    setMasterSuccess(false); setTransactionsSuccess(false);
+    setMasterProgress(0); setTransactionsProgress(0);
+    setMasterUploading(true); setTransactionsUploading(true);
+
     try {
-      const tok = await StorageService.getToken();
-      if (!tok?.access_token) { Alert.alert('Auth', 'Login required'); return; }
-      // Simulated progress
-      const interval = setInterval(() => {
-        if (type === 'master') setMasterProgress(p => Math.min(p + 7, 85));
-        else setTransactionsProgress(p => Math.min(p + 7, 85));
-      }, 250);
-      timers.current.push(interval);
-      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${tok.access_token}`, 'Content-Type': 'multipart/form-data' },
-        body: formData,
-      });
-      clearInterval(interval);
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Upload failed'); }
-      if (type === 'master') { setMasterProgress(100); setMasterSuccess(true); }
-      else { setTransactionsProgress(100); setTransactionsSuccess(true); }
-      Alert.alert('Success', `${type === 'master' ? 'Master' : 'Transactions'} file uploaded.`);
+      // Upload sequentially to keep predictable UI; both must succeed.
+      const okMaster = await doUpload(masterFile, '/uploads/master', setMasterProgress);
+      const okTxn = await doUpload(transactionsFile, '/uploads/transactions', setTransactionsProgress);
+
+      if (okMaster && okTxn) {
+        setMasterSuccess(true);
+        setTransactionsSuccess(true);
+        Alert.alert('Success', 'Both Master and Transactions files uploaded successfully.');
+      } else {
+        throw new Error('Both files must be uploaded successfully.');
+      }
     } catch (e) {
       console.error(e);
-      Alert.alert('Upload Failed', e.message || 'Failed to upload.');
-      if (type === 'master') setMasterProgress(0); else setTransactionsProgress(0);
+      // Show a single error covering the combined requirement
+      Alert.alert('Upload Failed', e?.message || 'Failed to upload both files. Please try again.');
+      // Reset success flags and progress to reflect failure of the combined operation
+      setMasterSuccess(false);
+      setTransactionsSuccess(false);
+      setMasterProgress(0);
+      setTransactionsProgress(0);
     } finally {
-      if (type === 'master') setMasterUploading(false); else setTransactionsUploading(false);
+      setMasterUploading(false);
+      setTransactionsUploading(false);
     }
   };
 
-  const UploadSection = ({ title, subtitle, file, uploading, progress, success, type, endpoint }) => (
+  const UploadSection = ({ title, subtitle, file, uploading, progress, success, type }) => (
     <Card style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.iconWrap}><Ionicons name="document-text-outline" size={18} color={tokens.colors.accent} /></View>
@@ -117,36 +190,55 @@ export default function UploadScreen() {
               <Text style={styles.progressText}>{success ? 'Done' : `Uploading ${progress}%`}</Text>
             </View>
           )}
-          {!uploading && !success && (
-            <View style={styles.actionsRow}>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => uploadFile(file, endpoint, type)}><Text style={styles.primaryBtnText}>Upload</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => removeFile(type)}><Text style={styles.secondaryBtnText}>Cancel</Text></TouchableOpacity>
-            </View>
-          )}
-          {success && <Text style={styles.successLine}>Uploaded successfully</Text>}
+          {/* Individual upload/cancel buttons removed; upload is combined for both files */}
         </View>
       )}
     </Card>
   );
 
+  const bothSelected = !!masterFile && !!transactionsFile;
+  const anyUploading = masterUploading || transactionsUploading;
+
   return (
     <Screen title="Uploads" subtitle="Master & Transactions DBF" scroll>
-      <UploadSection title="Master DBF" subtitle="Company + account data" file={masterFile} uploading={masterUploading} progress={masterProgress} success={masterSuccess} type="master" endpoint="/uploads/master" />
-      <UploadSection title="Transactions DBF" subtitle="Billing & payment records" file={transactionsFile} uploading={transactionsUploading} progress={transactionsProgress} success={transactionsSuccess} type="transactions" endpoint="/uploads/transactions" />
-      {(masterSuccess || transactionsSuccess) && (
+      <UploadSection title="Master DBF" subtitle="Company + account data" file={masterFile} uploading={masterUploading} progress={masterProgress} success={masterSuccess} type="master" />
+      <UploadSection title="Transactions DBF" subtitle="Billing & payment records" file={transactionsFile} uploading={transactionsUploading} progress={transactionsProgress} success={transactionsSuccess} type="transactions" />
+
+      <Card style={styles.bannerCard}>
+        <View style={styles.bannerRow}>
+          <Ionicons name="alert-circle-outline" size={20} color={tokens.colors.accent} />
+          <Text style={styles.bannerText}>You must upload both Master and Transactions files together.</Text>
+        </View>
+      </Card>
+
+      <Card style={styles.actionCard}>
+        <TouchableOpacity
+          style={[styles.primaryBtn, (!bothSelected || anyUploading) && styles.primaryBtnDisabled]}
+          onPress={uploadBoth}
+          disabled={!bothSelected || anyUploading}
+        >
+          <Text style={styles.primaryBtnText}>Upload Both Files</Text>
+        </TouchableOpacity>
+        {!bothSelected && (
+          <Text style={styles.helperText}>Select both files to enable upload.</Text>
+        )}
+      </Card>
+
+      {(masterSuccess && transactionsSuccess) && (
         <Card style={styles.bannerCard}>
           <View style={styles.bannerRow}>
             <Ionicons name="checkmark-circle" size={20} color={tokens.colors.success} />
-            <Text style={styles.bannerText}>{masterSuccess && transactionsSuccess ? 'Both files uploaded successfully' : `${masterSuccess ? 'Master' : 'Transactions'} file uploaded`}</Text>
+            <Text style={styles.bannerText}>Both files uploaded successfully</Text>
           </View>
         </Card>
       )}
+
       <Card style={styles.infoCard}>
         <View style={styles.infoHeader}><Ionicons name="information-circle-outline" size={18} color={tokens.colors.accent} /><Text style={styles.infoTitle}>Guidelines</Text></View>
         <Text style={styles.tip}>• Only .dbf files (max 15MB)</Text>
         <Text style={styles.tip}>• Master: company & account metadata</Text>
         <Text style={styles.tip}>• Transactions: billing & payments</Text>
-        <Text style={styles.tip}>• Upload again to overwrite latest data</Text>
+        <Text style={styles.tip}>• You must upload Master and Transactions together</Text>
       </Card>
     </Screen>
   );
@@ -171,17 +263,17 @@ const styles = StyleSheet.create({
   progressBarOuter: { height: 6, backgroundColor: tokens.colors.border, borderRadius: 4, overflow: 'hidden', marginBottom: 4 },
   progressBarFill: { height: '100%', backgroundColor: tokens.colors.accent },
   progressText: { color: tokens.colors.textDim, fontSize: 11 },
-  actionsRow: { flexDirection: 'row', marginTop: 6 },
-  primaryBtn: { flex: 1, backgroundColor: tokens.colors.accent, paddingVertical: 12, borderRadius: 12, alignItems: 'center', marginRight: 8 },
-  primaryBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
-  secondaryBtn: { paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border, alignItems: 'center', justifyContent: 'center' },
-  secondaryBtnText: { color: tokens.colors.textDim, fontWeight: '600', fontSize: 13 },
-  successLine: { marginTop: 8, color: tokens.colors.success, fontSize: 12, fontWeight: '600' },
-  bannerCard: { marginBottom: 16, padding: 14, borderLeftWidth: 4, borderLeftColor: tokens.colors.success },
+  // Removed per-section actionsRow and buttons as uploads are combined now
+  primaryBtn: { flex: 1, backgroundColor: tokens.colors.accent, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  primaryBtnDisabled: { opacity: 0.5 },
+  primaryBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
+  bannerCard: { marginBottom: 16, padding: 14, borderLeftWidth: 4, borderLeftColor: tokens.colors.accent },
   bannerRow: { flexDirection: 'row', alignItems: 'center' },
-  bannerText: { color: tokens.colors.success, fontWeight: '700', marginLeft: 8, fontSize: 13 },
+  bannerText: { color: tokens.colors.text, fontWeight: '700', marginLeft: 8, fontSize: 13 },
   infoCard: { padding: 16 },
   infoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   infoTitle: { color: tokens.colors.text, fontSize: 13, fontWeight: '700', marginLeft: 8 },
   tip: { color: tokens.colors.textDim, fontSize: 12, marginBottom: 4 },
+  actionCard: { padding: 16, marginBottom: 16 },
+  helperText: { color: tokens.colors.textDim, fontSize: 12, marginTop: 8, textAlign: 'center' },
 });
