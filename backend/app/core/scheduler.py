@@ -8,6 +8,7 @@ from app.db.session import SessionLocal
 from app.services.notifications import run_notification_scan
 from datetime import datetime
 from app.models.models import Setting
+from zoneinfo import ZoneInfo
 
 scheduler: BackgroundScheduler | None = None
 
@@ -76,28 +77,6 @@ def _configure_jobs():
     finally:
         db.close()
 
-    # For testing: allow minute-level cadence when NOTIF_TEST_MINUTES is set
-    test_minutes = os.environ.get("NOTIF_TEST_MINUTES")
-    if test_minutes:
-        try:
-            m = int(test_minutes)
-            if m >= 1:
-                # Override trigger to every m minutes regardless of window
-                trigger = IntervalTrigger(minutes=m)
-                scheduler.add_job(
-                    _scan_job,
-                    trigger,
-                    id="notif_interval",
-                    max_instances=1,
-                    coalesce=True,
-                    replace_existing=True,
-                    misfire_grace_time=300,
-                )
-                log.info("Notification scheduler TEST mode minutes=%s", m)
-                return
-        except Exception:
-            pass
-
     # Compute discrete run hours aligned to [start, end] inclusive, every X hours (IST -> UTC)
     def ist_to_utc(h: int) -> int:
         # Keep existing integer-hour mapping used elsewhere to avoid half-hour complications
@@ -118,14 +97,18 @@ def _configure_jobs():
 
     utc_hours = compute_utc_hours(start_h, end_h, interval_hours)
 
-    # Schedule at minute 0 for each computed UTC hour
-    if not utc_hours:
-        # Fallback: if somehow no hours were computed, run every interval_hours as a safe default
-        trigger = IntervalTrigger(hours=interval_hours)
-    else:
-        # CronTrigger expects expressions; provide a comma-separated list of hours
-        hour_expr = ",".join(str(h) for h in utc_hours)
-        trigger = CronTrigger(hour=hour_expr, minute=0)
+    # Build discrete IST hours list: start, start+X, ..., up to end inclusive
+    def compute_ist_hours(start_h: int, end_h: int, step: int) -> list[int]:
+        if step <= 0:
+            step = 1
+        if start_h <= end_h:
+            return list(range(start_h, end_h + 1, step))
+        # wrap across midnight
+        return [h % 24 for h in range(start_h, end_h + 24 + 1, step)]
+
+    ist_hours = compute_ist_hours(start_h, end_h, interval_hours)
+    hour_expr = ",".join(str(h) for h in ist_hours)
+    trigger = CronTrigger(hour=hour_expr, minute=0, timezone=ZoneInfo("Asia/Kolkata"))
     scheduler.add_job(
         _scan_job,
         trigger,
@@ -136,9 +119,7 @@ def _configure_jobs():
         misfire_grace_time=300,
     )
     log.info(
-        "Notification scheduler configured at hours=%s (UTC) step=%s window(IST)=%s-%s",
-        utc_hours,
-        interval_hours,
+        "Notification scheduler configured: IST every hour at :00 within window=%s-%s",
         start_h,
         end_h,
     )
