@@ -33,6 +33,9 @@ export default function MultiPayScreen() {
   const [promiseDate, setPromiseDate] = useState(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [location, setLocation] = useState(null);
+  const [locationError, setLocationError] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationErrorMsg, setLocationErrorMsg] = useState("");
   const [comment, setComment] = useState('');
   const [method, setMethod] = useState('cash');
   const [submitting, setSubmitting] = useState(false);
@@ -62,17 +65,34 @@ export default function MultiPayScreen() {
     })();
   }, [code, sortBy]);
 
-  // Get location once
-  useEffect(() => {
-    (async () => {
+  // Location capture & enforcement (mandatory like PaymentScreen)
+  const fetchLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationError(true);
+        setLocationErrorMsg('Location permission denied. Please enable location to proceed.');
+        return;
+      }
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, timeout: 10000 });
         setLocation(loc.coords);
-      } catch { }
-    })();
-  }, []);
+        setLocationError(false);
+        setLocationErrorMsg('');
+      } catch (err) {
+        setLocationError(true);
+        setLocationErrorMsg('Unable to get your current location. Please ensure GPS is enabled and try again.');
+      }
+    } catch (err) {
+      setLocationError(true);
+      setLocationErrorMsg('Location permission denied. Please enable location to proceed.');
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchLocation(); }, []);
 
   // Recompute remaining from selections
   const recomputeRemaining = () => {
@@ -129,7 +149,7 @@ export default function MultiPayScreen() {
     if (JSON.stringify(nextSel) !== JSON.stringify(selected)) setSelected(nextSel);
   }, [bills, initialTotal, selected]);
 
-  const canSubmit = remaining === 0 && Object.keys(selected).length > 0 && (!needsPromise() || !!promiseDate);
+  const canSubmit = remaining === 0 && Object.keys(selected).length > 0 && (!needsPromise() || !!promiseDate) && !!location;
 
   function needsPromise() {
     // Needs promise if any allocation is partial on that bill
@@ -143,6 +163,7 @@ export default function MultiPayScreen() {
   const submit = async () => {
     if (remaining !== 0) { Alert.alert('Use Full Amount', 'Remaining must be 0 before submitting'); return; }
     if (needsPromise() && !promiseDate) { Alert.alert('Promise Required', 'Please choose next promise date for partial selection'); return; }
+    if (!location) { Alert.alert('Location Needed', 'Enable and capture location before submitting.'); return; }
     setSubmitting(true);
     try {
       const tok = await StorageService.getToken();
@@ -294,6 +315,23 @@ export default function MultiPayScreen() {
               contentContainerStyle={{ paddingBottom: 240 + bottomInset + EXTRA_FLOATING_PADDING }}
               style={{ flex: 1 }}
             />
+            {/* Block UI and scrolling when location is missing and an error was encountered */}
+            {(!location && locationError) && (
+              <View style={styles.locationBlockModalTransparent} pointerEvents="auto">
+                <View style={styles.locationBlockBox}>
+                  <Text style={styles.locationBlockTitle}>Location Required</Text>
+                  <Text style={styles.locationBlockMsg}>{locationErrorMsg || 'Location is required to submit payment. Please enable location services and grant permission.'}</Text>
+                  <TouchableOpacity style={styles.locationBlockBtn} onPress={fetchLocation} disabled={locationLoading}>
+                    {locationLoading ? (
+                      <ActivityIndicator size="small" color="#000" style={{ marginVertical: 2 }} />
+                    ) : (
+                      <Text style={styles.locationBlockBtnText}>Enable Location</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             <View
               pointerEvents="box-none"
               style={[
@@ -329,6 +367,38 @@ export default function MultiPayScreen() {
 }
 
 const styles = StyleSheet.create({
+  locationBlockModalTransparent: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'transparent', zIndex: 99, justifyContent: 'center', alignItems: 'center' },
+  locationBlockBox: {
+    backgroundColor: tokens.colors.card,
+    borderRadius: 22,
+    paddingVertical: 32,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    width: '80%',
+    maxWidth: 340,
+    borderWidth: 2,
+    borderColor: tokens.colors.accent,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  locationBlockTitle: { fontSize: 20, fontWeight: '800', color: tokens.colors.accent, marginBottom: 14, letterSpacing: 0.5 },
+  locationBlockMsg: { fontSize: 15, color: tokens.colors.text, textAlign: 'center', marginBottom: 22, lineHeight: 22 },
+  locationBlockBtn: {
+    backgroundColor: tokens.colors.accent,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 38,
+    marginTop: 10,
+    shadowColor: tokens.colors.accent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  locationBlockBtnText: { color: '#000', fontWeight: '800', fontSize: 16, letterSpacing: 0.2 },
   bill: { marginBottom: 10, padding: 12 },
   billSelected: { borderColor: tokens.colors.accent, borderWidth: 1 },
   billNumber: { fontWeight: '800', color: tokens.colors.text },
