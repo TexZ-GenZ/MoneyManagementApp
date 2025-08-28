@@ -10,7 +10,7 @@ export interface TabBarIconProps {
 }
 
 export function TabBarIcon({ name, color, style, onPress }: TabBarIconProps) {
-  const inner = <Ionicons name={name} size={26} color={color} />;
+  const inner = <Ionicons name={name} size={28} color={color} />;
   if (onPress) {
     return (
       <TouchableOpacity onPress={onPress} style={[styles.wrap, style]} activeOpacity={0.7}>
