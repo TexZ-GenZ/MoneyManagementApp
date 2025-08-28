@@ -9,6 +9,7 @@ import { StorageService } from '../../src/services/storageService';
 import { API_BASE_URL } from '../../src/utils/constants';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import * as Location from 'expo-location';
+import * as Linking from 'expo-linking';
 import { emitPaymentUpdate } from '../../src/events/paymentEvents';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -67,12 +68,17 @@ export default function MultiPayScreen() {
 
   // Location capture & enforcement (mandatory like PaymentScreen)
   const fetchLocation = async () => {
+    setLocation(null);
     setLocationLoading(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationError(true);
-        setLocationErrorMsg('Location permission denied. Please enable location to proceed.');
+        if (canAskAgain === false) {
+          setLocationErrorMsg('Location permission permanently denied. Open Settings to allow location.');
+        } else {
+          setLocationErrorMsg('Location permission denied. Please enable location to proceed.');
+        }
         return;
       }
       try {
@@ -317,11 +323,24 @@ export default function MultiPayScreen() {
             />
             {/* Block UI and scrolling when location is missing and an error was encountered */}
             {(!location && locationError) && (
+              // Prevent click-through when modal is open
+              
               <View style={styles.locationBlockModalTransparent} pointerEvents="auto">
                 <View style={styles.locationBlockBox}>
                   <Text style={styles.locationBlockTitle}>Location Required</Text>
                   <Text style={styles.locationBlockMsg}>{locationErrorMsg || 'Location is required to submit payment. Please enable location services and grant permission.'}</Text>
-                  <TouchableOpacity style={styles.locationBlockBtn} onPress={fetchLocation} disabled={locationLoading}>
+                  <TouchableOpacity style={styles.locationBlockBtn} onPress={async () => {
+                    try {
+                      const { canAskAgain } = await Location.getForegroundPermissionsAsync();
+                      if (canAskAgain === false) {
+                        Linking.openSettings?.();
+                      } else {
+                        fetchLocation();
+                      }
+                    } catch (_) {
+                      fetchLocation();
+                    }
+                  }} disabled={locationLoading}>
                     {locationLoading ? (
                       <ActivityIndicator size="small" color="#000" style={{ marginVertical: 2 }} />
                     ) : (

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Location from "expo-location";
+import * as Linking from 'expo-linking';
 import DateTimePickerModal from "react-native-modal-datetime-picker"; // still used for next promise only
 import { Picker } from '@react-native-picker/picker';
 import { StorageService } from "../../src/services/storageService";
@@ -143,12 +144,18 @@ export default function CollectPaymentScreen() {
 
   const [locationErrorMsg, setLocationErrorMsg] = useState("");
   const fetchLocation = async () => {
+    setLocation(null); // reset so modal logic can re-open on subsequent attempts
     setLocationLoading(true);
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      let { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         setLocationError(true);
-        setLocationErrorMsg("Location permission denied. Please enable location to proceed.");
+        // If the system won't show the dialog again, guide user to system settings
+        if (canAskAgain === false) {
+          setLocationErrorMsg("Location permission permanently denied. Open Settings to allow location.");
+        } else {
+          setLocationErrorMsg("Location permission denied. Please enable location to proceed.");
+        }
         return;
       }
       try {
@@ -361,7 +368,19 @@ export default function CollectPaymentScreen() {
           <View style={styles.locationBlockBox}>
             <Text style={styles.locationBlockTitle}>Location Required</Text>
             <Text style={styles.locationBlockMsg}>{locationErrorMsg || "Location is required to collect payment. Please enable location services and grant permission."}</Text>
-            <TouchableOpacity style={styles.locationBlockBtn} onPress={fetchLocation} disabled={locationLoading}>
+            <TouchableOpacity style={styles.locationBlockBtn} onPress={async () => {
+                try {
+                  const { canAskAgain } = await Location.getForegroundPermissionsAsync();
+                  if (canAskAgain === false) {
+                    // Deep link to system settings when permission is permanently denied
+                    Linking.openSettings?.();
+                  } else {
+                    fetchLocation();
+                  }
+                } catch (_) {
+                  fetchLocation();
+                }
+              }} disabled={locationLoading}>
               {locationLoading ? (
                 <ActivityIndicator size="small" color="#000" style={{ marginVertical: 2 }} />
               ) : (
