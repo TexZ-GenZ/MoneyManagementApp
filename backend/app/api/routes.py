@@ -193,6 +193,7 @@ def update_settings(
 @router.get("/companies", response_model=CompanyList)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def list_companies(
+    request: Request,
     db: Session = Depends(get_db),
     area: Optional[str] = None,
     q: Optional[str] = None,
@@ -370,7 +371,7 @@ def list_companies(
 
 @router.get("/companies/{code}", response_model=CompanyBase)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def get_company(code: str, db: Session = Depends(get_db)):
+def get_company(request: Request, code: str, db: Session = Depends(get_db)):
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -379,7 +380,7 @@ def get_company(code: str, db: Session = Depends(get_db)):
 
 @router.get("/companies/{code}/dashboard", response_model=CompanyDashboard)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def company_dashboard(code: str, db: Session = Depends(get_db)):
+def company_dashboard(request: Request, code: str, db: Session = Depends(get_db)):
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -451,6 +452,7 @@ def company_dashboard(code: str, db: Session = Depends(get_db)):
 )
 @user_limiter.limit(settings.RATE_LIMIT_PROMISE_UPDATE)
 def set_promise_date(
+    request: Request,
     code: str,
     body: CompanyUpdatePromise,
     db: Session = Depends(get_db),
@@ -491,6 +493,7 @@ def set_promise_date(
 )
 @user_limiter.limit(settings.RATE_LIMIT_CREDIT_UPDATE)
 def set_credit_date(
+    request: Request,
     code: str, body: CompanyUpdateCredit, db: Session = Depends(get_db)
 ):
     c = db.get(Company, code)
@@ -528,6 +531,7 @@ def set_credit_date(
 @router.get("/companies/{code}/bills", response_model=BillList)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def list_company_bills(
+    request: Request,
     code: str,
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None, pattern="^(pending|paid)$"),
@@ -571,7 +575,7 @@ def list_company_bills(
 
 @router.get("/bills/{bill_id}", response_model=BillOut)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def get_bill(bill_id: int, db: Session = Depends(get_db)):
+def get_bill(request: Request, bill_id: int, db: Session = Depends(get_db)):
     b = db.get(Bill, bill_id)
     if not b:
         raise HTTPException(status_code=404, detail="Bill not found")
@@ -595,7 +599,7 @@ def get_bill(bill_id: int, db: Session = Depends(get_db)):
 
 @router.get("/bills/{bill_id}/payments", response_model=BillPaymentHistory)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def bill_payment_history(bill_id: int, db: Session = Depends(get_db)):
+def bill_payment_history(request: Request, bill_id: int, db: Session = Depends(get_db)):
     allocs = (
         db.query(PaymentAllocation, Payment)
         .join(Payment, Payment.id == PaymentAllocation.payment_id)
@@ -634,6 +638,7 @@ def bill_payment_history(bill_id: int, db: Session = Depends(get_db)):
 )
 @user_limiter.limit(settings.RATE_LIMIT_PROMISE_UPDATE)
 def admin_update_bill_promise(
+    request: Request,
     bill_id: int,
     body: BillUpdatePromise,
     db: Session = Depends(get_db),
@@ -783,7 +788,12 @@ def submit_payment(
     dependencies=[Depends(require_roles("accountant", "admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def accountant_pending(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+def accountant_pending(
+    request: Request,
+    db: Session = Depends(get_db), 
+    skip: int = 0, 
+    limit: int = 50
+):
     q = db.query(Payment).filter(Payment.status == PaymentStatus.submitted)
     total = q.count()
     items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
@@ -793,6 +803,7 @@ def accountant_pending(db: Session = Depends(get_db), skip: int = 0, limit: int 
 @router.get("/companies/{code}/payments", response_model=PaymentList)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def list_company_payments(
+    request: Request,
     code: str,
     db: Session = Depends(get_db),
     status: Optional[str] = Query(None),
@@ -823,6 +834,7 @@ def list_company_payments(
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def payments_activity(
+    request: Request,
     search: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
@@ -1027,7 +1039,7 @@ def payments_activity(
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_RECONCILE)
-def admin_reconcile_bill_promises(db: Session = Depends(get_db)):
+def admin_reconcile_bill_promises(request: Request, db: Session = Depends(get_db)):
     try:
         count = reconcile_bill_promises(db)
         return {"updated": count}
@@ -1040,7 +1052,7 @@ def admin_reconcile_bill_promises(db: Session = Depends(get_db)):
 
 @router.get("/payments/{payment_id}", response_model=PaymentDetailOut)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def get_payment_detail(payment_id: int, db: Session = Depends(get_db)):
+def get_payment_detail(request: Request, payment_id: int, db: Session = Depends(get_db)):
     p = db.get(Payment, payment_id)
     if not p:
         raise HTTPException(status_code=404, detail="Payment not found")
@@ -1107,7 +1119,10 @@ def submit_bulk_payment(
 )
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def accountant_approve(
-    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+    request: Request,
+    payment_id: int, 
+    comment: str | None = None, 
+    db: Session = Depends(get_db)
 ):
     p = db.get(Payment, payment_id)
     if not p:
@@ -1275,7 +1290,7 @@ def admin_create_user(
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def admin_update_mobile(user_id: int, mobile: str, db: Session = Depends(get_db)):
+def admin_update_mobile(request: Request, user_id: int, mobile: str, db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1296,7 +1311,10 @@ def admin_update_mobile(user_id: int, mobile: str, db: Session = Depends(get_db)
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
 def admin_update_password(
-    user_id: int, new_password: str, db: Session = Depends(get_db)
+    request: Request,
+    user_id: int, 
+    new_password: str, 
+    db: Session = Depends(get_db)
 ):
     u = db.get(User, user_id)
     if not u:
@@ -1315,7 +1333,7 @@ def admin_update_password(
     dependencies=[Depends(require_roles("admin", "accountant"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def list_executives(db: Session = Depends(get_db)):
+def list_executives(request: Request, db: Session = Depends(get_db)):
     execs = db.query(User).filter(User.role == Role.executive).all()
     # returning list; schema is single, but Pydantic can coerce list of UserOut if we wrap
     return [UserOut.model_validate(e) for e in execs]
@@ -1327,7 +1345,7 @@ def list_executives(db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def assign_company(executive_id: int, company_code: str, db: Session = Depends(get_db)):
+def assign_company(request: Request, executive_id: int, company_code: str, db: Session = Depends(get_db)):
     if not db.get(User, executive_id):
         raise HTTPException(status_code=404, detail="Executive not found")
     if not db.get(Company, company_code):
@@ -1353,7 +1371,10 @@ def assign_company(executive_id: int, company_code: str, db: Session = Depends(g
 )
 @user_limiter.limit(settings.RATE_LIMIT_USER_DELETE)
 def unassign_company(
-    executive_id: int, company_code: str, db: Session = Depends(get_db)
+    request: Request,
+    executive_id: int, 
+    company_code: str, 
+    db: Session = Depends(get_db)
 ):
     row = (
         db.query(ExecAssignment)
@@ -1378,6 +1399,7 @@ def unassign_company(
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def get_executive_companies(
+    request: Request,
     executive_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1448,7 +1470,7 @@ def get_executive_companies(
 
 @router.get("/me/companies", dependencies=[Depends(require_roles("executive"))])
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def my_companies(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def my_companies(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     codes = [
         r.company_code
         for r in db.query(ExecAssignment)
@@ -1515,7 +1537,7 @@ def my_companies(user: User = Depends(get_current_user), db: Session = Depends(g
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
+def list_users(request: Request, role: Optional[str] = None, db: Session = Depends(get_db)):
     q = db.query(User)
     if role:
         try:
@@ -1544,7 +1566,7 @@ def list_users(role: Optional[str] = None, db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def admin_update_username(user_id: int, username: str, db: Session = Depends(get_db)):
+def admin_update_username(request: Request, user_id: int, username: str, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username, User.id != user_id).first():
         raise HTTPException(status_code=400, detail="Username already exists")
     u = db.get(User, user_id)
@@ -1571,6 +1593,7 @@ def admin_update_username(user_id: int, username: str, db: Session = Depends(get
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
 def admin_deactivate_user(
+    request: Request,
     user_id: int,
     current: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1602,7 +1625,7 @@ def admin_deactivate_user(
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def admin_activate_user(user_id: int, db: Session = Depends(get_db)):
+def admin_activate_user(request: Request, user_id: int, db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1625,7 +1648,7 @@ def admin_activate_user(user_id: int, db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_USER_DELETE)
-def admin_hard_delete_user(user_id: int, db: Session = Depends(get_db)):
+def admin_hard_delete_user(request: Request, user_id: int, db: Session = Depends(get_db)):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1704,6 +1727,7 @@ def upload_transactions(
 @router.get("/notifications")
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def list_notifications(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     status: Optional[str] = Query(None),
@@ -1807,6 +1831,7 @@ def list_notifications(
 @router.get("/notifications/unread-count")
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ_HIGH)
 def notifications_unread_count(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     company_code: Optional[str] = Query(None),
@@ -1830,7 +1855,7 @@ def notifications_unread_count(
 
 @router.post("/notifications/{notification_id}/ack")
 @user_limiter.limit(settings.RATE_LIMIT_GENERAL)
-def acknowledge_notification(notification_id: int, db: Session = Depends(get_db)):
+def acknowledge_notification(request: Request, notification_id: int, db: Session = Depends(get_db)):
     n = db.get(Notification, notification_id)
     if not n:
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -1846,6 +1871,7 @@ def acknowledge_notification(notification_id: int, db: Session = Depends(get_db)
 @router.get("/notifications/delivered")
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def list_delivered_notifications(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     skip: int = Query(0, ge=0),
@@ -1869,6 +1895,7 @@ def list_delivered_notifications(
 @router.post("/notifications/delivered/{delivered_id}/ack")
 @user_limiter.limit(settings.RATE_LIMIT_GENERAL)
 def ack_delivered_notification(
+    request: Request,
     delivered_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -1889,7 +1916,7 @@ def ack_delivered_notification(
     "/admin/notifications/scan", dependencies=[Depends(require_roles("admin"))]
 )
 @user_limiter.limit(settings.RATE_LIMIT_NOTIFICATION_SCAN)
-def manual_notification_scan(db: Session = Depends(get_db)):
+def manual_notification_scan(request: Request, db: Session = Depends(get_db)):
     run_notification_scan(db)
     return {"ok": True}
 
@@ -1897,7 +1924,9 @@ def manual_notification_scan(db: Session = Depends(get_db)):
 @router.get("/notifications/counts")
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def notification_counts(
-    db: Session = Depends(get_db), company_code: Optional[str] = Query(None)
+    request: Request,
+    db: Session = Depends(get_db), 
+    company_code: Optional[str] = Query(None)
 ):
     from sqlalchemy import func
 
@@ -1921,7 +1950,10 @@ def notification_counts(
 )
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def accountant_decline(
-    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+    request: Request,
+    payment_id: int, 
+    comment: str | None = None, 
+    db: Session = Depends(get_db)
 ):
     p = db.get(Payment, payment_id)
     if not p:
@@ -2089,7 +2121,7 @@ def upsert_push_token(
 # Admin endpoint: send push to a user (simple wrapper around FCM HTTP v1 or legacy API)
 @router.post("/send-push")
 @user_limiter.limit(settings.RATE_LIMIT_GENERAL)
-def send_push(payload: SendPushIn, db: Session = Depends(get_db)):
+def send_push(request: Request, payload: SendPushIn, db: Session = Depends(get_db)):
     """Send a push notification to a user by user_id with {"user_id": int, "message": str}.
     Note: This implementation uses FCM HTTP v1 or legacy API depending on FCM_SERVER_KEY env.
     For production use, prefer service-account based HTTP v1 flow.
@@ -2202,7 +2234,7 @@ def send_push(payload: SendPushIn, db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def admin_pending(db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+def admin_pending(request: Request, db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
     q = db.query(Payment).filter(Payment.status == PaymentStatus.accountant_approved)
     total = q.count()
     items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
@@ -2216,7 +2248,10 @@ def admin_pending(db: Session = Depends(get_db), skip: int = 0, limit: int = 50)
 )
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def admin_approve(
-    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+    request: Request,
+    payment_id: int, 
+    comment: str | None = None, 
+    db: Session = Depends(get_db)
 ):
     try:
         p_row = db.get(Payment, payment_id)
@@ -2245,7 +2280,10 @@ def admin_approve(
 )
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def admin_decline(
-    payment_id: int, comment: str | None = None, db: Session = Depends(get_db)
+    request: Request,
+    payment_id: int, 
+    comment: str | None = None, 
+    db: Session = Depends(get_db)
 ):
     p = db.get(Payment, payment_id)
     if not p:
@@ -2388,7 +2426,7 @@ def admin_decline(
 # Admin: hard reset database (dangerous). Truncates all tables and reseeds admin & settings.
 @router.post("/admin/reset", dependencies=[Depends(require_roles("admin"))])
 @user_limiter.limit(settings.RATE_LIMIT_RECONCILE)
-def admin_reset(db: Session = Depends(get_db)):
+def admin_reset(request: Request, db: Session = Depends(get_db)):
     # Some ephemeral test environments may not include legacy 'imports' table; exclude it from truncate
     db.execute(
         text(
@@ -2415,7 +2453,7 @@ def admin_reset(db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_RECONCILE)
-def admin_recalc_all(db: Session = Depends(get_db)):
+def admin_recalc_all(request: Request, db: Session = Depends(get_db)):
     """Recalculate totals & credit dates for all non-archived companies (admin only)."""
     companies = db.query(Company).filter(Company.is_archived == False).all()
     count = 0
@@ -2435,7 +2473,9 @@ def admin_recalc_all(db: Session = Depends(get_db)):
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def list_company_assignments(
-    db: Session = Depends(get_db), unassigned_only: bool = Query(False)
+    request: Request,
+    db: Session = Depends(get_db), 
+    unassigned_only: bool = Query(False)
 ):
     assignments = {a.company_code: a for a in db.query(ExecAssignment).all()}
     # Include inactive executives so we can show placeholder instead of appearing unassigned
@@ -2472,7 +2512,7 @@ def list_company_assignments(
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def raw_assignments(db: Session = Depends(get_db)):
+def raw_assignments(request: Request, db: Session = Depends(get_db)):
     rows = db.query(ExecAssignment).all()
     return {
         "count": len(rows),
@@ -2488,7 +2528,7 @@ def raw_assignments(db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def batch_assign(payload: AssignmentBatchIn, db: Session = Depends(get_db)):
+def batch_assign(request: Request, payload: AssignmentBatchIn, db: Session = Depends(get_db)):
     exec_user = db.get(User, payload.executive_id)
     if not exec_user or exec_user.role != Role.executive:
         raise HTTPException(status_code=400, detail="invalid executive_id")
@@ -2514,7 +2554,7 @@ def batch_assign(payload: AssignmentBatchIn, db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_USER_DELETE)
-def batch_unassign(payload: UnassignBatchIn, db: Session = Depends(get_db)):
+def batch_unassign(request: Request, payload: UnassignBatchIn, db: Session = Depends(get_db)):
     removed: List[str] = []
     for code in payload.company_codes:
         existing = (
