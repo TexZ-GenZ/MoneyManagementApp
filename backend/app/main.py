@@ -12,6 +12,11 @@ from app.core.config import settings
 from app.core.scheduler import start_scheduler, shutdown_scheduler
 from app.core.logging_config import configure_logging
 
+# Import rate limiting components
+from app.services.rate_limiting import limiter, rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[override]
@@ -48,6 +53,11 @@ async def lifespan(app: FastAPI):  # type: ignore[override]
 
 
 app = FastAPI(title="Jaskirat Textiles API", lifespan=lifespan)
+
+# Add rate limiting state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
 app.include_router(router)
 
 # CORS
