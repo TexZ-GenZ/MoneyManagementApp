@@ -201,21 +201,21 @@ export default function UnifiedHistory() {
                             })()}
                         </View>
                     </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={[styles.amount, { color: tokens.colors.accent }]}> 
-                                {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : formatCurrency(item.amount_collected)}
-                            </Text>
-                            <View style={{ marginTop: 6 }}>
-                                <StatusBadge status={item.status}>
-                                    {prettyStatus(item.status)}
-                                </StatusBadge>
-                            </View>
-                            {!!item.allocation_count && (
-                                <Text style={styles.bulkHint}>
-                                    {item.allocation_count > 1 ? `${item.allocation_count} bills` : (item.first_bill_number ? `Bill ${item.first_bill_number}` : '1 bill')}
-                                </Text>
-                            )}
+                    <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={[styles.amount, { color: tokens.colors.accent }]}>
+                            {(Number(item.amount_collected) === 0) ? 'Change in promise date' : formatCurrency(item.amount_collected)}
+                        </Text>
+                        <View style={{ marginTop: 6 }}>
+                            <StatusBadge status={item.status}>
+                                {prettyStatus(item.status)}
+                            </StatusBadge>
                         </View>
+                        {!!item.allocation_count && (
+                            <Text style={styles.bulkHint}>
+                                {item.allocation_count > 1 ? `${item.allocation_count} bills` : (item.first_bill_number ? `Bill ${item.first_bill_number}` : '1 bill')}
+                            </Text>
+                        )}
+                    </View>
                 </View>
 
                 <View style={styles.metaRow}>

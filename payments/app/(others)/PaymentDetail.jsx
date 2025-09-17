@@ -33,6 +33,14 @@ export default function PaymentDetails() {
     const insets = useSafeAreaInsets();
     const userRole = useAppSelector(s => s.auth.user?.role || '');
 
+    const toLocalYMD = (d) => {
+        const dt = new Date(d);
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+
     useEffect(() => { fetchAll(); }, [bill_id]);
 
     const fetchAll = useCallback(async () => {
@@ -105,7 +113,7 @@ export default function PaymentDetails() {
                         collected_at: new Date().toISOString(),
                         amount_collected: 0,
                         method: 'system',
-                        comments: `Promise date change to ${iso}`,
+                        comments: (userRole === 'executive') ? `Promise date change to ${iso}` : null,
                         next_promise_date: iso,
                         bill_allocations: [{ bill_id: Number(bill_id), amount: 0 }]
                     })
@@ -126,7 +134,7 @@ export default function PaymentDetails() {
 
     const submitPromiseDate = async (pickedDate) => {
         if (!pickedDate) return;
-        const iso = new Date(pickedDate).toISOString().split('T')[0];
+        const iso = toLocalYMD(pickedDate);
         setShowPromisePicker(false);
         Alert.alert(
             'Confirm Change',

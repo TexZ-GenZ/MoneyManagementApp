@@ -783,6 +783,42 @@ def submit_payment(
         db.add(p)
         db.commit()
         db.refresh(p)
+    # If executive initiated a promise-date change (zero-amount), attach robust executive comment
+    try:
+        is_promise_change = (
+            float(getattr(p, "amount_collected", 0)) == 0.0
+            and getattr(p, "next_promise_date", None) is not None
+        )
+    except Exception:
+        is_promise_change = False
+    if user.role == Role.executive and is_promise_change:
+        try:
+            alloc = (
+                db.query(PaymentAllocation)
+                .filter(PaymentAllocation.payment_id == p.id)
+                .first()
+            )
+            old_date = None
+            if alloc:
+                b = db.query(Bill).filter(Bill.id == alloc.bill_id).one_or_none()
+                if b:
+                    old_date = getattr(b, "promise_date", None) or getattr(
+                        b, "due_date", None
+                    )
+            new_date = getattr(p, "next_promise_date", None)
+            if new_date:
+                old_str = (
+                    old_date.isoformat()
+                    if hasattr(old_date, "isoformat")
+                    else (str(old_date) if old_date else "—")
+                )
+                new_str = new_date.isoformat()
+                p.comments = f"Promise date change from {old_str} to {new_str}"
+                db.add(p)
+                db.commit()
+                db.refresh(p)
+        except Exception:
+            pass
     # If accountant initiated a promise-date change (zero-amount), auto-advance to admin stage
     try:
         is_promise_change = (
@@ -806,12 +842,20 @@ def submit_payment(
             if alloc:
                 b = db.query(Bill).filter(Bill.id == alloc.bill_id).one_or_none()
                 if b:
-                    old_date = getattr(b, "promise_date", None) or getattr(b, "due_date", None)
+                    old_date = getattr(b, "promise_date", None) or getattr(
+                        b, "due_date", None
+                    )
             new_date = getattr(p, "next_promise_date", None)
             if new_date:
-                old_str = (old_date.isoformat() if hasattr(old_date, 'isoformat') else (str(old_date) if old_date else '—'))
+                old_str = (
+                    old_date.isoformat()
+                    if hasattr(old_date, "isoformat")
+                    else (str(old_date) if old_date else "—")
+                )
                 new_str = new_date.isoformat()
-                p.accountant_comment = f"Promise date change from {old_str} to {new_str}"
+                p.accountant_comment = (
+                    f"Promise date change from {old_str} to {new_str}"
+                )
         except Exception:
             pass
         db.add(p)
@@ -867,10 +911,20 @@ def submit_payment(
                     )
                     old_str = None
                     if alloc:
-                        b = db.query(Bill).filter(Bill.id == alloc.bill_id).one_or_none()
+                        b = (
+                            db.query(Bill)
+                            .filter(Bill.id == alloc.bill_id)
+                            .one_or_none()
+                        )
                         if b:
-                            old = getattr(b, "promise_date", None) or getattr(b, "due_date", None)
-                            old_str = old.isoformat() if hasattr(old, 'isoformat') else (str(old) if old else None)
+                            old = getattr(b, "promise_date", None) or getattr(
+                                b, "due_date", None
+                            )
+                            old_str = (
+                                old.isoformat()
+                                if hasattr(old, "isoformat")
+                                else (str(old) if old else None)
+                            )
                 except Exception:
                     old_str = None
                 to_str = p.next_promise_date.isoformat()

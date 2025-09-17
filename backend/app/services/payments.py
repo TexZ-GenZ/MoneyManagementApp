@@ -317,10 +317,20 @@ def create_payment_with_allocations(
                         .first()
                     )
                     if alloc:
-                        b = db.query(Bill).filter(Bill.id == alloc.bill_id).one_or_none()
+                        b = (
+                            db.query(Bill)
+                            .filter(Bill.id == alloc.bill_id)
+                            .one_or_none()
+                        )
                         if b:
-                            old = getattr(b, "promise_date", None) or getattr(b, "due_date", None)
-                            from_str = old.isoformat() if hasattr(old, 'isoformat') else (str(old) if old else None)
+                            old = getattr(b, "promise_date", None) or getattr(
+                                b, "due_date", None
+                            )
+                            from_str = (
+                                old.isoformat()
+                                if hasattr(old, "isoformat")
+                                else (str(old) if old else None)
+                            )
                 except Exception:
                     pass
                 to_str = p.next_promise_date.isoformat()
