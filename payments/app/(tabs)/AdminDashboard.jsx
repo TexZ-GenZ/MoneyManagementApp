@@ -156,7 +156,8 @@ export default function AdminDashboard() {
             {item.billNumbers && item.billNumbers.length ? `Bill ${item.billNumbers.join(', ')}` : 'No Bill'} • {item.executiveName}
           </Text>
           <Text style={styles.recentAmountLine} numberOfLines={1}>
-            {item.amount_collected ? `₹${item.amount_collected}` : 'No Amount'}{item.collected_at ? ` • ${formatDate(item.collected_at)}` : ''}
+            {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : (item.amount_collected ? `₹${item.amount_collected}` : 'No Amount')}
+            {item.collected_at ? ` • ${formatDate(item.collected_at)}` : ''}
           </Text>
         </View>
         <TouchableOpacity style={styles.detailBtn} onPress={() => router.push({ pathname: '../(others)/PaymentApprovalDetail', params: { payment_id: item.id } })}>

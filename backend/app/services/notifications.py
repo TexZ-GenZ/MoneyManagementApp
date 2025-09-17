@@ -219,15 +219,27 @@ def build_payment_review_message(db: Session, p: Payment) -> str:
     company_part = f"{p.company_code}"
     if comp and getattr(comp, "name", None):
         company_part += f" ({comp.name})"
-    try:
-        amt = f"{float(p.amount_collected):,.2f}"
-    except Exception:
-        amt = str(p.amount_collected)
-    amt_part = f"INR {amt}"
-    method_part = f"via {p.method}" if p.method else ""
-    date_part = (
-        p.collected_at.date().isoformat() if getattr(p, "collected_at", None) else ""
+    is_promise_change = (
+        getattr(p, "amount_collected", None) is not None
+        and float(getattr(p, "amount_collected", 0)) == 0.0
+        and getattr(p, "next_promise_date", None) is not None
     )
+    if is_promise_change:
+        amt_part = "Promise date change"
+        method_part = f"to {p.next_promise_date.isoformat()}"
+        date_part = ""
+    else:
+        try:
+            amt = f"{float(p.amount_collected):,.2f}"
+        except Exception:
+            amt = str(p.amount_collected)
+        amt_part = f"INR {amt}"
+        method_part = f"via {p.method}" if p.method else ""
+        date_part = (
+            p.collected_at.date().isoformat()
+            if getattr(p, "collected_at", None)
+            else ""
+        )
     stage = (
         "accountant"
         if p.status == PaymentStatus.submitted
@@ -237,7 +249,7 @@ def build_payment_review_message(db: Session, p: Payment) -> str:
         f"#{p.id}",
         company_part,
         f"{amt_part} {method_part}".strip(),
-        f"Collected {date_part}" if date_part else None,
+        (f"Collected {date_part}" if date_part else None),
         (
             f"Awaiting {stage} approval"
             if stage in ("accountant", "admin")
@@ -311,7 +323,7 @@ def _send_role_pending_pushes(db: Session):
         if s and s.notif_every_hours
         else DEFAULT_RESEND_INTERVAL_HOURS
     )
-    
+
     # Gather counts
     accountant_cnt = (
         db.query(Payment).filter(Payment.status == PaymentStatus.submitted).count()
@@ -330,7 +342,7 @@ def _send_role_pending_pushes(db: Session):
     def _send_to_role(role: Role, count: int, stage: str):
         if count <= 0:
             return
-        
+
         users = db.query(User).filter(User.role == role, User.is_active == True).all()
         if not users:
             return
@@ -342,7 +354,7 @@ def _send_role_pending_pushes(db: Session):
         log.debug("Role=%s users=%s tokens=%s", role, len(users), len(tokens))
         if not tokens:
             return
-            
+
         title = (
             "Needs Accountant Approval"
             if stage == "accountant"
@@ -350,7 +362,7 @@ def _send_role_pending_pushes(db: Session):
         )
         noun = "payment" if count == 1 else "payments"
         body = f"{count} {noun} awaiting {stage} approval\nTap to review."
-        
+
         # Per-user dedupe based on delivered history within interval window
         cutoff = now - timedelta(hours=interval_hours)
         user_ids = [u.id for u in users]
@@ -364,7 +376,7 @@ def _send_role_pending_pushes(db: Session):
             .all()
         )
         recently_sent = {uid for (uid,) in recent}
-        
+
         # Record and push only to users not recently notified
         for u in users:
             if u.id in recently_sent:
@@ -426,9 +438,7 @@ def _send_exec_pending_pushes(db: Session):
     start_h = s.exec_window_start_hour or 6
     end_h = s.exec_window_end_hour or 22
     interval_hours = (
-        s.notif_every_hours
-        if s.notif_every_hours
-        else DEFAULT_RESEND_INTERVAL_HOURS
+        s.notif_every_hours if s.notif_every_hours else DEFAULT_RESEND_INTERVAL_HOURS
     )
 
     def ist_to_utc(h: int) -> int:
@@ -444,6 +454,7 @@ def _send_exec_pending_pushes(db: Session):
         return
     # Pending bills per executive based on assignments (bills.status = pending)
     from sqlalchemy import text as _text
+
     rows = db.execute(
         _text(
             """
@@ -485,7 +496,9 @@ def _send_exec_pending_pushes(db: Session):
         companies = r.companies
         bill_noun = "bill" if bills == 1 else "bills"
         comp_noun = "company" if companies == 1 else "companies"
-        msg = f"{bills} pending {bill_noun} across {companies} {comp_noun}\nTap to view."
+        msg = (
+            f"{bills} pending {bill_noun} across {companies} {comp_noun}\nTap to view."
+        )
 
         # Skip if we've sent recently to this exec
         if r.executive_id in recently_sent:
@@ -528,9 +541,7 @@ def _send_executive_overdue_push(db: Session):
     start_h = s.exec_window_start_hour or 6
     end_h = s.exec_window_end_hour or 22
     interval_hours = (
-        s.notif_every_hours
-        if s.notif_every_hours
-        else DEFAULT_RESEND_INTERVAL_HOURS
+        s.notif_every_hours if s.notif_every_hours else DEFAULT_RESEND_INTERVAL_HOURS
     )
 
     def ist_to_utc(h: int) -> int:
@@ -625,7 +636,7 @@ def _send_executive_overdue_push(db: Session):
         # Skip if recently sent to this user
         if exec_id in recently_sent:
             continue
-        
+
         # Record once per exec user
         _record_user_notification(
             db, exec_id, title, body, {"stage": "exec_overdue", "screen": "Overdue"}

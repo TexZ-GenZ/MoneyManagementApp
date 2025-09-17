@@ -12,6 +12,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import text, or_, func, literal
 from typing import Optional, List
+import httpx
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -494,7 +495,9 @@ def set_promise_date(
 @user_limiter.limit(settings.RATE_LIMIT_CREDIT_UPDATE)
 def set_credit_date(
     request: Request,
-    code: str, body: CompanyUpdateCredit, db: Session = Depends(get_db)
+    code: str,
+    body: CompanyUpdateCredit,
+    db: Session = Depends(get_db),
 ):
     c = db.get(Company, code)
     if not c:
@@ -625,6 +628,7 @@ def bill_payment_history(request: Request, bill_id: int, db: Session = Depends(g
                 exec_location_verified=payment.exec_location_verified,
                 exec_lat=getattr(payment, "exec_lat", None),
                 exec_lng=getattr(payment, "exec_lng", None),
+                next_promise_date=getattr(payment, "next_promise_date", None),
             )
         )
     return BillPaymentHistory(items=items, total=len(items))
@@ -694,7 +698,7 @@ def admin_update_bill_promise(
 @router.post(
     "/payments",
     response_model=PaymentOut,
-    dependencies=[Depends(require_roles("executive"))],
+    dependencies=[Depends(require_roles("executive", "accountant"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_SUBMIT)
 def submit_payment(
@@ -779,6 +783,144 @@ def submit_payment(
         db.add(p)
         db.commit()
         db.refresh(p)
+    # If accountant initiated a promise-date change (zero-amount), auto-advance to admin stage
+    try:
+        is_promise_change = (
+            float(getattr(p, "amount_collected", 0)) == 0.0
+            and getattr(p, "next_promise_date", None) is not None
+        )
+    except Exception:
+        is_promise_change = False
+    if user.role == Role.accountant and is_promise_change:
+        p.status = PaymentStatus.accountant_approved
+        p.accountant_review_at = datetime.utcnow()
+        # Set an accountant comment describing change from old to new
+        try:
+            # Fetch the single allocated bill to derive old promise
+            alloc = (
+                db.query(PaymentAllocation)
+                .filter(PaymentAllocation.payment_id == p.id)
+                .first()
+            )
+            old_date = None
+            if alloc:
+                b = db.query(Bill).filter(Bill.id == alloc.bill_id).one_or_none()
+                if b:
+                    old_date = getattr(b, "promise_date", None) or getattr(b, "due_date", None)
+            new_date = getattr(p, "next_promise_date", None)
+            if new_date:
+                old_str = (old_date.isoformat() if hasattr(old_date, 'isoformat') else (str(old_date) if old_date else '—'))
+                new_str = new_date.isoformat()
+                p.accountant_comment = f"Promise date change from {old_str} to {new_str}"
+        except Exception:
+            pass
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        # Ensure admin-stage notification and push
+        try:
+            existing = (
+                db.query(Notification)
+                .filter(
+                    Notification.payment_id == p.id,
+                    Notification.type == NotificationType.payment_review,
+                    Notification.status == NotificationStatus.pending,
+                )
+                .first()
+            )
+            if not existing:
+                comp = db.get(Company, p.company_code)
+                comp_part = p.company_code + (
+                    f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+                )
+                body = f"#{p.id} • {comp_part} • Promise date change to {p.next_promise_date.isoformat()} • Awaiting admin approval"
+                db.add(
+                    Notification(
+                        company_code=p.company_code,
+                        payment_id=p.id,
+                        type=NotificationType.payment_review,
+                        status=NotificationStatus.pending,
+                        message=body,
+                    )
+                )
+                db.commit()
+        except Exception:
+            pass
+        # Push to admins
+        try:
+            admin_users = (
+                db.query(User)
+                .filter(User.role == Role.admin, User.is_active == True)
+                .all()
+            )
+            if admin_users:
+                comp = db.get(Company, p.company_code)
+                comp_part = p.company_code + (
+                    f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
+                )
+                # Build robust body with from->to dates
+                try:
+                    alloc = (
+                        db.query(PaymentAllocation)
+                        .filter(PaymentAllocation.payment_id == p.id)
+                        .first()
+                    )
+                    old_str = None
+                    if alloc:
+                        b = db.query(Bill).filter(Bill.id == alloc.bill_id).one_or_none()
+                        if b:
+                            old = getattr(b, "promise_date", None) or getattr(b, "due_date", None)
+                            old_str = old.isoformat() if hasattr(old, 'isoformat') else (str(old) if old else None)
+                except Exception:
+                    old_str = None
+                to_str = p.next_promise_date.isoformat()
+                body = f"📝 {comp_part}\nPromise date change {('from ' + old_str + ' ' if old_str else '')}to {to_str}\nTap to review request #{p.id}"
+                tokens = (
+                    db.query(PushToken)
+                    .filter(PushToken.user_id.in_([u.id for u in admin_users]))
+                    .all()
+                )
+                for u in admin_users:
+                    try:
+                        _record_user_notification(
+                            db,
+                            u.id,
+                            "Needs Admin Approval",
+                            body,
+                            {
+                                "payment_id": p.id,
+                                "stage": "admin",
+                                "screen": "NotifyAdmin",
+                            },
+                        )
+                    except Exception:
+                        pass
+                for t in tokens:
+                    if not isinstance(t.token, str) or not t.token.startswith(
+                        "ExponentPushToken"
+                    ):
+                        continue
+                    try:
+                        httpx.post(
+                            "https://exp.host/--/api/v2/push/send",
+                            json={
+                                "to": t.token,
+                                "title": "Needs Admin Approval",
+                                "body": body,
+                                "data": {
+                                    "payment_id": p.id,
+                                    "stage": "admin",
+                                    "screen": "NotifyAdmin",
+                                },
+                                "priority": "high",
+                                "sound": "default",
+                            },
+                            timeout=8,
+                        )
+                    except Exception:
+                        continue
+        except Exception:
+            pass
     return p
 
 
@@ -789,10 +931,7 @@ def submit_payment(
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def accountant_pending(
-    request: Request,
-    db: Session = Depends(get_db), 
-    skip: int = 0, 
-    limit: int = 50
+    request: Request, db: Session = Depends(get_db), skip: int = 0, limit: int = 50
 ):
     q = db.query(Payment).filter(Payment.status == PaymentStatus.submitted)
     total = q.count()
@@ -1052,7 +1191,9 @@ def admin_reconcile_bill_promises(request: Request, db: Session = Depends(get_db
 
 @router.get("/payments/{payment_id}", response_model=PaymentDetailOut)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def get_payment_detail(request: Request, payment_id: int, db: Session = Depends(get_db)):
+def get_payment_detail(
+    request: Request, payment_id: int, db: Session = Depends(get_db)
+):
     p = db.get(Payment, payment_id)
     if not p:
         raise HTTPException(status_code=404, detail="Payment not found")
@@ -1099,7 +1240,7 @@ def get_payment_detail(request: Request, payment_id: int, db: Session = Depends(
 @router.post(
     "/payments/bulk",
     response_model=PaymentOut,
-    dependencies=[Depends(require_roles("executive", "admin"))],
+    dependencies=[Depends(require_roles("executive", "accountant", "admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_BULK)
 def submit_bulk_payment(
@@ -1120,9 +1261,9 @@ def submit_bulk_payment(
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def accountant_approve(
     request: Request,
-    payment_id: int, 
-    comment: str | None = None, 
-    db: Session = Depends(get_db)
+    payment_id: int,
+    comment: str | None = None,
+    db: Session = Depends(get_db),
 ):
     p = db.get(Payment, payment_id)
     if not p:
@@ -1183,11 +1324,19 @@ def accountant_approve(
             comp_part = p.company_code + (
                 f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
             )
-            try:
-                amt = f"{float(p.amount_collected):,.2f}"
-            except Exception:
-                amt = str(p.amount_collected)
-            body = f"📝 {comp_part}\n₹{amt} via {p.method} • Collected {p.collected_at.date().isoformat()}\nTap to review payment #{p.id}"
+            is_promise_change = (
+                getattr(p, "amount_collected", None) is not None
+                and float(getattr(p, "amount_collected", 0)) == 0.0
+                and getattr(p, "next_promise_date", None) is not None
+            )
+            if is_promise_change:
+                body = f"📝 {comp_part}\nPromise date change to {p.next_promise_date.isoformat()}\nTap to review request #{p.id}"
+            else:
+                try:
+                    amt = f"{float(p.amount_collected):,.2f}"
+                except Exception:
+                    amt = str(p.amount_collected)
+                body = f"📝 {comp_part}\n₹{amt} via {p.method} • Collected {p.collected_at.date().isoformat()}\nTap to review payment #{p.id}"
 
             tokens = (
                 db.query(PushToken)
@@ -1290,7 +1439,9 @@ def admin_create_user(
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def admin_update_mobile(request: Request, user_id: int, mobile: str, db: Session = Depends(get_db)):
+def admin_update_mobile(
+    request: Request, user_id: int, mobile: str, db: Session = Depends(get_db)
+):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1311,10 +1462,7 @@ def admin_update_mobile(request: Request, user_id: int, mobile: str, db: Session
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
 def admin_update_password(
-    request: Request,
-    user_id: int, 
-    new_password: str, 
-    db: Session = Depends(get_db)
+    request: Request, user_id: int, new_password: str, db: Session = Depends(get_db)
 ):
     u = db.get(User, user_id)
     if not u:
@@ -1345,7 +1493,12 @@ def list_executives(request: Request, db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def assign_company(request: Request, executive_id: int, company_code: str, db: Session = Depends(get_db)):
+def assign_company(
+    request: Request,
+    executive_id: int,
+    company_code: str,
+    db: Session = Depends(get_db),
+):
     if not db.get(User, executive_id):
         raise HTTPException(status_code=404, detail="Executive not found")
     if not db.get(Company, company_code):
@@ -1372,9 +1525,9 @@ def assign_company(request: Request, executive_id: int, company_code: str, db: S
 @user_limiter.limit(settings.RATE_LIMIT_USER_DELETE)
 def unassign_company(
     request: Request,
-    executive_id: int, 
-    company_code: str, 
-    db: Session = Depends(get_db)
+    executive_id: int,
+    company_code: str,
+    db: Session = Depends(get_db),
 ):
     row = (
         db.query(ExecAssignment)
@@ -1470,7 +1623,11 @@ def get_executive_companies(
 
 @router.get("/me/companies", dependencies=[Depends(require_roles("executive"))])
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def my_companies(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def my_companies(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     codes = [
         r.company_code
         for r in db.query(ExecAssignment)
@@ -1537,7 +1694,9 @@ def my_companies(request: Request, user: User = Depends(get_current_user), db: S
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def list_users(request: Request, role: Optional[str] = None, db: Session = Depends(get_db)):
+def list_users(
+    request: Request, role: Optional[str] = None, db: Session = Depends(get_db)
+):
     q = db.query(User)
     if role:
         try:
@@ -1566,7 +1725,9 @@ def list_users(request: Request, role: Optional[str] = None, db: Session = Depen
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def admin_update_username(request: Request, user_id: int, username: str, db: Session = Depends(get_db)):
+def admin_update_username(
+    request: Request, user_id: int, username: str, db: Session = Depends(get_db)
+):
     if db.query(User).filter(User.username == username, User.id != user_id).first():
         raise HTTPException(status_code=400, detail="Username already exists")
     u = db.get(User, user_id)
@@ -1648,7 +1809,9 @@ def admin_activate_user(request: Request, user_id: int, db: Session = Depends(ge
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_USER_DELETE)
-def admin_hard_delete_user(request: Request, user_id: int, db: Session = Depends(get_db)):
+def admin_hard_delete_user(
+    request: Request, user_id: int, db: Session = Depends(get_db)
+):
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1855,7 +2018,9 @@ def notifications_unread_count(
 
 @router.post("/notifications/{notification_id}/ack")
 @user_limiter.limit(settings.RATE_LIMIT_GENERAL)
-def acknowledge_notification(request: Request, notification_id: int, db: Session = Depends(get_db)):
+def acknowledge_notification(
+    request: Request, notification_id: int, db: Session = Depends(get_db)
+):
     n = db.get(Notification, notification_id)
     if not n:
         raise HTTPException(status_code=404, detail="Notification not found")
@@ -1925,8 +2090,8 @@ def manual_notification_scan(request: Request, db: Session = Depends(get_db)):
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def notification_counts(
     request: Request,
-    db: Session = Depends(get_db), 
-    company_code: Optional[str] = Query(None)
+    db: Session = Depends(get_db),
+    company_code: Optional[str] = Query(None),
 ):
     from sqlalchemy import func
 
@@ -1951,9 +2116,9 @@ def notification_counts(
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def accountant_decline(
     request: Request,
-    payment_id: int, 
-    comment: str | None = None, 
-    db: Session = Depends(get_db)
+    payment_id: int,
+    comment: str | None = None,
+    db: Session = Depends(get_db),
 ):
     p = db.get(Payment, payment_id)
     if not p:
@@ -2234,7 +2399,9 @@ def send_push(request: Request, payload: SendPushIn, db: Session = Depends(get_d
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
-def admin_pending(request: Request, db: Session = Depends(get_db), skip: int = 0, limit: int = 50):
+def admin_pending(
+    request: Request, db: Session = Depends(get_db), skip: int = 0, limit: int = 50
+):
     q = db.query(Payment).filter(Payment.status == PaymentStatus.accountant_approved)
     total = q.count()
     items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
@@ -2249,9 +2416,9 @@ def admin_pending(request: Request, db: Session = Depends(get_db), skip: int = 0
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def admin_approve(
     request: Request,
-    payment_id: int, 
-    comment: str | None = None, 
-    db: Session = Depends(get_db)
+    payment_id: int,
+    comment: str | None = None,
+    db: Session = Depends(get_db),
 ):
     try:
         p_row = db.get(Payment, payment_id)
@@ -2281,9 +2448,9 @@ def admin_approve(
 @user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
 def admin_decline(
     request: Request,
-    payment_id: int, 
-    comment: str | None = None, 
-    db: Session = Depends(get_db)
+    payment_id: int,
+    comment: str | None = None,
+    db: Session = Depends(get_db),
 ):
     p = db.get(Payment, payment_id)
     if not p:
@@ -2474,8 +2641,8 @@ def admin_recalc_all(request: Request, db: Session = Depends(get_db)):
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
 def list_company_assignments(
     request: Request,
-    db: Session = Depends(get_db), 
-    unassigned_only: bool = Query(False)
+    db: Session = Depends(get_db),
+    unassigned_only: bool = Query(False),
 ):
     assignments = {a.company_code: a for a in db.query(ExecAssignment).all()}
     # Include inactive executives so we can show placeholder instead of appearing unassigned
@@ -2528,7 +2695,9 @@ def raw_assignments(request: Request, db: Session = Depends(get_db)):
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_SETTINGS_UPDATE)
-def batch_assign(request: Request, payload: AssignmentBatchIn, db: Session = Depends(get_db)):
+def batch_assign(
+    request: Request, payload: AssignmentBatchIn, db: Session = Depends(get_db)
+):
     exec_user = db.get(User, payload.executive_id)
     if not exec_user or exec_user.role != Role.executive:
         raise HTTPException(status_code=400, detail="invalid executive_id")
@@ -2554,7 +2723,9 @@ def batch_assign(request: Request, payload: AssignmentBatchIn, db: Session = Dep
     dependencies=[Depends(require_roles("admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_USER_DELETE)
-def batch_unassign(request: Request, payload: UnassignBatchIn, db: Session = Depends(get_db)):
+def batch_unassign(
+    request: Request, payload: UnassignBatchIn, db: Session = Depends(get_db)
+):
     removed: List[str] = []
     for code in payload.company_codes:
         existing = (

@@ -95,7 +95,8 @@ export default function PaymentApprovalDetail() {
         if (!payment || approving || declining) return;
         const isAdminStage = payment.status === 'accountant_approved' && currentUser?.role === 'admin';
         const title = 'Confirm Approval';
-        const subtitle = `${isAdminStage ? 'Admin' : 'Accountant'} approval for ${payment?.company_code || 'payment'} • ${formatCurrency(payment?.amount_collected || 0)}\n\nAre you sure?`;
+    const amountLabel = (Number(payment?.amount_collected) === 0 && payment?.next_promise_date) ? 'Change in promise date' : formatCurrency(payment?.amount_collected || 0);
+    const subtitle = `${isAdminStage ? 'Admin' : 'Accountant'} approval for ${payment?.company_code || 'payment'} • ${amountLabel}\n\nAre you sure?`;
         Alert.alert(title, subtitle, [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Approve', style: 'default', onPress: () => handleApprove() },
@@ -181,7 +182,9 @@ export default function PaymentApprovalDetail() {
                                 ) : null}
                             </View>
                             <View style={styles.amountStatusCol}>
-                                <Text style={styles.amount}>{formatCurrency(payment.amount_collected)}</Text>
+                                <Text style={[styles.amount, (Number(payment.amount_collected) === 0 && payment.next_promise_date) && styles.amountPromise]}>
+                                    {(Number(payment.amount_collected) === 0 && payment.next_promise_date) ? 'Change in\npromise date' : formatCurrency(payment.amount_collected)}
+                                </Text>
                             </View>
                         </View>
                         <View style={styles.metaGrid}>
@@ -288,7 +291,9 @@ export default function PaymentApprovalDetail() {
                         <View style={styles.modalOverlay}>
                             <View style={styles.modalBox}>
                                 <Text style={styles.modalTitle}>Decline Payment</Text>
-                                <Text style={styles.modalSub}>{payment?.company_code} • {formatCurrency(payment?.amount_collected || 0)}</Text>
+                                <Text style={styles.modalSub}>
+                                    {payment?.company_code} • {(Number(payment?.amount_collected) === 0 && payment?.next_promise_date) ? 'Change in promise date' : formatCurrency(payment?.amount_collected || 0)}
+                                </Text>
                                 <TextInput
                                     style={styles.modalInput}
                                     placeholder="Add a comment (optional)"
@@ -361,6 +366,7 @@ const styles = StyleSheet.create({
     subSectionTitle: { fontSize: 12, fontWeight: '700', color: tokens.colors.textSubtle, letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' },
     topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     amount: { flex: 1, fontSize: 22, fontWeight: '700', color: tokens.colors.accent },
+    amountPromise: { textAlign: 'center', lineHeight: 24 },
     infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
     infoLabel: { fontSize: 12, color: tokens.colors.textDim },
     infoValue: { fontSize: 13, fontWeight: '600', color: tokens.colors.text, marginLeft: 12 },

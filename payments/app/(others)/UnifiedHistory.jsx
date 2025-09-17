@@ -202,8 +202,8 @@ export default function UnifiedHistory() {
                         </View>
                     </View>
                         <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={[styles.amount, { color: tokens.colors.accent }]}>
-                                {formatCurrency(item.amount_collected)}
+                            <Text style={[styles.amount, { color: tokens.colors.accent }]}> 
+                                {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : formatCurrency(item.amount_collected)}
                             </Text>
                             <View style={{ marginTop: 6 }}>
                                 <StatusBadge status={item.status}>

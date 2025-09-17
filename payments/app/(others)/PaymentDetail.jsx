@@ -80,29 +80,62 @@ export default function PaymentDetails() {
 
     const toggleExpand = (idx) => setExpandedIdx(expandedIdx === idx ? null : idx);
 
-    const submitPromiseDate = async (pickedDate) => {
+    const doSubmitPromiseDate = async (iso) => {
         try {
-            if (!pickedDate) return;
             const h = await authHeaders();
-            const iso = new Date(pickedDate).toISOString().split('T')[0];
-            const r = await fetch(`${API_BASE_URL}/admin/bills/${bill_id}/promise-date`, {
-                method: 'PATCH',
-                headers: h,
-                body: JSON.stringify({ promise_date: iso })
-            });
-            if (!r.ok) {
-                const txt = await r.text();
-                throw new Error(txt || 'HTTP error');
+            if (userRole === 'admin') {
+                const r = await fetch(`${API_BASE_URL}/admin/bills/${bill_id}/promise-date`, {
+                    method: 'PATCH',
+                    headers: h,
+                    body: JSON.stringify({ promise_date: iso })
+                });
+                if (!r.ok) {
+                    const txt = await r.text();
+                    throw new Error(txt || 'HTTP error');
+                }
+                await fetchBill();
+                Alert.alert('Updated', 'Promise date updated.');
+            } else {
+                const tok = await StorageService.getToken();
+                const r = await fetch(`${API_BASE_URL}/payments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok.access_token}` } : {}) },
+                    body: JSON.stringify({
+                        company_code: code,
+                        collected_at: new Date().toISOString(),
+                        amount_collected: 0,
+                        method: 'system',
+                        comments: `Promise date change to ${iso}`,
+                        next_promise_date: iso,
+                        bill_allocations: [{ bill_id: Number(bill_id), amount: 0 }]
+                    })
+                });
+                if (!r.ok) {
+                    const txt = await r.text();
+                    throw new Error(txt || 'HTTP error');
+                }
+                Alert.alert('Submitted', userRole === 'accountant' ? 'Sent to Admin for approval.' : 'Sent to Accountant for approval.');
             }
-            await fetchBill();
-            Alert.alert('Updated', 'Promise date updated.');
+            await fetchPaymentHistory();
         } catch (e) {
             console.error('update promise failed', e);
             const msg = String(e?.message || e);
             Alert.alert('Error', msg.includes('earlier') ? 'Promise date cannot be earlier than credit date or current promise.' : 'Failed to update promise date.');
-        } finally {
-            setShowPromisePicker(false);
         }
+    };
+
+    const submitPromiseDate = async (pickedDate) => {
+        if (!pickedDate) return;
+        const iso = new Date(pickedDate).toISOString().split('T')[0];
+        setShowPromisePicker(false);
+        Alert.alert(
+            'Confirm Change',
+            `Change promise date to ${formatDate(iso)}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Yes, Continue', style: 'destructive', onPress: () => doSubmitPromiseDate(iso) },
+            ]
+        );
     };
 
     const minPickDate = useMemo(() => {
@@ -182,12 +215,17 @@ export default function PaymentDetails() {
         return (
             <Card style={styles.paymentCard}>
                 <View style={styles.cardTopRow}>
-                    <Text style={styles.amountMain}>{formatCurrency(item.amount)}</Text>
+                    <Text style={styles.amountMain}>
+                        {(parseFloat(item.amount) === 0 && item.next_promise_date) ? 'Change in promise date' : formatCurrency(item.amount)}
+                    </Text>
                     <StatusBadge status={item.payment_status} />
                 </View>
                 <View style={styles.metaRow}>
                     <Meta label="Collected" value={formatDateTime(item.collected_at)} />
                     <Meta label="Method" value={item.method || '—'} />
+                    {(parseFloat(item.amount) === 0 && item.next_promise_date) ? (
+                        <Meta label="Promise Change" value={`→ ${formatDate(item.next_promise_date)}`} />
+                    ) : null}
                     {(item.exec_lat && item.exec_lng) ? (
                         <TouchableOpacity onPress={() => {
                             const url = `https://www.google.com/maps/search/?api=1&query=${item.exec_lat},${item.exec_lng}`;
@@ -272,7 +310,7 @@ export default function PaymentDetails() {
             <Text style={styles.pageTitle}>{company?.name || name || code}</Text>
             <View style={styles.pageHeaderSubRow}>
                 <Text style={styles.pageSubtitle} numberOfLines={1}>{`Bill ${bill?.bill_number || bill_number}`}</Text>
-                {userRole === 'admin' && (
+                {(userRole === 'admin' || userRole === 'executive' || userRole === 'accountant') && (
                     <TouchableOpacity style={styles.promiseBtnHeader} onPress={() => setShowPromisePicker(true)}>
                         <Text style={styles.promiseBtnHeaderText}>Change Promise Date</Text>
                     </TouchableOpacity>

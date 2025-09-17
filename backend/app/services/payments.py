@@ -59,8 +59,18 @@ def create_payment_with_allocations(
         if next_promise_date < date.today():
             raise ValueError("next_promise_date cannot be in the past")
     # Validate allocations before creating the payment
-    if amount_collected is None or amount_collected <= 0:
-        raise ValueError("amount_collected must be > 0")
+    # Allow special case: zero-amount submission to request a promise-date change
+    zero_amount_promise_change = (
+        (amount_collected is not None)
+        and Decimal(str(amount_collected)) == Decimal("0")
+        and next_promise_date is not None
+    )
+    if amount_collected is None or (
+        amount_collected <= 0 and not zero_amount_promise_change
+    ):
+        raise ValueError(
+            "amount_collected must be > 0 (or 0 only for promise-date change)"
+        )
     # Fetch all referenced bills
     bill_ids = [a["bill_id"] for a in allocations]
     # No duplicate bill allocations per payment
@@ -69,6 +79,23 @@ def create_payment_with_allocations(
     if not bill_ids:
         raise ValueError("At least one bill allocation is required")
     bills = {b.id: b for b in db.query(Bill).filter(Bill.id.in_(bill_ids)).all()}
+    # Prevent multiple concurrent promise-date change requests for the same bill
+    if zero_amount_promise_change and bill_ids:
+        existing_pd_change = (
+            db.query(PaymentAllocation)
+            .join(Payment, Payment.id == PaymentAllocation.payment_id)
+            .filter(
+                PaymentAllocation.bill_id.in_(bill_ids),
+                Payment.status.in_(
+                    [PaymentStatus.submitted, PaymentStatus.accountant_approved]
+                ),
+                Payment.amount_collected == 0,
+                Payment.next_promise_date.isnot(None),
+            )
+            .first()
+        )
+        if existing_pd_change:
+            raise ValueError("A promise-date change is already pending for this bill")
     # Reserved allocations from pending reviews (submitted or accountant_approved)
     reserved_rows = (
         db.query(
@@ -99,7 +126,11 @@ def create_payment_with_allocations(
         except Exception:
             pass
         if amt <= 0:
-            raise ValueError("Allocation amount must be > 0")
+            # Permit zero allocation only in the special promise-date change flow
+            if not (zero_amount_promise_change and amt == 0):
+                raise ValueError(
+                    "Allocation amount must be > 0 (0 only for promise-date change)"
+                )
         b = bills.get(bid)
         if not b:
             raise ValueError(f"Bill {bid} not found")
@@ -124,6 +155,10 @@ def create_payment_with_allocations(
             raise ValueError("Allocation exceeds bill remaining amount")
         # Allow backward updates; no per-bill forward-only restriction
         total_alloc += amt
+    # For promise-date change, enforce exactly one allocation with 0 matching amount_collected
+    if zero_amount_promise_change:
+        if len(allocations) != 1:
+            raise ValueError("Promise-date change must reference exactly one bill")
     # Normalize totals to 2dp for a robust equality comparison
     try:
         total_alloc = total_alloc.quantize(TWO_DP, rounding=ROUND_HALF_UP)
@@ -139,6 +174,7 @@ def create_payment_with_allocations(
     if total_alloc > amount_collected_dec:
         raise ValueError("Total allocations exceed amount_collected")
     if total_alloc != amount_collected_dec:
+        # Allow equality check to pass for zero-amount flows (already ensured above)
         raise ValueError("Allocation total must equal amount_collected")
     # Geo coordinate validation
     if exec_lat is not None:
@@ -240,6 +276,20 @@ def create_payment_with_allocations(
     db.refresh(p)
     # Immediate push notification to accountants for new submitted payment
     try:
+        # If this is a promise-date change created by an accountant, skip accountant-stage push
+        skip_push = False
+        try:
+            if (
+                Decimal(str(p.amount_collected)) == Decimal("0")
+                and getattr(p, "next_promise_date", None) is not None
+            ):
+                actor = db.query(User).filter(User.id == p.executive_id).one_or_none()
+                if actor and actor.role == Role.accountant:
+                    skip_push = True
+        except Exception:
+            pass
+        if skip_push:
+            return p
         accountant_users = (
             db.query(User)
             .filter(User.role == Role.accountant, User.is_active == True)
@@ -257,10 +307,34 @@ def create_payment_with_allocations(
             comp_part = p.company_code + (
                 f" ({comp.name})" if comp and getattr(comp, "name", None) else ""
             )
-            body = (
-                f"#{p.id} • {comp_part} • INR {_fmt_amount(p.amount_collected)} via {p.method} • "
-                f"Collected {p.collected_at.date().isoformat()} • Awaiting accountant approval"
-            )
+            if Decimal(str(p.amount_collected)) == Decimal("0") and p.next_promise_date:
+                # Try to add from->to context
+                from_str = None
+                try:
+                    alloc = (
+                        db.query(PaymentAllocation)
+                        .filter(PaymentAllocation.payment_id == p.id)
+                        .first()
+                    )
+                    if alloc:
+                        b = db.query(Bill).filter(Bill.id == alloc.bill_id).one_or_none()
+                        if b:
+                            old = getattr(b, "promise_date", None) or getattr(b, "due_date", None)
+                            from_str = old.isoformat() if hasattr(old, 'isoformat') else (str(old) if old else None)
+                except Exception:
+                    pass
+                to_str = p.next_promise_date.isoformat()
+                body = (
+                    f"#{p.id} • {comp_part} • Promise date change "
+                    f"{('from ' + from_str + ' ' if from_str else '')}to {to_str} • Awaiting accountant approval"
+                )
+                title = "Promise Date Change Requested"
+            else:
+                body = (
+                    f"#{p.id} • {comp_part} • INR {_fmt_amount(p.amount_collected)} via {p.method} • "
+                    f"Collected {p.collected_at.date().isoformat()} • Awaiting accountant approval"
+                )
+                title = "Payment Submitted"
             tokens = (
                 db.query(PushToken)
                 .filter(PushToken.user_id.in_([u.id for u in accountant_users]))
@@ -272,7 +346,7 @@ def create_payment_with_allocations(
                     _record_user_notification(
                         db,
                         u.id,
-                        "Payment Submitted",
+                        title,
                         body,
                         {"payment_id": p.id, "stage": "accountant"},
                     )
@@ -294,7 +368,7 @@ def create_payment_with_allocations(
                         "https://exp.host/--/api/v2/push/send",
                         json={
                             "to": t.token,
-                            "title": "Payment Submitted",
+                            "title": title,
                             "body": body,
                             "data": {"payment_id": p.id, "stage": "accountant"},
                         },

@@ -65,6 +65,7 @@ class BillPaymentHistoryItem(BaseModel):
     exec_location_verified: Optional[bool] = None
     exec_lat: Optional[float] = None
     exec_lng: Optional[float] = None
+    next_promise_date: Optional[date] = None
 
 
 class BillPaymentHistory(BaseModel):

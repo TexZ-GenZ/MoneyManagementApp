@@ -217,8 +217,50 @@ class ApiService {
     });
   }
 
+  // Minimal: Promise-date change as zero-amount payment
+  async requestBillPromiseDateChange(params: {
+    billId: number;
+    companyCode: string;
+    newPromiseDate: string; // YYYY-MM-DD
+    note?: string;
+  }): Promise<any> {
+    const payload = {
+      company_code: params.companyCode,
+      collected_at: new Date().toISOString(),
+      amount_collected: 0,
+      method: "system",
+      comments: params.note ?? undefined,
+      next_promise_date: params.newPromiseDate,
+      bill_allocations: [{ bill_id: params.billId, amount: 0 }],
+    };
+    return this.request<any>("/payments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
   async getPendingPayments(): Promise<Payment[]> {
     return this.request<Payment[]>("/payments/pending");
+  }
+
+  // Bill-specific payment history (for UI section)
+  async getBillPaymentHistory(billId: number): Promise<{
+    items: Array<{
+      payment_id: number;
+      amount: number;
+      payment_status: string;
+      collected_at: string;
+      method: string;
+      comments?: string | null;
+      accountant_comment?: string | null;
+      admin_comment?: string | null;
+      exec_location_verified?: boolean | null;
+      exec_lat?: number | null;
+      exec_lng?: number | null;
+    }>;
+    total: number;
+  }> {
+    return this.request(`/bills/${billId}/payments`);
   }
 
   async getExecutivePayments(executiveId: string): Promise<Payment[]> {

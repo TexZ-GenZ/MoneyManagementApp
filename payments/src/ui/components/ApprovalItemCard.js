@@ -23,7 +23,9 @@ export default function ApprovalItemCard({ item }) {
                         </View>
                     </View>
                     <View style={styles.topRight}>
-                        <Text style={styles.amount}>{formatCurrency(item.amount_collected)}</Text>
+                        <Text style={styles.amount}>
+                            {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : formatCurrency(item.amount_collected)}
+                        </Text>
                         <StatusBadge status={item.status} style={{ marginTop: 6 }} />
                     </View>
                 </View>

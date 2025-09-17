@@ -181,7 +181,10 @@ export default function AccountantDashboard() {
                   <View style={{ flex: 1, paddingRight: 10 }}>
                     <Text style={styles.recentTitle} numberOfLines={1}>{item.companyName}</Text>
                     <Text style={styles.recentMeta} numberOfLines={1}>{item.billNumbers && item.billNumbers.length ? `Bill ${item.billNumbers.join(', ')}` : 'No Bill'} • {item.executiveName}</Text>
-                    <Text style={styles.recentAmountLine} numberOfLines={1}>{item.amount_collected ? `₹${item.amount_collected}` : 'No Amount'}{item.status ? ` • ${item.status}` : ''}</Text>
+                    <Text style={styles.recentAmountLine} numberOfLines={1}>
+                      {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : (item.amount_collected ? `₹${item.amount_collected}` : 'No Amount')}
+                      {item.status ? ` • ${item.status}` : ''}
+                    </Text>
                   </View>
                   <TouchableOpacity style={styles.detailBtn} onPress={() => router.push({ pathname: '../(others)/PaymentApprovalDetail', params: { payment_id: item.id } })}>
                     <Text style={styles.detailBtnText}>Detail</Text>
