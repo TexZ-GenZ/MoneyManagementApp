@@ -1304,7 +1304,14 @@ def submit_bulk_payment(
     db: Session = Depends(get_db),
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
-    return submit_payment(body, user, db, idempotency_key)
+    # Call the single-payment handler with explicit request to satisfy rate limiter
+    return submit_payment(
+        request=request,
+        body=body,
+        user=user,
+        db=db,
+        idempotency_key=idempotency_key,
+    )
 
 
 @router.post(
