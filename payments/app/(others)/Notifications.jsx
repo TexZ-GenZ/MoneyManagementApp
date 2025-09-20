@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as ExpoNotifications from 'expo-notifications';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
@@ -21,6 +21,7 @@ export default function Notifications() {
     const pageSize = 40;
     const loadingMoreRef = useRef(false);
     const skipRef = useRef(0);
+    const router = useRouter();
 
     const fetchNotifs = useCallback(async (opts = { append: false }) => {
         if (loadingMoreRef.current) return;
@@ -84,6 +85,33 @@ export default function Notifications() {
         } catch (_) { }
     };
 
+    const openFromNotification = useCallback(async (it) => {
+        if (!it) return;
+        try {
+            // Best-effort parse of payload data (backend stores JSON string in data_json)
+            const data = it.data_json ? JSON.parse(it.data_json) : null;
+            if (data && (data.payment_id || data.paymentId)) {
+                const pid = String(data.payment_id || data.paymentId);
+                try { if (!it.acknowledged) await ackDelivered(it.id); } catch (_) { }
+                router.push({ pathname: '/(others)/PaymentApprovalDetail', params: { payment_id: pid } });
+                return;
+            }
+            if (data && (data.screen || data.stage)) {
+                const screen = String(data.screen || '').toLowerCase();
+                const stage = String(data.stage || '').toLowerCase();
+                try { if (!it.acknowledged) await ackDelivered(it.id); } catch (_) { }
+                if (screen === 'notifyadmin' || stage === 'admin') {
+                    router.push('/(others)/NotifyAdmin');
+                    return;
+                }
+                if (screen === 'notifyaccountant' || screen === 'approvals' || stage === 'accountant') {
+                    router.push('/(others)/NotifyAccountant');
+                    return;
+                }
+            }
+        } catch (_) { /* ignore parse/navigation errors */ }
+    }, [router]);
+
     // Include delivered items in unread count (acknowledged=false)
     const deliveredUnread = useMemo(() => items.filter(n => n && n.title && n.body && !n.acknowledged).length, [items]);
     const totalUnread = deliveredUnread || 0;
@@ -95,28 +123,30 @@ export default function Notifications() {
 
             const isAck = !!item.acknowledged;
             return (
-                <Card style={styles.itemCard}>
-                    <View style={styles.itemHeaderRow}>
-                        <View style={styles.iconCircle}>
-                            <Ionicons name="notifications-outline" size={18} color={tokens.colors.accent} />
+                <TouchableOpacity activeOpacity={0.85} onPress={() => openFromNotification(item)}>
+                    <Card style={styles.itemCard}>
+                        <View style={styles.itemHeaderRow}>
+                            <View style={styles.iconCircle}>
+                                <Ionicons name="notifications-outline" size={18} color={tokens.colors.accent} />
+                            </View>
+                            <View style={{ flex: 1, paddingRight: 8 }}>
+                                <Text style={styles.itemTitle} numberOfLines={2}>{String(item.title)}</Text>
+                            </View>
+                            {!isAck && (
+                                <View style={styles.unreadPill}><Text style={styles.unreadText}>UNREAD</Text></View>
+                            )}
                         </View>
-                        <View style={{ flex: 1, paddingRight: 8 }}>
-                            <Text style={styles.itemTitle} numberOfLines={2}>{String(item.title)}</Text>
+                        <Text style={[styles.itemLine]} numberOfLines={4}>{String(item.body)}</Text>
+                        <View style={styles.footerRow}>
+                            <Text style={styles.createdAt} numberOfLines={1} ellipsizeMode="tail">{createdLabel}</Text>
+                            {!isAck && (
+                                <TouchableOpacity style={styles.ackBtn} onPress={() => ackDelivered(item.id)}>
+                                    <Text style={styles.ackText}>Mark read</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
-                        {!isAck && (
-                            <View style={styles.unreadPill}><Text style={styles.unreadText}>UNREAD</Text></View>
-                        )}
-                    </View>
-                    <Text style={[styles.itemLine]} numberOfLines={4}>{String(item.body)}</Text>
-                    <View style={styles.footerRow}>
-                        <Text style={styles.createdAt} numberOfLines={1} ellipsizeMode="tail">{createdLabel}</Text>
-                        {!isAck && (
-                            <TouchableOpacity style={styles.ackBtn} onPress={() => ackDelivered(item.id)}>
-                                <Text style={styles.ackText}>Mark read</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </Card>
+                    </Card>
+                </TouchableOpacity>
             );
         }
         // Legacy/aggregated items are removed; only delivered items are rendered.
