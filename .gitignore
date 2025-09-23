@@ -49,5 +49,3 @@ expo-env.d.ts
 .vscode
 *.sublime-project
 *.sublime-workspace
-backend/.coverage
-backend/data/.master.import.lock
