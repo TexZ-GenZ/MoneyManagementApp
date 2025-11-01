@@ -6,7 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install dependencies (upgrade pip to latest for better resolver / wheels availability)
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir --upgrade pip \
+# Install system packages needed by tooling (e.g., psql client for test DB bootstrap)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and startup script

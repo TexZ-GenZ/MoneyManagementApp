@@ -12,7 +12,10 @@ from sqlalchemy import create_engine, text
 
 url = os.environ.get("DATABASE_URL", "")
 # Normalize driver for psycopg v3
-if url.startswith("postgresql://") and "+psycopg" not in url:
+# NOTE: previous indentation caused a SyntaxError in some shells; use proper left alignment
+if url.startswith("postgres://"):
+	url = url.replace("postgres://", "postgresql+psycopg://", 1)
+elif url.startswith("postgresql://") and "+psycopg" not in url:
 	url = url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 # Optionally force SSL when provider requires it (e.g., Railway)
