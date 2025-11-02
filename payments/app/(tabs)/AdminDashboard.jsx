@@ -144,11 +144,37 @@ export default function AdminDashboard() {
 
   const renderPayment = (item, index) => {
     const isLast = index === recentPayments.length - 1;
+    
+    // Get status dots color
+    const getStatusDots = (status) => {
+      const s = (status || '').toLowerCase();
+      if (s === 'pending' || s === 'submitted') {
+        return { show: true, color: '#FF4D4F' }; // Red
+      }
+      if (s === 'accountant_approved') {
+        return { show: true, color: '#FFD54F' }; // Yellow
+      }
+      if (s === 'admin_approved') {
+        return { show: true, color: '#4CAC8A' }; // Green
+      }
+      return { show: false };
+    };
+    
+    const statusDots = getStatusDots(item.status);
+    
     return (
       <View style={[styles.recentRow, isLast && styles.recentRowLast]}>
         <View style={styles.recentIcon}><Ionicons name="cash-outline" size={18} color={tokens.colors.accent} /></View>
         <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={styles.recentTitle} numberOfLines={1}>{item.companyName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {statusDots.show && (
+              <View style={{ flexDirection: 'row', gap: 3 }}>
+                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: statusDots.color }} />
+                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: statusDots.color }} />
+              </View>
+            )}
+            <Text style={styles.recentTitle} numberOfLines={1}>{item.companyName}</Text>
+          </View>
           <Text style={styles.recentMeta} numberOfLines={1}>
             {item.billNumbers && item.billNumbers.length ? `Bill ${item.billNumbers.join(', ')}` : 'No Bill'} • {item.executiveName}
           </Text>
