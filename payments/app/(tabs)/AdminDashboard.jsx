@@ -24,7 +24,7 @@ export default function AdminDashboard() {
   const navItems = [
     { label: 'Approve pending payments', icon: 'checkmark', route: '../(others)/NotifyAdmin' },
     { label: 'Promise Date', icon: 'calendar-outline', route: '../(others)/PromiseDate' },
-    { label: 'Settings', icon: 'settings-outline', route: '../admin/SettingsScreen' },
+    { label: 'Due Bills', icon: 'receipt-outline', route: '../(others)/ExecutiveList' },
   ];
 
   const onPressItem = (item) => router.push(item.route);

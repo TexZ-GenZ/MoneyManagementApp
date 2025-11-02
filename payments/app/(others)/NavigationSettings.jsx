@@ -13,6 +13,7 @@ export default function NavigationSettings() {
     { label: 'User info management', icon: 'person-circle-outline', route: '../(others)/ManageUsers' },
     { label: 'Modify company assignments', icon: 'git-branch-outline', route: '../(others)/CompanyAssignments' },
     { label: 'Companies list', icon: 'business-outline', route: '../CompanyList/AllCompanies' },
+    { label: 'Settings', icon: 'settings-outline', route: '../admin/SettingsScreen' },
   ];
 
   const onPressItem = (item) => {
