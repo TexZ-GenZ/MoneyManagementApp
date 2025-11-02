@@ -66,6 +66,46 @@ export default function MultiPayScreen() {
     })();
   }, [code, sortBy]);
 
+  // Auto-select bills in order when bills are first loaded
+  useEffect(() => {
+    if (bills.length === 0 || Object.keys(selected).length > 0) return; // Only run once when bills first load
+    
+    const autoSelectBills = () => {
+      let remainingAmount = initialTotal;
+      const newSelected = {};
+      let needsPromise = false;
+      
+      // Sort bills by oldest first (by bill_date)
+      const orderedBills = bills.slice().sort((a, b) => new Date(a.bill_date) - new Date(b.bill_date));
+      
+      for (const bill of orderedBills) {
+        if (remainingAmount <= 0) break;
+        
+        const outstanding = Math.max(0, Number(bill.amount) - Number(bill.amount_paid));
+        
+        if (outstanding <= remainingAmount) {
+          // Full payment - allocate entire outstanding amount
+          newSelected[bill.id] = outstanding;
+          remainingAmount -= outstanding;
+        } else if (remainingAmount > 0) {
+          // Partial payment - allocate remaining amount
+          newSelected[bill.id] = remainingAmount;
+          remainingAmount = 0;
+          needsPromise = true;
+        }
+      }
+      
+      setSelected(newSelected);
+      
+      // If any bill has partial payment, prompt for promise date
+      if (needsPromise) {
+        setTimeout(() => setPickerVisible(true), 500);
+      }
+    };
+    
+    autoSelectBills();
+  }, [bills, initialTotal]);
+
   // Location capture & enforcement (mandatory like PaymentScreen)
   const fetchLocation = async () => {
     setLocation(null);
