@@ -23,10 +23,7 @@ export default function AdminDashboard() {
 
   const navItems = [
     { label: 'Approve pending payments', icon: 'checkmark', route: '../(others)/NotifyAdmin' },
-    { label: 'Companies list', icon: 'business-outline', route: '../CompanyList/AllCompanies' },
-    { label: 'Executive wise company info', icon: 'people-outline', route: '../(others)/ExecutiveList' },
-    { label: 'Modify company assignments', icon: 'git-branch-outline', route: '../(others)/CompanyAssignments' },
-    { label: 'User info management', icon: 'person-circle-outline', route: '../(others)/ManageUsers' },
+    { label: 'Promise Date', icon: 'calendar-outline', route: '../(others)/PromiseDate' },
     { label: 'Settings', icon: 'settings-outline', route: '../admin/SettingsScreen' },
   ];
 
@@ -179,14 +176,19 @@ export default function AdminDashboard() {
             <Text style={styles.headerTitle}>Dashboard</Text>
             <Text style={styles.headerSubtitle}>Quick access & recent activity</Text>
           </View>
-          <TouchableOpacity onPress={() => { router.push('../(others)/Notifications'); }} style={styles.bellWrap} accessibilityRole="button" accessibilityLabel="Notifications">
-            <Ionicons name="notifications-outline" size={22} color={tokens.colors.text} />
-            {unread > 0 && (
-              <View style={styles.bellBadge} pointerEvents="none">
-                <Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity onPress={() => { router.push('../(others)/NavigationSettings'); }} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Navigation Settings">
+              <Ionicons name="grid-outline" size={22} color={tokens.colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { router.push('../(others)/Notifications'); }} style={styles.bellWrap} accessibilityRole="button" accessibilityLabel="Notifications">
+              <Ionicons name="notifications-outline" size={22} color={tokens.colors.text} />
+              {unread > 0 && (
+                <View style={styles.bellBadge} pointerEvents="none">
+                  <Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     >
@@ -230,7 +232,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   headerTitle: { fontSize: 30, fontWeight: '800', color: tokens.colors.text },
   headerSubtitle: { fontSize: 14, color: tokens.colors.textDim, marginTop: 4 },
-  bellWrap: { position: 'relative', padding: 8, marginLeft: 12 },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconBtn: { padding: 8, marginLeft: 4 },
+  bellWrap: { position: 'relative', padding: 8, marginLeft: 4 },
   bellBadge: { position: 'absolute', top: 2, right: 2, backgroundColor: tokens.colors.accent, borderRadius: 10, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#000' },
   bellBadgeText: { color: '#000', fontSize: 10, fontWeight: '800' },
   navCard: { paddingVertical: 20, paddingHorizontal: 10 },
