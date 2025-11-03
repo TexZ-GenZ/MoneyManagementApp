@@ -9,6 +9,7 @@ export default function NavigationSettings() {
   const router = useRouter();
 
   const navItems = [
+    { label: 'Approve pending payments', icon: 'checkmark-circle-outline', route: '../(others)/NotifyAdmin' },
     { label: 'Executive wise company info', icon: 'people-outline', route: '../(others)/ExecutiveList' },
     { label: 'User info management', icon: 'person-circle-outline', route: '../(others)/ManageUsers' },
     { label: 'Modify company assignments', icon: 'git-branch-outline', route: '../(others)/CompanyAssignments' },

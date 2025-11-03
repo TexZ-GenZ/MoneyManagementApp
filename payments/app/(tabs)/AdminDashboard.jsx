@@ -22,9 +22,9 @@ export default function AdminDashboard() {
   const { unread, refreshUnread } = useNotificationsBadge();
 
   const navItems = [
-    { label: 'Approve pending payments', icon: 'checkmark', route: '../(others)/NotifyAdmin' },
     { label: 'Promise Date', icon: 'calendar-outline', route: '../(others)/PromiseDate' },
     { label: 'Due Bills', icon: 'receipt-outline', route: '../(others)/ExecutiveList' },
+    { label: 'Approved Payments', icon: 'checkmark-done-outline', route: '../(others)/ApprovedPayments' },
   ];
 
   const onPressItem = (item) => router.push(item.route);
