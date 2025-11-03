@@ -215,9 +215,6 @@ export default function ApprovedPayments() {
                         </View>
                     )}
                 </View>
-                <View style={styles.clickHint}>
-                    <Ionicons name="chevron-forward" size={18} color={tokens.colors.textSubtle} />
-                </View>
             </Card>
         </TouchableOpacity>
     );
@@ -278,5 +275,4 @@ const styles = StyleSheet.create({
     metaRow: { borderTopWidth: 1, borderColor: tokens.colors.border, paddingTop: 10 },
     metaPair: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
     metaText: { fontSize: 12, color: tokens.colors.textDim, flex: 1 },
-    clickHint: { position: 'absolute', right: 16, top: '50%', marginTop: -9 },
 });

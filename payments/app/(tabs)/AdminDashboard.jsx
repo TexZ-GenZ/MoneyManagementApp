@@ -118,7 +118,7 @@ export default function AdminDashboard() {
   const navGrid = useMemo(() => navItems.map(it => it), [navItems]);
 
   const renderNavItem = ({ item }) => {
-    const showBadge = (item.route?.includes('NotifyAdmin') || item.label.toLowerCase().startsWith('approve')) && pendingTotal > 0;
+    const showBadge = (item.route?.includes('NotifyAdmin') || item.label.toLowerCase() === 'approve pending payments') && pendingTotal > 0;
     const badgeText = pendingTotal > 99 ? '99+' : String(pendingTotal);
     return (
       <TouchableOpacity
