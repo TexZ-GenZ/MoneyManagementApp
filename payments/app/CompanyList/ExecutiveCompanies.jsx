@@ -141,7 +141,6 @@ export default function ExecutiveCompaniesScreen() {
 
   const renderItem = ({ item }) => {
     const outbalNum = Number(item.outbal) || 0;
-    const amountNum = Number(item.amount) || 0;
     const execName = item.executive || item.executive_name || item.assigned_executive_username || item.assigned_executive_name || item.area || execUsername;
     return (
       <TouchableOpacity
@@ -164,10 +163,6 @@ export default function ExecutiveCompaniesScreen() {
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>OUTBAL</Text>
               <Text style={[styles.metricValue, outbalNum > 0 ? styles.dangerValue : null]} numberOfLines={1}>{outbalNum}</Text>
-            </View>
-            <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>AMOUNT</Text>
-              <Text style={styles.metricValue} numberOfLines={1}>{amountNum}</Text>
             </View>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>OVERDUE</Text>
