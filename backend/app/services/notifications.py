@@ -330,7 +330,11 @@ def _send_role_pending_pushes(db: Session):
     )
     admin_cnt = (
         db.query(Payment)
-        .filter(Payment.status == PaymentStatus.accountant_approved)
+        .filter(
+            Payment.status.in_(
+                [PaymentStatus.accountant_approved, PaymentStatus.submitted]
+            )
+        )
         .count()
     )
     log.debug(

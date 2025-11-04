@@ -995,7 +995,15 @@ def accountant_pending(
 ):
     q = db.query(Payment).filter(Payment.status == PaymentStatus.submitted)
     total = q.count()
-    items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    items = (
+        q.order_by(
+            (Payment.status != PaymentStatus.submitted),
+            Payment.collected_at.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return PaymentList(items=items, total=total)
 
 
@@ -2094,7 +2102,11 @@ def list_notifications(
         # Admin should see only admin-relevant notifications (awaiting admin approval)
         q = q.filter(Notification.type == NotificationType.payment_review)
         q = q.join(Payment, Payment.id == Notification.payment_id)
-        q = q.filter(Payment.status == PaymentStatus.accountant_approved)
+        q = q.filter(
+            Payment.status.in_(
+                [PaymentStatus.accountant_approved, PaymentStatus.submitted]
+            )
+        )
     if status:
         try:
             st = NotificationStatus(status)
@@ -2134,7 +2146,11 @@ def list_notifications(
         if user.role == Role.admin:
             count = (
                 db.query(Payment)
-                .filter(Payment.status == PaymentStatus.accountant_approved)
+                .filter(
+                    Payment.status.in_(
+                        [PaymentStatus.accountant_approved, PaymentStatus.submitted]
+                    )
+                )
                 .count()
             )
             role_stage = "admin"
@@ -2576,9 +2592,21 @@ def send_push(request: Request, payload: SendPushIn, db: Session = Depends(get_d
 def admin_pending(
     request: Request, db: Session = Depends(get_db), skip: int = 0, limit: int = 50
 ):
-    q = db.query(Payment).filter(Payment.status == PaymentStatus.accountant_approved)
+    q = db.query(Payment).filter(
+        Payment.status.in_(
+            [PaymentStatus.submitted, PaymentStatus.accountant_approved]
+        )
+    )
     total = q.count()
-    items = q.order_by(Payment.collected_at.desc()).offset(skip).limit(limit).all()
+    items = (
+        q.order_by(
+            (Payment.status != PaymentStatus.submitted),
+            Payment.collected_at.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return PaymentList(items=items, total=total)
 
 
@@ -2598,12 +2626,15 @@ def admin_approve(
         p_row = db.get(Payment, payment_id)
         if not p_row:
             raise ValueError
-        if p_row.status != PaymentStatus.accountant_approved:
+        if p_row.status not in (
+            PaymentStatus.accountant_approved,
+            PaymentStatus.submitted,
+        ):
             raise HTTPException(
                 status_code=400,
-                detail="Only accountant-approved payments can be approved by admin",
+                detail="Only pending payments can be approved by admin",
             )
-        p = admin_approve_payment(db, payment_id)
+        p = admin_approve_payment(db, payment_id, allow_bypass=True)
         if comment:
             p.admin_comment = comment
             db.add(p)
@@ -2629,10 +2660,13 @@ def admin_decline(
     p = db.get(Payment, payment_id)
     if not p:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if p.status != PaymentStatus.accountant_approved:
+    if p.status not in (
+        PaymentStatus.accountant_approved,
+        PaymentStatus.submitted,
+    ):
         raise HTTPException(
             status_code=400,
-            detail="Only accountant-approved payments can be declined by admin",
+            detail="Only pending payments can be declined by admin",
         )
     p.status = PaymentStatus.declined_by_admin
     p.admin_review_at = datetime.utcnow()

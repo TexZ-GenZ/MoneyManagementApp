@@ -391,7 +391,9 @@ def create_payment_with_allocations(
     return p
 
 
-def admin_approve_payment(db: Session, payment_id: int) -> Payment:
+def admin_approve_payment(
+    db: Session, payment_id: int, allow_bypass: bool = False
+) -> Payment:
     # Lock payment row and ensure status transition is valid (optimistic concurrency)
     p = (
         db.query(Payment)
@@ -401,7 +403,11 @@ def admin_approve_payment(db: Session, payment_id: int) -> Payment:
     )
     if not p:
         raise ValueError("Payment not found")
-    if p.status != PaymentStatus.accountant_approved:
+    if p.status == PaymentStatus.accountant_approved:
+        pass
+    elif allow_bypass and p.status == PaymentStatus.submitted:
+        pass
+    else:
         raise ValueError("Invalid state for admin approval")
     # allocate amounts
     allocs = (
