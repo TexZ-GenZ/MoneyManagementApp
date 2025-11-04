@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import Screen from '../../src/ui/components/Screen';
@@ -11,6 +11,8 @@ import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '../../src/utils/constants';
 import { useNotificationsBadge } from '../../src/ui/hooks/useNotificationsBadge';
 import { onBadgeChange } from '../../src/events/notificationsEvents';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { useAppSelector } from '../../src/store/hooks';
 
 export default function ExecutiveDashboard() {
   const router = useRouter();
@@ -21,6 +23,10 @@ export default function ExecutiveDashboard() {
   const [viewMode, setViewMode] = useState('overdue'); // overdue | upcoming
   const [overdueBills, setOverdueBills] = useState([]);
   const [loadingBills, setLoadingBills] = useState(false);
+  const userRole = useAppSelector(s => s.auth.user?.role || '');
+  const [promiseTarget, setPromiseTarget] = useState(null);
+  const [promisePickerVisible, setPromisePickerVisible] = useState(false);
+  const [promiseUpdatingId, setPromiseUpdatingId] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
@@ -67,46 +73,45 @@ export default function ExecutiveDashboard() {
   }, []);
 
   // After companies load, fetch overdue bills across assigned companies (only those with any overdue_count)
-  useEffect(() => {
-    const fetchOverdue = async () => {
-      if (!companies || companies.length === 0) { setOverdueBills([]); return; }
-      setLoadingBills(true);
-      try {
-        const token = await StorageService.getToken();
-        const base = API_BASE_URL;
-        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` };
-        const targets = (companies || []).filter(c => (c?.overdue_count || 0) > 0);
-        // Cap to a reasonable number to avoid too many parallel requests
-        const limited = targets.slice(0, 30);
-        const results = await Promise.allSettled(limited.map(async (c) => {
-          try {
-            const r = await fetch(`${base}/companies/${encodeURIComponent(c.code)}/bills?status=pending&sort=oldest`, { headers });
-            if (!r.ok) return [];
-            const data = await r.json().catch(() => ({}));
-            const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
-            return items
-              .filter(isBillOverdue)
-              .map(b => ({
-                ...b,
-                __company_code: c.code,
-                __company_name: c.name,
-                __company_area: c.area,
-              }));
-          } catch { return []; }
-        }));
-        const flat = results.flatMap(res => res.status === 'fulfilled' ? res.value : []);
-        // Sort by effective due date ascending
-        const getDue = (b) => {
-          const d = b?.promise_date || b?.due_date; const dt = d ? new Date(d) : null; if (!dt) return 0; dt.setHours(0, 0, 0, 0); return dt.getTime();
-        };
-        flat.sort((a, b) => getDue(a) - getDue(b));
-        setOverdueBills(flat);
-      } catch {
-        setOverdueBills([]);
-      } finally { setLoadingBills(false); }
-    };
-    fetchOverdue();
+  const fetchOverdueBills = useCallback(async () => {
+    if (!companies || companies.length === 0) { setOverdueBills([]); return; }
+    setLoadingBills(true);
+    try {
+      const token = await StorageService.getToken();
+      const base = API_BASE_URL;
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token?.access_token}` };
+      const targets = (companies || []).filter(c => (c?.overdue_count || 0) > 0);
+      // Cap to a reasonable number to avoid too many parallel requests
+      const limited = targets.slice(0, 30);
+      const results = await Promise.allSettled(limited.map(async (c) => {
+        try {
+          const r = await fetch(`${base}/companies/${encodeURIComponent(c.code)}/bills?status=pending&sort=oldest`, { headers });
+          if (!r.ok) return [];
+          const data = await r.json().catch(() => ({}));
+          const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+          return items
+            .filter(isBillOverdue)
+            .map(b => ({
+              ...b,
+              __company_code: c.code,
+              __company_name: c.name,
+              __company_area: c.area,
+            }));
+        } catch { return []; }
+      }));
+      const flat = results.flatMap(res => res.status === 'fulfilled' ? res.value : []);
+      // Sort by effective due date ascending
+      const getDue = (b) => {
+        const d = b?.promise_date || b?.due_date; const dt = d ? new Date(d) : null; if (!dt) return 0; dt.setHours(0, 0, 0, 0); return dt.getTime();
+      };
+      flat.sort((a, b) => getDue(a) - getDue(b));
+      setOverdueBills(flat);
+    } catch {
+      setOverdueBills([]);
+    } finally { setLoadingBills(false); }
   }, [companies, isBillOverdue]);
+
+  useEffect(() => { fetchOverdueBills(); }, [fetchOverdueBills]);
 
   const today = useMemo(() => new Date(), []);
   const parseDate = (d) => { try { return d ? new Date(d) : null; } catch { return null; } };
@@ -141,9 +146,13 @@ export default function ExecutiveDashboard() {
     , [enriched]);
 
   const activeList = viewMode === 'upcoming' ? upcomingCompanies : overdueCompanies;
-  const previewBills = (overdueBills || []).slice(0, 8);
+  const previewBills = useMemo(() => (overdueBills || []).slice(0, 20), [overdueBills]);
 
   const nextActionableCount = overdueBills.length;
+  const canChangePromise = useMemo(() => {
+    const role = (userRole || '').toLowerCase();
+    return role === 'admin' || role === 'executive' || role === 'accountant';
+  }, [userRole]);
 
   const formatShortDate = (d) => d ? formatDate(d) : '—';
   const badgeFor = (it) => {
@@ -152,11 +161,117 @@ export default function ExecutiveDashboard() {
     if (bucket === 'upcoming') return <Text style={[styles.badge, styles.badgeUpcoming]}>{formatShortDate(it.__cls.due)}</Text>;
     return null;
   };
+  const toLocalYMD = (date) => {
+    if (!date) return '';
+    const dt = new Date(date);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const handleOpenPromisePicker = (bill) => {
+    setPromiseTarget(bill);
+    setPromisePickerVisible(true);
+  };
+  const handlePromiseCancel = () => {
+    setPromisePickerVisible(false);
+    setPromiseTarget(null);
+  };
+  const minPromiseDate = useMemo(() => {
+    if (!promiseTarget) return new Date();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const candidates = [today.getTime()];
+    if (promiseTarget?.promise_date) {
+      const existing = new Date(promiseTarget.promise_date);
+      if (!isNaN(existing.getTime())) {
+        existing.setHours(0, 0, 0, 0);
+        candidates.push(existing.getTime());
+      }
+    }
+    return new Date(Math.max(...candidates));
+  }, [promiseTarget]);
+  const doSubmitPromiseDate = useCallback(async (iso) => {
+    if (!promiseTarget) return;
+    const role = (userRole || '').toLowerCase();
+    const billIdRaw = promiseTarget?.id ?? promiseTarget?.bill_id;
+    const billId = billIdRaw ? Number(billIdRaw) : null;
+    const companyCode = promiseTarget?.__company_code || promiseTarget?.company_code || promiseTarget?.company?.code || promiseTarget?.code;
+    if (!billId || !companyCode) {
+      Alert.alert('Error', 'Missing bill details. Open the bill to update the promise date.');
+      setPromiseTarget(null);
+      return;
+    }
+    try {
+      setPromiseUpdatingId(String(billId));
+      const token = await StorageService.getToken();
+      if (!token?.access_token) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+      if (role === 'admin') {
+        const resp = await fetch(`${API_BASE_URL}/admin/bills/${billId}/promise-date`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.access_token}` },
+          body: JSON.stringify({ promise_date: iso }),
+        });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(txt || 'HTTP error');
+        }
+        Alert.alert('Updated', 'Promise date updated.');
+      } else {
+        const resp = await fetch(`${API_BASE_URL}/payments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token.access_token}` },
+          body: JSON.stringify({
+            company_code: companyCode,
+            collected_at: new Date().toISOString(),
+            amount_collected: 0,
+            method: 'system',
+            comments: role === 'executive' ? `Promise date change to ${iso}` : null,
+            next_promise_date: iso,
+            bill_allocations: [{ bill_id: billId, amount: 0 }],
+          }),
+        });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(txt || 'HTTP error');
+        }
+        Alert.alert('Submitted', role === 'accountant' ? 'Sent to Admin for approval.' : 'Sent to Accountant for approval.');
+      }
+      await fetchOverdueBills();
+    } catch (e) {
+      console.error('update promise failed', e);
+      const msg = String(e?.message || e);
+      Alert.alert('Error', msg.includes('earlier') ? 'Promise date cannot be earlier than credit date or current promise.' : 'Failed to update promise date.');
+    } finally {
+      setPromiseUpdatingId(null);
+      setPromiseTarget(null);
+      setPromisePickerVisible(false);
+    }
+  }, [fetchOverdueBills, promiseTarget, userRole]);
+  const submitPromiseDate = (pickedDate) => {
+    if (!pickedDate || !promiseTarget) {
+      handlePromiseCancel();
+      return;
+    }
+    const iso = toLocalYMD(pickedDate);
+    setPromisePickerVisible(false);
+    Alert.alert(
+      'Confirm Change',
+      `Change promise date to ${formatDate(iso)}?`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => setPromiseTarget(null) },
+        { text: 'Yes, Continue', style: 'destructive', onPress: () => doSubmitPromiseDate(iso) },
+      ]
+    );
+  };
   const renderBillItem = ({ item }) => {
     const dueLike = item?.promise_date || item?.due_date;
     // Robust fallbacks to ensure we always show the assigned company name/code
     const companyName = item.__company_name || item.company_name || item.company?.name || item.company || '—';
     const companyCode = item.__company_code || item.company_code || item.company?.code || item.code || '';
+    const itemId = item?.id ?? item?.bill_id;
+    const isUpdatingPromise = promiseUpdatingId && String(promiseUpdatingId) === String(itemId);
     return (
       <Card style={styles.companyCard}>
         <TouchableOpacity
@@ -192,6 +307,18 @@ export default function ExecutiveDashboard() {
           </View>
           <Text style={[styles.badge, styles.badgeOverdue]}>BILL</Text>
         </TouchableOpacity>
+        {canChangePromise && (
+          <View style={styles.promiseActionRow}>
+            <TouchableOpacity
+              style={[styles.promiseInlineBtn, isUpdatingPromise && styles.promiseInlineBtnDisabled]}
+              onPress={() => handleOpenPromisePicker(item)}
+              activeOpacity={0.8}
+              disabled={!!isUpdatingPromise}
+            >
+              <Text style={styles.promiseInlineBtnText}>{isUpdatingPromise ? 'Updating...' : 'Change Promise Date'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </Card>
     );
   };
@@ -300,6 +427,13 @@ export default function ExecutiveDashboard() {
         )}
       </Card>
       <View style={{ marginBottom: 30 }} ></View>
+      <DateTimePickerModal
+        isVisible={promisePickerVisible}
+        mode="date"
+        onConfirm={submitPromiseDate}
+        onCancel={handlePromiseCancel}
+        minimumDate={minPromiseDate}
+      />
     </Screen>
   );
 }
@@ -347,4 +481,8 @@ const styles = StyleSheet.create({
   badgeUpcoming: { backgroundColor: tokens.colors.accent, color: '#000' },
   empty: { color: tokens.colors.textDim, fontSize: 12, padding: 16, textAlign: 'center' },
   errorText: { color: tokens.colors.danger, fontSize: 12, textAlign: 'center' },
+  promiseActionRow: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 0 },
+  promiseInlineBtn: { marginTop: -6, alignSelf: 'flex-start', backgroundColor: tokens.colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  promiseInlineBtnText: { color: '#000', fontWeight: '700', fontSize: 12, letterSpacing: 0.4 },
+  promiseInlineBtnDisabled: { opacity: 0.6 },
 });

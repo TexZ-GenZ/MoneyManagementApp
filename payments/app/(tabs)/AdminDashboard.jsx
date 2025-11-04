@@ -22,12 +22,9 @@ export default function AdminDashboard() {
   const { unread, refreshUnread } = useNotificationsBadge();
 
   const navItems = [
-    { label: 'Approve pending payments', icon: 'checkmark', route: '../(others)/NotifyAdmin' },
-    { label: 'Companies list', icon: 'business-outline', route: '../CompanyList/AllCompanies' },
-    { label: 'Executive wise company info', icon: 'people-outline', route: '../(others)/ExecutiveList' },
-    { label: 'Modify company assignments', icon: 'git-branch-outline', route: '../(others)/CompanyAssignments' },
-    { label: 'User info management', icon: 'person-circle-outline', route: '../(others)/ManageUsers' },
-    { label: 'Settings', icon: 'settings-outline', route: '../admin/SettingsScreen' },
+    { label: 'Promise Date', icon: 'calendar-outline', route: '../(others)/PromiseDate' },
+    { label: 'Due Bills', icon: 'receipt-outline', route: '../(others)/ExecutiveList' },
+    { label: 'Approvals', icon: 'checkmark-done-outline', route: '../(others)/ApprovedPayments' },
   ];
 
   const onPressItem = (item) => router.push(item.route);
@@ -121,7 +118,7 @@ export default function AdminDashboard() {
   const navGrid = useMemo(() => navItems.map(it => it), [navItems]);
 
   const renderNavItem = ({ item }) => {
-    const showBadge = (item.route?.includes('NotifyAdmin') || item.label.toLowerCase().startsWith('approve')) && pendingTotal > 0;
+    const showBadge = (item.route?.includes('NotifyAdmin') || item.label.toLowerCase() === 'approve pending payments') && pendingTotal > 0;
     const badgeText = pendingTotal > 99 ? '99+' : String(pendingTotal);
     return (
       <TouchableOpacity
@@ -147,11 +144,37 @@ export default function AdminDashboard() {
 
   const renderPayment = (item, index) => {
     const isLast = index === recentPayments.length - 1;
+    
+    // Get status dots color
+    const getStatusDots = (status) => {
+      const s = (status || '').toLowerCase();
+      if (s === 'pending' || s === 'submitted') {
+        return { show: true, color: '#FF4D4F' }; // Red
+      }
+      if (s === 'accountant_approved') {
+        return { show: true, color: '#FFD54F' }; // Yellow
+      }
+      if (s === 'admin_approved') {
+        return { show: true, color: '#4CAC8A' }; // Green
+      }
+      return { show: false };
+    };
+    
+    const statusDots = getStatusDots(item.status);
+    
     return (
       <View style={[styles.recentRow, isLast && styles.recentRowLast]}>
         <View style={styles.recentIcon}><Ionicons name="cash-outline" size={18} color={tokens.colors.accent} /></View>
         <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={styles.recentTitle} numberOfLines={1}>{item.companyName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {statusDots.show && (
+              <View style={{ flexDirection: 'row', gap: 3 }}>
+                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: statusDots.color }} />
+                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: statusDots.color }} />
+              </View>
+            )}
+            <Text style={styles.recentTitle} numberOfLines={1}>{item.companyName}</Text>
+          </View>
           <Text style={styles.recentMeta} numberOfLines={1}>
             {item.billNumbers && item.billNumbers.length ? `Bill ${item.billNumbers.join(', ')}` : 'No Bill'} • {item.executiveName}
           </Text>
@@ -179,14 +202,19 @@ export default function AdminDashboard() {
             <Text style={styles.headerTitle}>Dashboard</Text>
             <Text style={styles.headerSubtitle}>Quick access & recent activity</Text>
           </View>
-          <TouchableOpacity onPress={() => { router.push('../(others)/Notifications'); }} style={styles.bellWrap} accessibilityRole="button" accessibilityLabel="Notifications">
-            <Ionicons name="notifications-outline" size={22} color={tokens.colors.text} />
-            {unread > 0 && (
-              <View style={styles.bellBadge} pointerEvents="none">
-                <Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity onPress={() => { router.push('../(others)/NavigationSettings'); }} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Navigation Settings">
+              <Ionicons name="grid-outline" size={22} color={tokens.colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { router.push('../(others)/Notifications'); }} style={styles.bellWrap} accessibilityRole="button" accessibilityLabel="Notifications">
+              <Ionicons name="notifications-outline" size={22} color={tokens.colors.text} />
+              {unread > 0 && (
+                <View style={styles.bellBadge} pointerEvents="none">
+                  <Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     >
@@ -230,7 +258,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   headerTitle: { fontSize: 30, fontWeight: '800', color: tokens.colors.text },
   headerSubtitle: { fontSize: 14, color: tokens.colors.textDim, marginTop: 4 },
-  bellWrap: { position: 'relative', padding: 8, marginLeft: 12 },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconBtn: { padding: 8, marginLeft: 4 },
+  bellWrap: { position: 'relative', padding: 8, marginLeft: 4 },
   bellBadge: { position: 'absolute', top: 2, right: 2, backgroundColor: tokens.colors.accent, borderRadius: 10, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#000' },
   bellBadgeText: { color: '#000', fontSize: 10, fontWeight: '800' },
   navCard: { paddingVertical: 20, paddingHorizontal: 10 },

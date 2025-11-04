@@ -28,7 +28,13 @@ from app.schemas.company import (
     AssignmentBatchIn,
     UnassignBatchIn,
 )
-from app.schemas.bill import BillList, BillOut, BillUpdatePromise
+from app.schemas.bill import (
+    BillList,
+    BillOut,
+    BillUpdatePromise,
+    UpcomingPromiseBuckets,
+    UpcomingPromiseBill,
+)
 from app.schemas.payment import (
     PaymentSubmit,
     PaymentOut,
@@ -1224,6 +1230,113 @@ def payments_activity(
     except Exception as e:
         print(f"Error in payments_activity: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get(
+    "/admin/promises/upcoming",
+    response_model=UpcomingPromiseBuckets,
+    dependencies=[Depends(require_roles("admin", "accountant"))],
+)
+@user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
+def admin_upcoming_promises(
+    request: Request,
+    db: Session = Depends(get_db),
+    limit_per_bucket: int = Query(50, ge=1, le=200),
+):
+    today = date.today()
+    credit_settings = ensure_settings_row(db)
+    credit_days = credit_settings.credit_extension_days or 0
+
+    bucket_specs = [
+        ("1d", 0, 1),
+        ("3d", 2, 3),
+        ("5d", 4, 5),
+        ("1w", 6, 7),
+        ("2w", 8, 14),
+    ]
+    buckets: dict[str, list[UpcomingPromiseBill]] = {
+        key: [] for key, _, _ in bucket_specs
+    }
+    max_window = max(upper for _, _, upper in bucket_specs)
+
+    exec_sub = (
+        db.query(
+            ExecAssignment.company_code.label("company_code"),
+            func.min(ExecAssignment.executive_id).label("executive_id"),
+        )
+        .group_by(ExecAssignment.company_code)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            Bill.id.label("bill_id"),
+            Bill.bill_number,
+            Bill.company_code,
+            Bill.bill_date,
+            Bill.due_date,
+            Bill.promise_date,
+            Bill.amount,
+            Bill.amount_paid,
+            Company.name.label("company_name"),
+            exec_sub.c.executive_id,
+            User.username.label("executive_username"),
+        )
+        .join(Company, Company.code == Bill.company_code)
+        .outerjoin(exec_sub, exec_sub.c.company_code == Bill.company_code)
+        .outerjoin(User, User.id == exec_sub.c.executive_id)
+        .filter(Bill.is_archived == False)
+        .filter(Bill.status == BillStatus.pending)
+        .order_by(func.coalesce(Bill.promise_date, Bill.due_date, Bill.bill_date).asc())
+        .all()
+    )
+
+    for row in rows:
+        promise_date = row.promise_date
+        if promise_date is None:
+            if row.bill_date:
+                promise_date = row.bill_date + timedelta(days=credit_days or 0)
+            else:
+                promise_date = row.due_date
+        if not promise_date:
+            continue
+
+        days_until = (promise_date - today).days
+        if days_until < 0:
+            continue
+        if days_until > max_window:
+            break
+
+        outstanding = (row.amount or Decimal("0")) - (row.amount_paid or Decimal("0"))
+        if outstanding <= 0:
+            continue
+
+        bucket_key = None
+        for key, lower, upper in bucket_specs:
+            if lower <= days_until <= upper:
+                bucket_key = key
+                break
+        if not bucket_key:
+            continue
+
+        bucket = buckets[bucket_key]
+        if len(bucket) >= limit_per_bucket:
+            continue
+
+        bucket.append(
+            UpcomingPromiseBill(
+                bill_id=row.bill_id,
+                bill_number=row.bill_number,
+                company_code=row.company_code,
+                company_name=row.company_name,
+                executive_id=row.executive_id,
+                executive_name=row.executive_username,
+                promise_date=promise_date,
+                outstanding_amount=outstanding,
+            )
+        )
+
+    return UpcomingPromiseBuckets(buckets=buckets, generated_at=datetime.utcnow())
 
 
 # Admin utility: reconcile per-bill promise dates from approved payments
