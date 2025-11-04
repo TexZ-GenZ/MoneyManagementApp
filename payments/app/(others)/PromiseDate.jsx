@@ -179,8 +179,8 @@ export default function PromiseDate() {
       backButton
     >
       <View style={styles.filterContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScroll}
         >
@@ -192,7 +192,7 @@ export default function PromiseDate() {
               All ({totalCount})
             </Text>
           </TouchableOpacity>
-          
+
           {TIME_PERIODS.map((period) => {
             const count = (bucketData[period.key] || []).length;
             return (

@@ -440,8 +440,8 @@ def test_accountant_approve_wrong_state_400(client, db_session):
     assert "Only submitted payments" in r.text
 
 
-def test_admin_approve_wrong_state_400(client, db_session):
-    # Payment still submitted, admin cannot approve yet
+def test_admin_can_bypass_accountant_stage(client, db_session):
+    # Payment still submitted, admin can approve directly (bypass accountant)
     exec_user = create_user(db_session, "exec_admin_wrong", Role.executive)
     comp, bill = create_company_with_bill(db_session, code="PADM1")
     from app.models.models import ExecAssignment
@@ -474,8 +474,9 @@ def test_admin_approve_wrong_state_400(client, db_session):
     r = client.post(
         f"/admin/payments/{p['id']}/approve", headers=auth_headers(admin_token)
     )
-    assert r.status_code == 400
-    assert "Only accountant-approved payments" in r.text
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == PaymentStatus.admin_approved.value
 
 
 def test_admin_user_duplicate_username_400(client, db_session):

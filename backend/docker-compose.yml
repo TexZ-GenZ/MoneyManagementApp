@@ -47,7 +47,7 @@ services:
   tests:
     build: ./
     env_file: .env
-    profiles: [tests]
+    profiles: [ tests ]
     depends_on:
       db:
         condition: service_healthy
