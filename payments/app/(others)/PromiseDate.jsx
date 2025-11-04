@@ -1,97 +1,13 @@
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { formatDate, formatCurrency } from '../../src/ui/format';
-
-// Mock data - will be replaced with API call later
-const MOCK_DATA = {
-  '1d': [
-    {
-      bill_number: 'INV-2025-001',
-      company_name: 'Tech Solutions Ltd',
-      company_code: 'TECH001',
-      executive_name: 'Rajesh Kumar',
-      promise_date: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 125000,
-      bill_id: 101
-    },
-    {
-      bill_number: 'INV-2025-045',
-      company_name: 'Global Enterprises',
-      company_code: 'GLB045',
-      executive_name: 'Priya Sharma',
-      promise_date: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 87500,
-      bill_id: 102
-    }
-  ],
-  '3d': [
-    {
-      bill_number: 'INV-2025-023',
-      company_name: 'Alpha Industries',
-      company_code: 'ALP023',
-      executive_name: 'Amit Patel',
-      promise_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 215000,
-      bill_id: 103
-    },
-    {
-      bill_number: 'INV-2025-067',
-      company_name: 'Sunrise Corp',
-      company_code: 'SUN067',
-      executive_name: 'Rajesh Kumar',
-      promise_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 156000,
-      bill_id: 104
-    }
-  ],
-  '5d': [
-    {
-      bill_number: 'INV-2025-089',
-      company_name: 'Metro Traders',
-      company_code: 'MET089',
-      executive_name: 'Sneha Gupta',
-      promise_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 98000,
-      bill_id: 105
-    }
-  ],
-  '1w': [
-    {
-      bill_number: 'INV-2025-112',
-      company_name: 'Vertex Solutions',
-      company_code: 'VER112',
-      executive_name: 'Vikram Singh',
-      promise_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 340000,
-      bill_id: 106
-    },
-    {
-      bill_number: 'INV-2025-134',
-      company_name: 'Phoenix Enterprises',
-      company_code: 'PHX134',
-      executive_name: 'Priya Sharma',
-      promise_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 189000,
-      bill_id: 107
-    }
-  ],
-  '2w': [
-    {
-      bill_number: 'INV-2025-156',
-      company_name: 'Stellar Industries',
-      company_code: 'STL156',
-      executive_name: 'Amit Patel',
-      promise_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-      outstanding_amount: 267000,
-      bill_id: 108
-    }
-  ]
-};
+import { StorageService } from '../../src/services/storageService';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 const TIME_PERIODS = [
   { key: '1d', label: '1 Day' },
@@ -104,6 +20,82 @@ const TIME_PERIODS = [
 export default function PromiseDate() {
   const router = useRouter();
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [buckets, setBuckets] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [generatedAt, setGeneratedAt] = useState(null);
+  const firstFocus = useRef(true);
+
+  const fetchBuckets = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    setError(null);
+    try {
+      const token = await StorageService.getToken();
+      const resp = await fetch(`${API_BASE_URL}/admin/promises/upcoming`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token.access_token}` } : {}),
+        },
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || 'Request failed');
+      }
+      const data = await resp.json();
+      setBuckets(data?.buckets || {});
+      setGeneratedAt(data?.generated_at || null);
+    } catch (err) {
+      console.error('failed to load upcoming promises', err);
+      setError('Could not load upcoming promise buckets.');
+    } finally {
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => { fetchBuckets(false); }, [fetchBuckets]);
+
+  useFocusEffect(useCallback(() => {
+    if (firstFocus.current) {
+      firstFocus.current = false;
+      return;
+    }
+    fetchBuckets(true);
+  }, [fetchBuckets]));
+
+  const bucketData = useMemo(() => buckets || {}, [buckets]);
+  const activeKeys = useMemo(() => (
+    selectedFilter === 'all' ? TIME_PERIODS.map(p => p.key) : [selectedFilter]
+  ), [selectedFilter]);
+
+  const totalCount = useMemo(() => (
+    activeKeys.reduce((sum, key) => sum + ((bucketData[key] || []).length), 0)
+  ), [activeKeys, bucketData]);
+
+  const totalAmount = useMemo(() => (
+    activeKeys.reduce((sum, key) => (
+      sum + (bucketData[key] || []).reduce((inner, item) => inner + Number(item.outstanding_amount || 0), 0)
+    ), 0)
+  ), [activeKeys, bucketData]);
+
+  const lastUpdatedLabel = useMemo(() => {
+    if (!generatedAt) return 'Updated just now';
+    try {
+      const dt = new Date(generatedAt);
+      if (Number.isNaN(dt.getTime())) return 'Updated just now';
+      return `Updated ${dt.toLocaleString()}`;
+    } catch {
+      return 'Updated just now';
+    }
+  }, [generatedAt]);
 
   const handleItemPress = (item) => {
     router.push({
@@ -114,17 +106,18 @@ export default function PromiseDate() {
         code: item.company_code,
         name: item.company_name,
         outbal: item.outstanding_amount,
-        promise_date: item.promise_date
-      }
+        promise_date: item.promise_date,
+      },
     });
   };
 
   const renderPaymentItem = (item, periodKey) => {
-    const daysUntil = Math.ceil((new Date(item.promise_date) - new Date()) / (1000 * 60 * 60 * 24));
-    
+    const promiseDate = item.promise_date ? new Date(item.promise_date) : null;
+    const daysUntil = promiseDate ? Math.max(0, Math.ceil((promiseDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0;
+
     return (
       <TouchableOpacity
-        key={`${periodKey}-${item.bill_number}`}
+        key={`${periodKey}-${item.bill_id}`}
         style={styles.paymentItem}
         onPress={() => handleItemPress(item)}
         activeOpacity={0.7}
@@ -135,24 +128,24 @@ export default function PromiseDate() {
               <Ionicons name="document-text-outline" size={16} color={tokens.colors.accent} />
               <Text style={styles.billNumber}>{item.bill_number}</Text>
             </View>
-            <Text style={styles.companyName}>{item.company_name}</Text>
+            <Text style={styles.companyName}>{item.company_name || item.company_code}</Text>
           </View>
           <View style={styles.itemRight}>
-            <Text style={styles.amount}>{formatCurrency(item.outstanding_amount)}</Text>
+            <Text style={styles.amount}>{formatCurrency(Number(item.outstanding_amount || 0))}</Text>
             <View style={styles.daysTag}>
               <Text style={styles.daysText}>{daysUntil}d</Text>
             </View>
           </View>
         </View>
-        
+
         <View style={styles.itemFooter}>
           <View style={styles.metaRow}>
             <Ionicons name="person-outline" size={14} color={tokens.colors.textDim} />
-            <Text style={styles.metaText}>{item.executive_name}</Text>
+            <Text style={styles.metaText}>{item.executive_name || '—'}</Text>
           </View>
           <View style={styles.metaRow}>
             <Ionicons name="calendar-outline" size={14} color={tokens.colors.textDim} />
-            <Text style={styles.metaText}>{formatDate(item.promise_date)}</Text>
+            <Text style={styles.metaText}>{item.promise_date ? formatDate(item.promise_date) : '—'}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -160,9 +153,9 @@ export default function PromiseDate() {
   };
 
   const renderSection = (periodKey, periodLabel) => {
-    const items = MOCK_DATA[periodKey] || [];
-    if (items.length === 0) return null;
     if (selectedFilter !== 'all' && selectedFilter !== periodKey) return null;
+    const items = bucketData[periodKey] || [];
+    if (items.length === 0) return null;
 
     return (
       <View key={periodKey} style={styles.section}>
@@ -179,21 +172,12 @@ export default function PromiseDate() {
     );
   };
 
-  // Calculate total items for selected filter
-  const getTotalCount = () => {
-    if (selectedFilter === 'all') {
-      return Object.values(MOCK_DATA).reduce((sum, items) => sum + items.length, 0);
-    }
-    return MOCK_DATA[selectedFilter]?.length || 0;
-  };
-
   return (
     <Screen
       title="Upcoming Collections"
       scroll
       backButton
     >
-      {/* Filter Buttons */}
       <View style={styles.filterContainer}>
         <ScrollView 
           horizontal 
@@ -205,12 +189,12 @@ export default function PromiseDate() {
             onPress={() => setSelectedFilter('all')}
           >
             <Text style={[styles.filterBtnText, selectedFilter === 'all' && styles.filterBtnTextActive]}>
-              All ({getTotalCount()})
+              All ({totalCount})
             </Text>
           </TouchableOpacity>
           
           {TIME_PERIODS.map((period) => {
-            const count = MOCK_DATA[period.key]?.length || 0;
+            const count = (bucketData[period.key] || []).length;
             return (
               <TouchableOpacity
                 key={period.key}
@@ -232,34 +216,53 @@ export default function PromiseDate() {
           <View style={styles.summaryItem}>
             <Ionicons name="time-outline" size={20} color={tokens.colors.accent} />
             <Text style={styles.summaryLabel}>Total Upcoming</Text>
-            <Text style={styles.summaryValue}>{getTotalCount()}</Text>
+            <Text style={styles.summaryValue}>{totalCount}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Ionicons name="cash-outline" size={20} color={tokens.colors.accent} />
             <Text style={styles.summaryLabel}>Expected Amount</Text>
             <Text style={styles.summaryValue}>
-              {formatCurrency(
-                Object.values(MOCK_DATA)
-                  .flat()
-                  .filter(item => selectedFilter === 'all' || MOCK_DATA[selectedFilter]?.includes(item))
-                  .reduce((sum, item) => sum + item.outstanding_amount, 0)
-              )}
+              {formatCurrency(totalAmount)}
             </Text>
           </View>
         </View>
+        <View style={styles.summaryFooter}>
+          <Text style={styles.timestamp}>{lastUpdatedLabel}</Text>
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchBuckets(true)} disabled={refreshing}>
+            {refreshing ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <Text style={styles.refreshBtnText}>Refresh</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </Card>
 
-      {/* Sections */}
-      <View style={styles.sectionsContainer}>
-        {TIME_PERIODS.map((period) => renderSection(period.key, period.label))}
-      </View>
-
-      {getTotalCount() === 0 && (
-        <Card style={styles.emptyCard}>
-          <Ionicons name="calendar-clear-outline" size={48} color={tokens.colors.textDim} />
-          <Text style={styles.emptyText}>No upcoming collections</Text>
+      {loading ? (
+        <Card style={styles.loadingCard}>
+          <ActivityIndicator color={tokens.colors.accent} size="large" />
         </Card>
+      ) : error ? (
+        <Card style={styles.errorCard}>
+          <Ionicons name="warning-outline" size={32} color={tokens.colors.danger} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchBuckets(false)}>
+            <Text style={styles.retryBtnText}>Try Again</Text>
+          </TouchableOpacity>
+        </Card>
+      ) : (
+        <>
+          <View style={styles.sectionsContainer}>
+            {TIME_PERIODS.map((period) => renderSection(period.key, period.label))}
+          </View>
+          {totalCount === 0 && (
+            <Card style={styles.emptyCard}>
+              <Ionicons name="calendar-clear-outline" size={48} color={tokens.colors.textDim} />
+              <Text style={styles.emptyText}>No upcoming collections</Text>
+            </Card>
+          )}
+        </>
       )}
 
       <View style={{ marginBottom: 30 }} />
@@ -305,6 +308,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
+  },
+  summaryFooter: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   summaryItem: {
     flex: 1,
@@ -366,6 +375,49 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: tokens.colors.border,
+  },
+  loadingCard: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshBtn: {
+    backgroundColor: tokens.colors.accent,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  refreshBtnText: {
+    color: '#000',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  timestamp: {
+    fontSize: 11,
+    color: tokens.colors.textDim,
+  },
+  errorCard: {
+    padding: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    color: tokens.colors.danger,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: tokens.colors.accent,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#000',
   },
   itemHeader: {
     flexDirection: 'row',
