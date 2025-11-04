@@ -72,15 +72,20 @@ export default function PaymentApprovalDetail() {
         try {
             const t = await StorageService.getToken();
             const comment = encodeURIComponent((approveComment || '').trim());
-            const isAdminStage = payment.status === 'accountant_approved' && currentUser?.role === 'admin';
-            const base = isAdminStage ? 'admin' : 'accountant';
+            const isAdminAction = currentUser?.role === 'admin' && (payment.status === 'accountant_approved' || payment.status === 'submitted');
+            const base = isAdminAction ? 'admin' : 'accountant';
             const url = `${API_BASE_URL}/${base}/payments/${payment.id}/approve${comment ? `?comment=${comment}` : ''}`;
             const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t.access_token}` } : {}) } });
             if (!r.ok) throw new Error('Approve failed');
             const updated = await r.json().catch(() => null);
             // Optimistic local update
-            const newStatus = isAdminStage ? 'admin_approved' : 'accountant_approved';
-            setPayment(p => p ? { ...p, status: newStatus, [isAdminStage ? 'admin_comment' : 'accountant_comment']: approveComment || p[isAdminStage ? 'admin_comment' : 'accountant_comment'] } : p);
+            const newStatus = isAdminAction ? 'admin_approved' : 'accountant_approved';
+            setPayment(p => p ? {
+                ...p,
+                status: newStatus,
+                [isAdminAction ? 'admin_comment' : 'accountant_comment']:
+                    approveComment || p[isAdminAction ? 'admin_comment' : 'accountant_comment'],
+            } : p);
             emitPaymentUpdate({ id: payment.id, status: newStatus });
             // Navigate back to list immediately (no need to stay)
             router.back();
@@ -93,10 +98,10 @@ export default function PaymentApprovalDetail() {
     // Ask for confirmation before approving
     const confirmApprove = () => {
         if (!payment || approving || declining) return;
-        const isAdminStage = payment.status === 'accountant_approved' && currentUser?.role === 'admin';
+        const isAdminAction = currentUser?.role === 'admin' && (payment.status === 'accountant_approved' || payment.status === 'submitted');
         const title = 'Confirm Approval';
         const amountLabel = (Number(payment?.amount_collected) === 0 && payment?.next_promise_date) ? 'Change in promise date' : formatCurrency(payment?.amount_collected || 0);
-        const subtitle = `${isAdminStage ? 'Admin' : 'Accountant'} approval for ${payment?.company_code || 'payment'} • ${amountLabel}\n\nAre you sure?`;
+        const subtitle = `${isAdminAction ? 'Admin' : 'Accountant'} approval for ${payment?.company_code || 'payment'} • ${amountLabel}\n\nAre you sure?`;
         Alert.alert(title, subtitle, [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Approve', style: 'default', onPress: () => handleApprove() },
@@ -110,13 +115,18 @@ export default function PaymentApprovalDetail() {
         try {
             const t = await StorageService.getToken();
             const comment = encodeURIComponent((declineComment || '').trim());
-            const isAdminStage = payment.status === 'accountant_approved' && currentUser?.role === 'admin';
-            const base = isAdminStage ? 'admin' : 'accountant';
+            const isAdminAction = currentUser?.role === 'admin' && (payment.status === 'accountant_approved' || payment.status === 'submitted');
+            const base = isAdminAction ? 'admin' : 'accountant';
             const r = await fetch(`${API_BASE_URL}/${base}/payments/${payment.id}/decline?comment=${comment}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t.access_token}` } : {}) } });
             if (!r.ok) throw new Error('Decline failed');
             await r.json().catch(() => null);
-            const newStatus = isAdminStage ? 'declined_by_admin' : 'declined_by_accountant';
-            setPayment(p => p ? { ...p, status: newStatus, [isAdminStage ? 'admin_comment' : 'accountant_comment']: declineComment || p[isAdminStage ? 'admin_comment' : 'accountant_comment'] } : p);
+            const newStatus = isAdminAction ? 'declined_by_admin' : 'declined_by_accountant';
+            setPayment(p => p ? {
+                ...p,
+                status: newStatus,
+                [isAdminAction ? 'admin_comment' : 'accountant_comment']:
+                    declineComment || p[isAdminAction ? 'admin_comment' : 'accountant_comment'],
+            } : p);
             emitPaymentUpdate({ id: payment.id, status: newStatus });
             setDeclineVisible(false);
             // Return to list
@@ -127,11 +137,12 @@ export default function PaymentApprovalDetail() {
     };
 
     const isReadOnly = String(read_only || '') === '1';
-    const isAdminStage = payment && payment.status === 'accountant_approved';
-    const isAccountantStage = payment && payment.status === 'submitted';
-    const canAdminAct = currentUser?.role === 'admin' && isAdminStage;
-    const canAccountantAct = currentUser?.role === 'accountant' && isAccountantStage;
-    const canAct = !isReadOnly && (canAdminAct || canAccountantAct);
+    const paymentStatus = payment?.status;
+    const isAdminUser = currentUser?.role === 'admin';
+    const isAccountantUser = currentUser?.role === 'accountant';
+    const canAdminAct = !isReadOnly && isAdminUser && (paymentStatus === 'accountant_approved' || paymentStatus === 'submitted');
+    const canAccountantAct = !isReadOnly && isAccountantUser && paymentStatus === 'submitted';
+    const canAct = canAdminAct || canAccountantAct;
 
     // Scroll to 70% of content height when approval comment input is focused
     const handleApproveInputFocus = () => {
