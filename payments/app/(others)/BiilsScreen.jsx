@@ -251,7 +251,7 @@ export default function CompanyBillsList() {
                 <View style={styles.modalBackdrop}>
                     <View style={styles.modalCard}>
                         <Text style={styles.modalTitle}>Enter Amount</Text>
-                        <Text style={styles.modalHelpText}>💡 Enter in new format: ₹100 = ₹1.00, ₹12784 = ₹127.84</Text>
+                        <Text style={styles.modalHelpText}></Text>
                         <TextInput
                             style={styles.modalInput}
                             placeholder="Enter Total Amount"
