@@ -329,7 +329,7 @@ export default function MultiPayScreen() {
               ListHeaderComponent={(
                 <>
                   <Card style={{ marginBottom: 8, padding: 10 }}>
-                    <Text style={styles.helpText}>💡 Amounts shown in new format: ₹100 = ₹1.00, ₹12784 = ₹127.84</Text>
+
                     <Text style={styles.remLabel}>Total</Text>
                     <Text style={styles.remValue}>{formatCurrency(initialTotal)}</Text>
                     <Text style={[styles.remLabel, { marginTop: 6 }]}>Remaining</Text>
