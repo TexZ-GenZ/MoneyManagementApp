@@ -5,6 +5,7 @@ import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { API_BASE_URL } from '../../src/utils/constants';
+import { formatCurrency } from '../../src/ui/format';
 
 export default function CompanyListScreen() {
   const [companies, setCompanies] = useState([]);
@@ -204,11 +205,11 @@ export default function CompanyListScreen() {
           <View style={styles.amountRow}>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>OUTBAL</Text>
-              <Text style={[styles.metricValue, outbalNum > 0 ? styles.dangerValue : null]} numberOfLines={1}>{outbalNum}</Text>
+              <Text style={[styles.metricValue, outbalNum > 0 ? styles.dangerValue : null]} numberOfLines={1}>{formatCurrency(outbalNum)}</Text>
             </View>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>AMOUNT</Text>
-              <Text style={styles.metricValue} numberOfLines={1}>{amountNum}</Text>
+              <Text style={styles.metricValue} numberOfLines={1}>{formatCurrency(amountNum)}</Text>
             </View>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>OVERDUE</Text>

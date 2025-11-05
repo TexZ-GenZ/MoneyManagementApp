@@ -1,7 +1,7 @@
 // Formatting utilities (currency, dates) shared across screens
 
 export function formatCurrency(value, currency = 'INR') {
-    const num = Number(value || 0);
+    const num = Number(value || 0) / 100; // Divide by 100 to show actual amount (12784 becomes 127.84)
     try {
         return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 2 }).format(num);
     } catch (e) {

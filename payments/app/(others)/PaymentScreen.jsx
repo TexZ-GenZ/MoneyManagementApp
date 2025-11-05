@@ -222,6 +222,11 @@ export default function CollectPaymentScreen() {
       Alert.alert('Invalid Input', 'Enter a valid collected amount.');
       return false;
     }
+    // Minimum amount validation: must be at least 100 (shows as ₹1.00 after division by 100)
+    if (Number(amountCollected) < 100) {
+      Alert.alert('Amount Too Small', 'Minimum payment amount is ₹1.00 (enter 100 or more).');
+      return false;
+    }
     if (!isFullPayment && !nextPromiseDate) {
       Alert.alert('Missing Next Promise', 'Next promise date is required for partial payments.');
       return false;
@@ -429,6 +434,7 @@ export default function CollectPaymentScreen() {
             </View>
 
             <FieldLabel label={isFullPayment ? 'Amount (Full Payment)' : 'Amount Collected (₹)'} />
+            <Text style={styles.helpText}>💡 Enter amounts in new format: ₹100 = ₹1.00, ₹12784 = ₹127.84</Text>
             {isFullPayment ? (
               <View style={[styles.fieldBtn, billRemaining === 0 && { backgroundColor: tokens.colors.border }]}>
                 <Text style={styles.fieldBtnText}>
@@ -563,6 +569,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: tokens.colors.text, fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
   allocTotal: { color: tokens.colors.textDim, fontSize: 12, fontWeight: '600' },
   fieldLabel: { color: tokens.colors.textDim, fontSize: 11, fontWeight: '700', marginBottom: 6, letterSpacing: 0.5 },
+  helpText: { color: tokens.colors.accent, fontSize: 11, fontWeight: '600', marginBottom: 8, fontStyle: 'italic' },
   fieldBtn: { backgroundColor: tokens.colors.cardAlt, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: tokens.colors.border, marginBottom: 14 },
   fieldBtnText: { color: tokens.colors.text, fontSize: 14, fontWeight: '600' },
   textInput: { backgroundColor: tokens.colors.cardAlt, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, fontSize: 14, color: tokens.colors.text, borderWidth: 1, borderColor: tokens.colors.border, fontWeight: '600', marginBottom: 14 },
