@@ -28,39 +28,39 @@ const getDaysUntil = (promiseDate) => {
   return Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 };
 
+// Helper to check if a bill's promise date matches the selected filter (range-based)
 const matchesFilter = (bill, filterType, filterValue) => {
-  const promiseDate = bill.promise_date ? new Date(bill.promise_date) : null;
-  if (!promiseDate) return false;
-  promiseDate.setHours(0, 0, 0, 0);
-
+  if (!bill?.promise_date) return false;
+  
+  const promiseDate = new Date(bill.promise_date);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  promiseDate.setHours(0, 0, 0, 0);
+  
+  // No past dates
   if (promiseDate.getTime() < today.getTime()) return false;
+  
+  const daysUntil = Math.ceil((promiseDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  const daysUntil = getDaysUntil(bill.promise_date);
-
+  // Specific date selected
   if (filterType === 'date' && filterValue) {
     const selected = new Date(filterValue);
     selected.setHours(0, 0, 0, 0);
     return promiseDate.getTime() === selected.getTime();
   }
 
-  // "All" shows promises up to 3 months (90 days)
-  if (filterValue === 'all') {
-    return daysUntil >= 0 && daysUntil <= 90;
-  }
-
-  switch (filterValue) {
+  // Period filter - range from 0 to N days
+  switch (filterType) {
     case '1d':
-      return daysUntil === 1;
+      return daysUntil >= 0 && daysUntil <= 1;
     case '3d':
-      return daysUntil === 3;
+      return daysUntil >= 0 && daysUntil <= 3;
     case '5d':
-      return daysUntil === 5;
+      return daysUntil >= 0 && daysUntil <= 5;
     case '1w':
-      return daysUntil === 7;
+      return daysUntil >= 0 && daysUntil <= 7;
     case '2w':
-      return daysUntil === 14;
+      return daysUntil >= 0 && daysUntil <= 14;
     case 'all':
     default:
       return daysUntil >= 0 && daysUntil <= 90;
@@ -159,7 +159,13 @@ export default function PromiseCompaniesScreen() {
       }
     });
 
-    return Array.from(byCompany.values()).sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+    // Sort by earliest promise date (ascending - nearest first)
+    return Array.from(byCompany.values()).sort((a, b) => {
+      if (!a.earliestPromise && !b.earliestPromise) return 0;
+      if (!a.earliestPromise) return 1;
+      if (!b.earliestPromise) return -1;
+      return new Date(a.earliestPromise) - new Date(b.earliestPromise);
+    });
   }, [filteredBills]);
 
   useEffect(() => {

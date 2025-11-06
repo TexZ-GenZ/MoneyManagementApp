@@ -111,12 +111,12 @@ export default function PromiseDate() {
         return promiseDate.getTime() === selected.getTime();
       }
 
-      // If time period filter selected
+      // If time period filter selected - show range 0 to N days
       if (selectedFilter !== 'all') {
         const period = TIME_PERIODS.find(p => p.key === selectedFilter);
         if (period) {
-          // Exact day matching - bills exactly N days from today
-          return daysUntil === period.days;
+          // Range matching - bills from 0 to N days (e.g., 3d shows 0-3 days)
+          return daysUntil >= 0 && daysUntil <= period.days;
         }
       }
 
@@ -270,8 +270,8 @@ export default function PromiseDate() {
                 promiseDate.setHours(0, 0, 0, 0);
                 const daysUntil = Math.ceil((promiseDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
 
-                // Exact day matching for badge counts
-                return daysUntil === period.days;
+                // Range matching for badge counts (0 to N days)
+                return daysUntil >= 0 && daysUntil <= period.days;
               }).length;
 
               return (
