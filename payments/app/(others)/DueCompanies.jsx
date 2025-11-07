@@ -118,6 +118,14 @@ export default function DueCompaniesScreen() {
             <Ionicons name="chevron-forward" size={20} color={tokens.colors.textDim} />
           </View>
           
+          {/* Next Due Date Badge */}
+          {item.next_due_date && (
+            <View style={styles.promiseDateBadge}>
+              <Ionicons name="calendar-outline" size={14} color={tokens.colors.accent} />
+              <Text style={styles.promiseDateText}>Next Due: {formatDate(item.next_due_date)}</Text>
+            </View>
+          )}
+          
           <View style={styles.metricsRow}>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>OUTBAL</Text>
@@ -272,6 +280,22 @@ const styles = StyleSheet.create({
   },
   areaBadgeText: {
     fontSize: 11,
+    fontWeight: '700',
+    color: tokens.colors.text,
+  },
+  promiseDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: tokens.colors.cardAlt,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  promiseDateText: {
+    fontSize: 12,
     fontWeight: '700',
     color: tokens.colors.text,
   },

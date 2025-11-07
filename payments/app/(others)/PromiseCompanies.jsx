@@ -11,11 +11,11 @@ import { API_BASE_URL } from '../../src/utils/constants';
 
 const PERIOD_LABELS = {
   all: 'All',
-  '1d': '1 Day',
-  '3d': '3 Days',
-  '5d': '5 Days',
-  '1w': '1 Week',
-  '2w': '2 Weeks',
+  '0-3d': '0-3 Days',
+  '3d-1w': '3 Days-1 Week',
+  '1w-2w': '1 Week-2 Weeks',
+  '2w-1m': '2 Weeks-1 Month',
+  '1m-3m': '1 Month-3 Months',
   date: 'Specific Date',
 };
 
@@ -49,18 +49,18 @@ const matchesFilter = (bill, filterType, filterValue) => {
     return promiseDate.getTime() === selected.getTime();
   }
 
-  // Period filter - range from 0 to N days
+  // Period filter - range based matching
   switch (filterType) {
-    case '1d':
-      return daysUntil >= 0 && daysUntil <= 1;
-    case '3d':
-      return daysUntil >= 0 && daysUntil <= 3;
-    case '5d':
-      return daysUntil >= 0 && daysUntil <= 5;
-    case '1w':
-      return daysUntil >= 0 && daysUntil <= 7;
-    case '2w':
-      return daysUntil >= 0 && daysUntil <= 14;
+    case '0-3d':
+      return daysUntil >= 0 && daysUntil < 3;
+    case '3d-1w':
+      return daysUntil >= 3 && daysUntil < 7;
+    case '1w-2w':
+      return daysUntil >= 7 && daysUntil < 14;
+    case '2w-1m':
+      return daysUntil >= 14 && daysUntil < 30;
+    case '1m-3m':
+      return daysUntil >= 30 && daysUntil < 90;
     case 'all':
     default:
       return daysUntil >= 0 && daysUntil <= 90;

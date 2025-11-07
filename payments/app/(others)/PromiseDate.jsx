@@ -11,11 +11,11 @@ import { StorageService } from '../../src/services/storageService';
 import { API_BASE_URL } from '../../src/utils/constants';
 
 const TIME_PERIODS = [
-  { key: '1d', label: '1 Day', days: 1 },
-  { key: '3d', label: '3 Days', days: 3 },
-  { key: '5d', label: '5 Days', days: 5 },
-  { key: '1w', label: '1 Week', days: 7 },
-  { key: '2w', label: '2 Weeks', days: 14 }
+  { key: '0-3d', label: '0-3 Days', minDays: 0, maxDays: 3 },
+  { key: '3d-1w', label: '3 Days-1 Week', minDays: 3, maxDays: 7 },
+  { key: '1w-2w', label: '1 Week-2 Weeks', minDays: 7, maxDays: 14 },
+  { key: '2w-1m', label: '2 Weeks-1 Month', minDays: 14, maxDays: 30 },
+  { key: '1m-3m', label: '1 Month-3 Months', minDays: 30, maxDays: 90 },
 ];
 
 export default function PromiseDate() {
@@ -111,12 +111,12 @@ export default function PromiseDate() {
         return promiseDate.getTime() === selected.getTime();
       }
 
-      // If time period filter selected - show range 0 to N days
+      // If time period filter selected - show range using minDays and maxDays
       if (selectedFilter !== 'all') {
         const period = TIME_PERIODS.find(p => p.key === selectedFilter);
         if (period) {
-          // Range matching - bills from 0 to N days (e.g., 3d shows 0-3 days)
-          return daysUntil >= 0 && daysUntil <= period.days;
+          // Range matching - bills from minDays to maxDays (e.g., '0-3d' shows 0-2 days)
+          return daysUntil >= period.minDays && daysUntil < period.maxDays;
         }
       }
 
@@ -270,8 +270,8 @@ export default function PromiseDate() {
                 promiseDate.setHours(0, 0, 0, 0);
                 const daysUntil = Math.ceil((promiseDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
 
-                // Range matching for badge counts (0 to N days)
-                return daysUntil >= 0 && daysUntil <= period.days;
+                // Range matching for badge counts (minDays to maxDays)
+                return daysUntil >= period.minDays && daysUntil < period.maxDays;
               }).length;
 
               return (
