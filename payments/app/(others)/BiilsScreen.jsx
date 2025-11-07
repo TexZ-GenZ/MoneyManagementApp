@@ -251,6 +251,7 @@ export default function CompanyBillsList() {
                 <View style={styles.modalBackdrop}>
                     <View style={styles.modalCard}>
                         <Text style={styles.modalTitle}>Enter Amount</Text>
+                        <Text style={styles.modalHelpText}></Text>
                         <TextInput
                             style={styles.modalInput}
                             placeholder="Enter Total Amount"
@@ -268,6 +269,8 @@ export default function CompanyBillsList() {
                                 onPress={async () => {
                                     const v = Number(multiAmount);
                                     if (!multiAmount || Number.isNaN(v) || v <= 0) { Alert.alert('Invalid', 'Enter a valid amount'); return; }
+                                    // Minimum amount validation: must be at least 100 (shows as ₹1.00 after division by 100)
+                                    if (v < 100) { Alert.alert('Amount Too Small', 'Minimum bulk payment amount is ₹1.00 (enter 100 or more)'); return; }
                                     // Compute max allowed = total outstanding across all pending bills (pending includes overdue)
                                     const calcPendingOutstanding = (list) => (Array.isArray(list) ? list : []).filter(b => (b?.status === 'pending')).reduce((sum, b) => {
                                         const amt = Number(b?.amount) || 0; const paid = Number(b?.amount_paid) || 0; const out = Math.max(0, amt - paid);
@@ -354,6 +357,7 @@ const styles = StyleSheet.create({
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
     modalCard: { width: '100%', maxWidth: 420, backgroundColor: tokens.colors.cardAlt, borderRadius: 14, borderColor: tokens.colors.border, borderWidth: 1, padding: 20, shadowColor: '#000', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12, elevation: 12 },
     modalTitle: { fontSize: 18, fontWeight: '900', color: tokens.colors.text, marginBottom: 10, textAlign: 'center' },
+    modalHelpText: { color: tokens.colors.accent, fontSize: 11, fontWeight: '600', marginBottom: 10, textAlign: 'center', fontStyle: 'italic' },
     modalInput: { backgroundColor: '#00000014', borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: tokens.colors.text, marginBottom: 16, fontSize: 18, textAlign: 'center' },
     modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
     modalBtn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, flex: 1, alignItems: 'center' },

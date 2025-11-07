@@ -9,6 +9,7 @@ import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { API_BASE_URL } from '../../src/utils/constants';
+import { formatDate, formatCurrency } from '../../src/ui/format';
 import { useNotificationsBadge } from '../../src/ui/hooks/useNotificationsBadge';
 import { onBadgeChange } from '../../src/events/notificationsEvents';
 
@@ -208,7 +209,7 @@ export default function AccountantDashboard() {
                     </View>
                     <Text style={styles.recentMeta} numberOfLines={1}>{item.billNumbers && item.billNumbers.length ? `Bill ${item.billNumbers.join(', ')}` : 'No Bill'} • {item.executiveName}</Text>
                     <Text style={styles.recentAmountLine} numberOfLines={1}>
-                      {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : (item.amount_collected ? `₹${item.amount_collected}` : 'No Amount')}
+                      {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : (item.amount_collected ? formatCurrency(item.amount_collected) : 'No Amount')}
                     </Text>
                   </View>
                   <TouchableOpacity style={styles.detailBtn} onPress={() => router.push({ pathname: '../(others)/PaymentApprovalDetail', params: { payment_id: item.id } })}>

@@ -87,12 +87,13 @@ export default function MultiPayScreen() {
           // Full payment - allocate entire outstanding amount
           newSelected[bill.id] = outstanding;
           remainingAmount -= outstanding;
-        } else if (remainingAmount > 0) {
-          // Partial payment - allocate remaining amount
+        } else if (remainingAmount >= 100) {
+          // Partial payment - only allocate if remaining is at least 100 (₹1.00)
           newSelected[bill.id] = remainingAmount;
           remainingAmount = 0;
           needsPromise = true;
         }
+        // If remaining < 100, skip this bill (can't allocate less than minimum)
       }
       
       setSelected(newSelected);
@@ -168,6 +169,11 @@ export default function MultiPayScreen() {
     }
     // partial -> allocate remaining
     if (rem > 0) {
+      // Validation: minimum allocation is 100 (shows as ₹1.00 after division)
+      if (rem < 100) {
+        Alert.alert('Amount Too Small', 'Remaining amount must be at least ₹1.00 (100 or more) to allocate to a bill.');
+        return;
+      }
       sel[b.id] = rem;
       setSelected(sel);
       // require promise date
@@ -323,6 +329,7 @@ export default function MultiPayScreen() {
               ListHeaderComponent={(
                 <>
                   <Card style={{ marginBottom: 8, padding: 10 }}>
+
                     <Text style={styles.remLabel}>Total</Text>
                     <Text style={styles.remValue}>{formatCurrency(initialTotal)}</Text>
                     <Text style={[styles.remLabel, { marginTop: 6 }]}>Remaining</Text>
@@ -465,6 +472,7 @@ const styles = StyleSheet.create({
   dateRow: { marginTop: 4, flexDirection: 'row', justifyContent: 'space-between' },
   dateText: { color: tokens.colors.textSubtle, fontWeight: '700' },
   selText: { marginTop: 6, color: tokens.colors.textSubtle, fontWeight: '700' },
+  helpText: { color: tokens.colors.accent, fontSize: 11, fontWeight: '600', marginBottom: 10, fontStyle: 'italic' },
   remLabel: { fontSize: 11, color: tokens.colors.textDim, fontWeight: '700' },
   remValue: { fontSize: 18, fontWeight: '900', color: tokens.colors.text },
   promiseBtn: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },

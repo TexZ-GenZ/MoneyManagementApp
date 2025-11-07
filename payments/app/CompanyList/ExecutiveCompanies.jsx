@@ -5,6 +5,7 @@ import { StorageService } from '../../src/services/storageService';
 import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
+import { formatCurrency } from '../../src/ui/format';
 
 // Demo fetch -- replace with real API call
 // const fetchCompanies = async()=>{
@@ -162,7 +163,7 @@ export default function ExecutiveCompaniesScreen() {
           <View style={styles.amountRow}>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>OUTBAL</Text>
-              <Text style={[styles.metricValue, outbalNum > 0 ? styles.dangerValue : null]} numberOfLines={1}>{outbalNum}</Text>
+              <Text style={[styles.metricValue, outbalNum > 0 ? styles.dangerValue : null]} numberOfLines={1}>{formatCurrency(outbalNum)}</Text>
             </View>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>OVERDUE</Text>

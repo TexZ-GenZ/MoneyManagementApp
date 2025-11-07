@@ -42,10 +42,10 @@ export default function ApprovedPayments() {
             const data = await r.json();
             let arr = Array.isArray(data.items) ? data.items : [];
             
-            // Filter only admin_approved payments
+            // Filter only pending/submitted payments (awaiting approval)
             arr = arr.filter((it) => {
                 const s = (it.status || '').toLowerCase();
-                return s === 'admin_approved';
+                return s === 'pending' || s === 'submitted' || s === 'accountant_approved';
             });
             
             // Time parser
@@ -123,17 +123,18 @@ export default function ApprovedPayments() {
 
     const statusColor = (status) => {
         const s = (status || '').toLowerCase();
-        if (s === 'admin_approved') return tokens.colors.success;
         if (s === 'accountant_approved') return tokens.colors.warning;
+        if (s === 'submitted' || s === 'pending') return tokens.colors.accent;
         if (s.includes('declined')) return tokens.colors.danger;
+        if (s === 'admin_approved') return tokens.colors.success;
         return tokens.colors.accent;
     };
 
     const prettyStatus = (s) => {
         const lower = (s || '').toLowerCase();
+        if (lower === 'accountant_approved') return 'Ready for Approval';
+        if (lower === 'submitted' || lower === 'pending') return 'Pending';
         if (lower === 'admin_approved') return 'Approved';
-        if (lower === 'accountant_approved') return 'Acc Approved';
-        if (lower === 'submitted') return 'Submitted';
         if (lower === 'declined_by_admin') return 'Declined';
         if (lower === 'declined_by_accountant') return 'Acc Declined';
         return s || '—';
@@ -147,7 +148,7 @@ export default function ApprovedPayments() {
     };
 
     const openDetail = (it) => {
-        router.push({ pathname: '/(others)/PaymentApprovalDetail', params: { payment_id: it.payment_id, read_only: '1' } });
+        router.push({ pathname: '/(others)/PaymentApprovalDetail', params: { payment_id: it.payment_id } });
     };
 
     const Tag = ({ text, icon }) => (
@@ -220,7 +221,7 @@ export default function ApprovedPayments() {
     );
 
     return (
-        <Screen title="Approved Payments" subtitle="Admin approved payments history" scroll={false} backButton>
+        <Screen title="Pending Approvals" subtitle="Payments awaiting your approval" scroll={false} backButton>
             <Card style={styles.searchCard}>
                 <View style={styles.searchRow}>
                     <Ionicons name="search" size={18} color={tokens.colors.textDim} style={{ marginRight: 10 }} />
@@ -238,8 +239,8 @@ export default function ApprovedPayments() {
                 <View style={styles.loading}><ActivityIndicator color={tokens.colors.accent} size="large" /></View>
             ) : items.length === 0 ? (
                 <Card style={styles.emptyCard}>
-                    <Ionicons name="checkmark-done-circle-outline" size={48} color={tokens.colors.textDim} />
-                    <Text style={styles.emptyText}>No approved payments found</Text>
+                    <Ionicons name="checkmark-circle-outline" size={48} color={tokens.colors.textDim} />
+                    <Text style={styles.emptyText}>No pending approvals</Text>
                 </Card>
             ) : (
                 <FlatList

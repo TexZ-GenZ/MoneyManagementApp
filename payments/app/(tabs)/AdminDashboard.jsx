@@ -9,7 +9,7 @@ import Screen from '../../src/ui/components/Screen';
 import Card from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { API_BASE_URL } from '../../src/utils/constants';
-import { formatDate } from '../../src/ui/format';
+import { formatDate, formatCurrency } from '../../src/ui/format';
 import { useNotificationsBadge } from '../../src/ui/hooks/useNotificationsBadge';
 import { onBadgeChange } from '../../src/events/notificationsEvents';
 
@@ -23,8 +23,8 @@ export default function AdminDashboard() {
 
   const navItems = [
     { label: 'Promise Date', icon: 'calendar-outline', route: '../(others)/PromiseDate' },
-    { label: 'Due Bills', icon: 'receipt-outline', route: '../(others)/ExecutiveList' },
-    { label: 'Approvals', icon: 'checkmark-done-outline', route: '../(others)/ApprovedPayments' },
+    { label: 'Due Bills', icon: 'receipt-outline', route: '../(others)/DueBills' },
+    { label: 'Approvals', icon: 'checkmark-done-outline', route: '../(others)/NotifyAdmin' },
   ];
 
   const onPressItem = (item) => router.push(item.route);
@@ -179,7 +179,7 @@ export default function AdminDashboard() {
             {item.billNumbers && item.billNumbers.length ? `Bill ${item.billNumbers.join(', ')}` : 'No Bill'} • {item.executiveName}
           </Text>
           <Text style={styles.recentAmountLine} numberOfLines={1}>
-            {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : (item.amount_collected ? `₹${item.amount_collected}` : 'No Amount')}
+            {(Number(item.amount_collected) === 0 && item.next_promise_date) ? 'Change in promise date' : (item.amount_collected ? formatCurrency(item.amount_collected) : 'No Amount')}
             {item.collected_at ? ` • ${formatDate(item.collected_at)}` : ''}
           </Text>
         </View>
