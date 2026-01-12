@@ -1,0 +1,240 @@
+MONEY MANAGEMENT APP - COMPLETE FEATURE GUIDE
+=============================================
+
+1. USER ROLES & AUTHENTICATION
+-------------------------------
+- Three user roles: Executive, Accountant, Admin
+- Mobile-based login with PIN/password authentication
+- Secure JWT token-based session management
+- Role-based access control for all features
+- Active/inactive user status management
+
+2. EXECUTIVE DASHBOARD & FEATURES
+----------------------------------
+Dashboard:
+- Today's collection target display
+- Current day collection vs. target
+- Assigned companies count
+- Top performing companies by payment status
+
+Company Management:
+- View all assigned companies with filtering
+- Search companies by code, name, or area
+- Company details: bills, balances, credit info
+- Outstanding amount tracking per company
+
+Bill Management:
+- View all pending bills by company
+- Multiple bills selection for bulk payment
+- Overdue bills tracking with days calculation
+- Bill history and payment allocations
+- Promise date setting for future payments
+
+Payment Collection:
+- Single payment submission with proof
+- Multi-payment (bulk) submission across bills
+- Payment methods: Cash, Check, UPI, Bank Transfer, NEFT
+- Photo proof capture and location tracking
+- Real-time amount validation (₹1.00 minimum)
+- Auto-location capture or manual entry
+- Comment/notes field for payment context
+
+Payment History:
+- View all submitted payments (unified history)
+- Filter by status: All, Pending, Approved, Declined
+- Search payments by company, area, or reference
+- Payment status tracking: Submitted → Accountant → Admin
+- Payment detail view with full audit trail
+
+3. ACCOUNTANT DASHBOARD & FEATURES
+-----------------------------------
+Dashboard:
+- Pending reviews count (awaiting accountant approval)
+- Approved today count
+- Total outstanding across all executives
+- Quick action buttons for reviews and notifications
+
+Payment Review & Approval:
+- Review executive-submitted payments
+- View payment proof images with zoom
+- Check location data and timestamps
+- Approve or decline with mandatory comments
+- Bulk approval workflows for multiple payments
+- Payment detail drill-down with company context
+
+Notifications:
+- Real-time alerts for new submissions
+- Payment status change notifications
+- 24-hour notification history
+- Auto-acknowledgment on view
+- Badge counter on dashboard/tab
+
+Activity Tracking:
+- View all payment activity across executives
+- Filter by executive, company, or date
+- Track payment flow through approval stages
+- Search functionality for quick lookup
+
+4. ADMIN DASHBOARD & FEATURES
+------------------------------
+Dashboard Cards:
+- Total outstanding amount (all companies)
+- Pending admin approvals count
+- Total executives count
+- Today's collection summary
+
+Due Bills Management:
+- View executives with overdue companies
+- Time-based filters: 0-1W, 1W-1M, 1-3M, 3-6M, 6M-1Y, 1Y+
+- Executive drill-down to see overdue companies
+- Next due date display per company
+- Days overdue calculation and sorting
+- Direct navigation to company payment screen
+
+Promise Date Tracking:
+- View upcoming promise dates by time ranges
+- Filters: 0-3d, 3d-1w, 1w-2w, 2w-1m, 1m-3m
+- Executive grouping by promise commitments
+- Companies sorted by earliest promise date
+- Calendar view for promise date selection
+- Promise date audit trail
+
+Final Approval Workflow:
+- Review accountant-approved payments
+- Final approval/decline authority
+- Full payment context: amount, method, proof, location
+- Comment history from all stages
+- Bulk approval capabilities
+- Payment detail view with executive/company info
+
+History & Analytics:
+- Unified payment history (all executives)
+- Advanced filtering: status, date, executive, company
+- Activity timeline with role-specific timestamps
+- Search across all payment attributes
+- Export-ready data views
+
+User Management:
+- Create new users (Executive, Accountant, Admin)
+- Edit user details: username, mobile, password
+- Activate/deactivate user accounts
+- Role assignment and changes
+- Pending payments check before deactivation
+- Delete users with payment validation
+
+Company Assignment:
+- Assign companies to executives
+- Unassign companies from executives
+- View executive's current company assignments
+- Company search and validation
+- Bulk assignment capabilities
+- Assignment history tracking
+
+Data Import:
+- Upload DBF files for bill/company data
+- CSV import for transaction records
+- Duplicate detection and prevention
+- Import history and audit logs
+- Error handling for corrupt/invalid files
+
+Notifications Management:
+- Admin-specific notification rules
+- Escalation alerts for overdue bills
+- Payment approval notifications
+- System alerts and warnings
+
+5. PAYMENT LIFECYCLE
+--------------------
+Stage 1 - Executive Submission:
+- Executive collects payment and submits with proof
+- Status: "Submitted"
+- Includes: amount, method, photo, location, comment
+
+Stage 2 - Accountant Review:
+- Accountant reviews and approves/declines
+- Status: "Accountant Approved" or "Accountant Declined"
+- Accountant comment added
+
+Stage 3 - Admin Final Approval:
+- Admin reviews accountant-approved payments
+- Status: "Admin Approved" or "Admin Declined"
+- Admin comment added
+- Final disposition
+
+Payment Status Flow:
+Submitted → Accountant Approved → Admin Approved (Success)
+         → Accountant Declined (Rejected at Stage 2)
+                              → Admin Declined (Rejected at Stage 3)
+
+6. NOTIFICATIONS SYSTEM
+-----------------------
+Real-time Push Notifications:
+- Payment submission alerts (to Accountant/Admin)
+- Approval/decline notifications (to Executive)
+- Overdue bill reminders
+- Promise date upcoming alerts
+
+In-App Notifications:
+- Notification center with 24-hour history
+- Badge counters on dashboard and tabs
+- Tap to view payment detail
+- Auto-acknowledgment on read
+- Pull-to-refresh for latest updates
+
+7. DATA DISPLAY & FORMATTING
+-----------------------------
+Currency:
+- All amounts displayed in rupees (₹)
+- Division by 100 for display (12700 → ₹127.00)
+- Minimum payment amount: ₹1.00 (100 paise)
+- Consistent decimal formatting across app
+
+Dates:
+- Relative time display: "2 hours ago", "3 days ago"
+- Full timestamps for audit trail
+- Promise date calendar picker
+- Date range filters for reporting
+
+Sorting & Filtering:
+- Multi-level sorting: status, date, amount
+- Filter persistence across sessions
+- Search with debouncing (250ms)
+- Result count display
+
+8. ADVANCED FEATURES
+--------------------
+Concurrency Handling:
+- Optimistic UI updates
+- Real-time event bus for payment changes
+- Auto-refresh on screen focus
+- Conflict resolution for simultaneous edits
+
+Location Tracking:
+- Automatic GPS capture on payment submission
+- Manual address entry fallback
+- Location permission handling
+- Accuracy and timestamp metadata
+
+Offline Support:
+- Graceful error handling for network issues
+- Retry mechanisms for failed requests
+- Loading states and skeleton screens
+- Refresh controls on all data views
+
+Security:
+- JWT token-based authentication
+- Token refresh on expiry
+- Secure storage for credentials
+- Role-based route protection
+- API request validation
+
+9. TECHNICAL FEATURES
+---------------------
+- React Native with Expo Router navigation
+- Redux state management for auth/user data
+- FastAPI backend with PostgreSQL database
+- Real-time updates via event emitters
+- OTA (Over-The-Air) updates via EAS Update
+- Docker containerization for backend
+- Alembic database migrations
+- Comprehensive test coverage (50+ test files)

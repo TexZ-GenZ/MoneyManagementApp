@@ -25,12 +25,13 @@ async def lifespan(app: FastAPI):  # type: ignore[override]
     # Seed admin + settings
     db: Session = SessionLocal()
     try:
-        admin = db.query(User).filter(User.username == "admin").first()
+        admin = db.query(User).filter(User.username == "Jaskirat").first()
         if not admin:
             db.add(
                 User(
-                    username="admin",
-                    password_hash=hash_password("admin"),
+                    username="Jaskirat",
+                    mobile="9815318199",
+                    password_hash=hash_password("9815318199"),
                     role=Role.admin,
                     area=None,
                     is_active=True,
