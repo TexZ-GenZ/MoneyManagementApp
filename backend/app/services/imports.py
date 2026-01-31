@@ -149,6 +149,17 @@ def _to_decimal(val) -> Decimal:
         return Decimal(0)
 
 
+def _is_truthy(val: Any) -> bool:
+    if val is None:
+        return False
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float, Decimal)):
+        return Decimal(str(val)) != 0
+    txt = str(val).strip().lower()
+    return txt in {"true", "t", "yes", "y", "1"}
+
+
 def _acquire_lock(kind: str) -> bool:
     p = _lock_path(kind)
     if p.exists():
@@ -511,7 +522,7 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                     code = str(r.get("code") or "").strip()
                     if not bill_no or not code:
                         continue
-                    seen_numbers.add(f"{code}::{bill_no}")
+                    seen_numbers.add(bill_no)
                     touched_codes.add(code)
                     bill_date = _parse_date(r.get("date") or r.get("bill_date"))
                     due_date = _parse_date(r.get("due_date") or r.get("duedate") or r.get("due"))
@@ -533,22 +544,34 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                             if raw_amount > 0:
                                 fallback_due_assigned += 1
                     new_amount = raw_amount.quantize(Decimal("0.00"))
+                    rec_amt_raw = (
+                        r.get("rec_amt")
+                        or r.get("recamt")
+                        or r.get("received_amt")
+                        or r.get("received")
+                    )
+                    rec_amount = _to_decimal(rec_amt_raw).quantize(Decimal("0.00"))
+                    is_cleared = _is_truthy(r.get("is_cleared") or r.get("cleared"))
                     if not db.get(Company, code):
                         db.add(Company(code=code, name=code, area=None))
-                    bill = (
-                        db.query(Bill)
-                        .filter(Bill.company_code == code, Bill.bill_number == bill_no)
-                        .one_or_none()
-                    )
+                    bill = db.query(Bill).filter(Bill.bill_number == bill_no).one_or_none()
                     if not bill:
+                        effective_amount = new_amount
+                        if is_cleared and rec_amount == 0:
+                            rec_amount = effective_amount
+                        status = BillStatus.pending
+                        if rec_amount >= effective_amount and effective_amount > 0:
+                            status = BillStatus.paid
+                        elif rec_amount > 0:
+                            status = BillStatus.partial
                         bill = Bill(
                             bill_number=bill_no,
                             company_code=code,
                             bill_date=bill_date,
                             due_date=due_date,
-                            amount=new_amount,
-                            amount_paid=Decimal(0),
-                            status=BillStatus.pending,
+                            amount=effective_amount,
+                            amount_paid=rec_amount if rec_amount > 0 else Decimal(0),
+                            status=status,
                             is_archived=False,
                         )
                         db.add(bill)
@@ -564,9 +587,26 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                         if bill.due_date != due_date:
                             bill.due_date = due_date
                             changed = True
-                        if bill.amount != new_amount:
-                            bill.amount = new_amount
-                            changed = True
+                        # Do not overwrite existing amount from re-imports
+                        effective_amount = bill.amount
+                        if is_cleared and rec_amount == 0:
+                            rec_amount = effective_amount
+                        if rec_amount > 0 or is_cleared or rec_amount == new_amount:
+                            if bill.amount_paid != rec_amount:
+                                bill.amount_paid = rec_amount
+                                changed = True
+                            if rec_amount >= effective_amount and effective_amount > 0:
+                                if bill.status != BillStatus.paid:
+                                    bill.status = BillStatus.paid
+                                    changed = True
+                            elif rec_amount > 0:
+                                if bill.status != BillStatus.partial:
+                                    bill.status = BillStatus.partial
+                                    changed = True
+                            else:
+                                if bill.status != BillStatus.pending:
+                                    bill.status = BillStatus.pending
+                                    changed = True
                         if bill.is_archived:
                             bill.is_archived = False
                             changed = True
@@ -582,8 +622,7 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                         db.query(Bill).filter(Bill.is_archived == False).all()
                     )
                     for b in existing_bills:
-                        key = f"{b.company_code}::{b.bill_number}"
-                        if key not in seen_numbers:
+                        if b.bill_number not in seen_numbers:
                             b.is_archived = True
                             archived_count += 1
             db.commit()
