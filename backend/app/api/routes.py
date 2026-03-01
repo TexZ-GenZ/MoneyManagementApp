@@ -397,7 +397,7 @@ def company_dashboard(request: Request, code: str, db: Session = Depends(get_db)
         db.query(Bill)
         .filter(
             Bill.company_code == code,
-            Bill.status == "pending",
+            Bill.status.in_([BillStatus.pending, BillStatus.partial]),
             Bill.is_archived == False,
         )
         .order_by(Bill.due_date.asc())
@@ -543,7 +543,7 @@ def list_company_bills(
     request: Request,
     code: str,
     db: Session = Depends(get_db),
-    status: Optional[str] = Query(None, pattern="^(pending|paid)$"),
+    status: Optional[str] = Query(None, pattern="^(pending|partial|paid)$"),
     sort: Optional[str] = Query(None, pattern="^(oldest|amount_desc|recent)$"),
     skip: int = 0,
     limit: int = 100,
@@ -2593,9 +2593,7 @@ def admin_pending(
     request: Request, db: Session = Depends(get_db), skip: int = 0, limit: int = 50
 ):
     q = db.query(Payment).filter(
-        Payment.status.in_(
-            [PaymentStatus.submitted, PaymentStatus.accountant_approved]
-        )
+        Payment.status.in_([PaymentStatus.submitted, PaymentStatus.accountant_approved])
     )
     total = q.count()
     items = (

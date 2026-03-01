@@ -13,7 +13,6 @@ APScheduler==3.10.4
 dbfread==2.0.7
 dbf==0.99.9
 openpyxl==3.1.5
-redis==5.0.1
 slowapi==0.1.9
 
 pytest==8.3.2

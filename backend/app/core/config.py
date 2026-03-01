@@ -13,9 +13,6 @@ class Settings(BaseSettings):
     NOTIF_EVERY_HOURS: int = 2
     CORS_ALLOWED_ORIGINS: List[str] = ["*"]
 
-    # Redis configuration for rate limiting
-    REDIS_URL: str
-
     # Authentication rate limits
     RATE_LIMIT_LOGIN: str
     RATE_LIMIT_AUTH_ME: str

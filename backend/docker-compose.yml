@@ -12,19 +12,7 @@ services:
       # Initialize extra databases on first run
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,32 +23,34 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     ports:
       - "${API_PORT:-8000}:8000"
-    command: [ "sh", "-lc", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload" ]
+    command:
+      [
+        "sh",
+        "-lc",
+        "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
     volumes:
       - ./:/app
-    environment:
-      - REDIS_URL=redis://redis:6379/0
   tests:
     build: ./
     env_file: .env
-    profiles: [ tests ]
+    profiles: [tests]
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     working_dir: /app
     # Create the test database if missing, run migrations using TEST_DB_URL, then execute tests
-    command: [ "sh", "-lc", "export PGPASSWORD=\"$POSTGRES_PASSWORD\"; psql -h db -U $POSTGRES_USER -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='app_test'\" | grep -q 1 || psql -h db -U $POSTGRES_USER -d postgres -c \"CREATE DATABASE app_test;\"; export DATABASE_URL=\"$TEST_DB_URL\"; alembic upgrade head; pytest -q" ]
+    command:
+      [
+        "sh",
+        "-lc",
+        'export PGPASSWORD="$POSTGRES_PASSWORD"; psql -h db -U $POSTGRES_USER -d postgres -tc "SELECT 1 FROM pg_database WHERE datname=''app_test''" | grep -q 1 || psql -h db -U $POSTGRES_USER -d postgres -c "CREATE DATABASE app_test;"; export DATABASE_URL="$TEST_DB_URL"; alembic upgrade head; pytest -q',
+      ]
     environment:
       - TEST_DB_URL=${TEST_DB_URL}
-      - REDIS_URL=redis://redis:6379/1
     volumes:
       - ./:/app
 volumes:
   pgdata:
-  redis_data:

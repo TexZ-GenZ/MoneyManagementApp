@@ -1,51 +1,16 @@
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-import redis
 from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
-
-# Initialize Redis connection
-def get_redis_client():
-    """Get Redis client for rate limiting"""
-    try:
-        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        # Test the connection
-        redis_client.ping()
-        return redis_client
-    except redis.ConnectionError:
-        logger.warning(
-            "Could not connect to Redis. Rate limiting will fall back to in-memory storage."
-        )
-        return None
-    except Exception as e:
-        logger.error(f"Error initializing Redis: {e}")
-        return None
-
-
-# Initialize rate limiter
-redis_client = get_redis_client()
-
-# Create limiter with Redis backend if available, otherwise use in-memory
-if redis_client:
-    limiter = Limiter(
-        key_func=get_remote_address,
-        storage_uri=settings.REDIS_URL,
-        default_limits=[settings.RATE_LIMIT_GENERAL],
-    )
-    logger.info("Rate limiting initialized with Redis backend")
-else:
-    # Fallback to in-memory rate limiting (not recommended for production)
-    limiter = Limiter(
-        key_func=get_remote_address, default_limits=[settings.RATE_LIMIT_GENERAL]
-    )
-    logger.warning(
-        "Rate limiting initialized with in-memory backend (not suitable for production)"
-    )
+# Use in-memory rate limiting only.
+limiter = Limiter(
+    key_func=get_remote_address, default_limits=[settings.RATE_LIMIT_GENERAL]
+)
+logger.info("Rate limiting initialized with in-memory backend")
 
 
 # Custom rate limit exceeded handler
@@ -113,6 +78,5 @@ def get_client_identifier(request):
 # Create a custom limiter for user-based rate limiting
 user_limiter = Limiter(
     key_func=get_client_identifier,
-    storage_uri=settings.REDIS_URL if redis_client else None,
     default_limits=[settings.RATE_LIMIT_GENERAL],
 )
