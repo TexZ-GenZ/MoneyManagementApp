@@ -20,7 +20,9 @@ class CompanyBase(BaseModel):
     oldest_due_date: Optional[date] = None
     outbal: Decimal
     amount: Decimal
-    # Counts (enriched): number of pending and overdue bills
+    # Counts (enriched): mutually exclusive buckets
+    # pending_count = pending bills not yet overdue
+    # overdue_count = pending bills already overdue
     pending_count: Optional[int] = None
     overdue_count: Optional[int] = None
     # Enriched fields (not persisted directly on companies table)

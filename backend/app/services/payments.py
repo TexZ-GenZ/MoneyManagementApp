@@ -24,6 +24,144 @@ from app.services.notifications import _record_user_notification
 log = get_logger(__name__)
 
 
+def get_reserved_totals_by_bill(
+    db: Session,
+    bill_ids: List[int],
+    *,
+    exclude_payment_id: int | None = None,
+) -> dict[int, Decimal]:
+    if not bill_ids:
+        return {}
+    q = (
+        db.query(
+            PaymentAllocation.bill_id,
+            func.coalesce(func.sum(PaymentAllocation.amount), 0),
+        )
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .filter(
+            PaymentAllocation.bill_id.in_(bill_ids),
+            Payment.status.in_(
+                [PaymentStatus.submitted, PaymentStatus.accountant_approved]
+            ),
+        )
+    )
+    if exclude_payment_id is not None:
+        q = q.filter(Payment.id != exclude_payment_id)
+    rows = q.group_by(PaymentAllocation.bill_id).all()
+    return {bid: Decimal(str(total)) for bid, total in rows}
+
+
+def _validate_allocations_against_effective_remaining(
+    db: Session,
+    *,
+    company_code: str,
+    allocations: List[dict],
+    amount_collected: float,
+    next_promise_date,
+    exclude_payment_id: int | None = None,
+) -> tuple[dict[int, Bill], Decimal, bool]:
+    from decimal import Decimal, ROUND_HALF_UP
+
+    TWO_DP = Decimal("0.01")
+    zero_amount_promise_change = (
+        (amount_collected is not None)
+        and Decimal(str(amount_collected)) == Decimal("0")
+        and next_promise_date is not None
+    )
+    bill_ids = [a["bill_id"] for a in allocations]
+    if len(bill_ids) != len(set(bill_ids)):
+        raise ValueError("Duplicate bill allocations are not allowed")
+    if not bill_ids:
+        raise ValueError("At least one bill allocation is required")
+
+    bills = {b.id: b for b in db.query(Bill).filter(Bill.id.in_(bill_ids)).all()}
+
+    if zero_amount_promise_change and bill_ids:
+        existing_pd_change = (
+            db.query(PaymentAllocation)
+            .join(Payment, Payment.id == PaymentAllocation.payment_id)
+            .filter(
+                PaymentAllocation.bill_id.in_(bill_ids),
+                Payment.status.in_(
+                    [PaymentStatus.submitted, PaymentStatus.accountant_approved]
+                ),
+                Payment.amount_collected == 0,
+                Payment.next_promise_date.isnot(None),
+            )
+        )
+        if exclude_payment_id is not None:
+            existing_pd_change = existing_pd_change.filter(Payment.id != exclude_payment_id)
+        existing_pd_change = existing_pd_change.first()
+        if existing_pd_change:
+            raise ValueError("A promise-date change is already pending for this bill")
+
+    reserved_by_bill = get_reserved_totals_by_bill(
+        db, bill_ids, exclude_payment_id=exclude_payment_id
+    )
+
+    total_alloc = Decimal(0)
+    for a in allocations:
+        bid = a["bill_id"]
+        amt = Decimal(str(a["amount"]))
+        try:
+            amt = amt.quantize(TWO_DP, rounding=ROUND_HALF_UP)
+        except Exception:
+            pass
+        if amt <= 0:
+            if not (zero_amount_promise_change and amt == 0):
+                raise ValueError(
+                    "Allocation amount must be > 0 (0 only for promise-date change)"
+                )
+        b = bills.get(bid)
+        if not b:
+            raise ValueError(f"Bill {bid} not found")
+        if b.company_code != company_code:
+            raise ValueError("Allocation bill does not belong to company")
+        if getattr(b, "is_archived", False):
+            raise ValueError("Cannot allocate to archived bill")
+        if b.status != BillStatus.pending:
+            raise ValueError("Can only allocate to pending bills")
+
+        already_reserved = reserved_by_bill.get(bid, Decimal(0))
+        effective_remaining = Decimal(b.amount) - Decimal(b.amount_paid) - already_reserved
+        try:
+            effective_remaining = effective_remaining.quantize(
+                TWO_DP, rounding=ROUND_HALF_UP
+            )
+        except Exception:
+            pass
+        if effective_remaining < 0:
+            effective_remaining = Decimal(0)
+        if amt > effective_remaining:
+            bill_ref = getattr(b, "bill_number", None) or str(bid)
+            raise ValueError(
+                "Allocation exceeds bill remaining amount: "
+                f"bill={bill_ref}, remaining={effective_remaining}, requested={amt}"
+            )
+        total_alloc += amt
+
+    if zero_amount_promise_change and len(allocations) != 1:
+        raise ValueError("Promise-date change must reference exactly one bill")
+
+    try:
+        total_alloc = total_alloc.quantize(TWO_DP, rounding=ROUND_HALF_UP)
+    except Exception:
+        pass
+    amount_collected_dec = Decimal(str(amount_collected))
+    try:
+        amount_collected_dec = amount_collected_dec.quantize(
+            TWO_DP, rounding=ROUND_HALF_UP
+        )
+    except Exception:
+        pass
+    if total_alloc > amount_collected_dec:
+        raise ValueError("Total allocations exceed amount_collected")
+    if total_alloc != amount_collected_dec:
+        raise ValueError("Allocation total must equal amount_collected")
+
+    return bills, total_alloc, zero_amount_promise_change
+
+
 def create_payment_with_allocations(
     db: Session,
     *,
@@ -71,111 +209,13 @@ def create_payment_with_allocations(
         raise ValueError(
             "amount_collected must be > 0 (or 0 only for promise-date change)"
         )
-    # Fetch all referenced bills
-    bill_ids = [a["bill_id"] for a in allocations]
-    # No duplicate bill allocations per payment
-    if len(bill_ids) != len(set(bill_ids)):
-        raise ValueError("Duplicate bill allocations are not allowed")
-    if not bill_ids:
-        raise ValueError("At least one bill allocation is required")
-    bills = {b.id: b for b in db.query(Bill).filter(Bill.id.in_(bill_ids)).all()}
-    # Prevent multiple concurrent promise-date change requests for the same bill
-    if zero_amount_promise_change and bill_ids:
-        existing_pd_change = (
-            db.query(PaymentAllocation)
-            .join(Payment, Payment.id == PaymentAllocation.payment_id)
-            .filter(
-                PaymentAllocation.bill_id.in_(bill_ids),
-                Payment.status.in_(
-                    [PaymentStatus.submitted, PaymentStatus.accountant_approved]
-                ),
-                Payment.amount_collected == 0,
-                Payment.next_promise_date.isnot(None),
-            )
-            .first()
-        )
-        if existing_pd_change:
-            raise ValueError("A promise-date change is already pending for this bill")
-    # Reserved allocations from pending reviews (submitted or accountant_approved)
-    reserved_rows = (
-        db.query(
-            PaymentAllocation.bill_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .filter(
-            PaymentAllocation.bill_id.in_(bill_ids),
-            Payment.status.in_(
-                [PaymentStatus.submitted, PaymentStatus.accountant_approved]
-            ),
-        )
-        .group_by(PaymentAllocation.bill_id)
-        .all()
+    _bills, _total_alloc, _zero_pd = _validate_allocations_against_effective_remaining(
+        db,
+        company_code=company_code,
+        allocations=allocations,
+        amount_collected=amount_collected,
+        next_promise_date=next_promise_date,
     )
-    reserved_by_bill = {
-        bid: Decimal(str(total)).quantize(TWO_DP, rounding=ROUND_HALF_UP)
-        for bid, total in reserved_rows
-    }
-    total_alloc = Decimal(0)
-    for a in allocations:
-        bid = a["bill_id"]
-        amt = Decimal(str(a["amount"]))
-        # normalize to 2 decimal places
-        try:
-            amt = amt.quantize(TWO_DP, rounding=ROUND_HALF_UP)
-        except Exception:
-            pass
-        if amt <= 0:
-            # Permit zero allocation only in the special promise-date change flow
-            if not (zero_amount_promise_change and amt == 0):
-                raise ValueError(
-                    "Allocation amount must be > 0 (0 only for promise-date change)"
-                )
-        b = bills.get(bid)
-        if not b:
-            raise ValueError(f"Bill {bid} not found")
-        if b.company_code != company_code:
-            raise ValueError("Allocation bill does not belong to company")
-        if getattr(b, "is_archived", False):
-            raise ValueError("Cannot allocate to archived bill")
-        if b.status != BillStatus.pending:
-            raise ValueError("Can only allocate to pending bills")
-        already_reserved = reserved_by_bill.get(bid, Decimal(0))
-        effective_remaining = (
-            Decimal(b.amount) - Decimal(b.amount_paid) - already_reserved
-        )
-        # Compare with cents precision
-        try:
-            effective_remaining = effective_remaining.quantize(
-                TWO_DP, rounding=ROUND_HALF_UP
-            )
-        except Exception:
-            pass
-        if amt > effective_remaining:
-            raise ValueError("Allocation exceeds bill remaining amount")
-        # Allow backward updates; no per-bill forward-only restriction
-        total_alloc += amt
-    # For promise-date change, enforce exactly one allocation with 0 matching amount_collected
-    if zero_amount_promise_change:
-        if len(allocations) != 1:
-            raise ValueError("Promise-date change must reference exactly one bill")
-    # Normalize totals to 2dp for a robust equality comparison
-    try:
-        total_alloc = total_alloc.quantize(TWO_DP, rounding=ROUND_HALF_UP)
-    except Exception:
-        pass
-    amount_collected_dec = Decimal(str(amount_collected))
-    try:
-        amount_collected_dec = amount_collected_dec.quantize(
-            TWO_DP, rounding=ROUND_HALF_UP
-        )
-    except Exception:
-        pass
-    if total_alloc > amount_collected_dec:
-        raise ValueError("Total allocations exceed amount_collected")
-    if total_alloc != amount_collected_dec:
-        # Allow equality check to pass for zero-amount flows (already ensured above)
-        raise ValueError("Allocation total must equal amount_collected")
     # Geo coordinate validation
     if exec_lat is not None:
         if exec_lat < -90 or exec_lat > 90:
@@ -211,6 +251,17 @@ def create_payment_with_allocations(
             if existing_after:
                 return existing_after
         raise
+    # Re-validate after payment row creation to prevent stale allocation submits.
+    # This catches races where another request reserved remaining amounts between
+    # the initial validation and final allocation insertion.
+    _validate_allocations_against_effective_remaining(
+        db,
+        company_code=company_code,
+        allocations=allocations,
+        amount_collected=amount_collected,
+        next_promise_date=next_promise_date,
+        exclude_payment_id=p.id,
+    )
     for a in allocations:
         # persist normalized amount
         amt = Decimal(str(a["amount"]))

@@ -117,3 +117,109 @@ def test_bills_sorting_and_filters(db_session, client):
     db_session.commit()
     r_paid = client.get("/companies/C000/bills", headers=hdr, params={"status": "paid"})
     assert all(b["status"] == "paid" for b in r_paid.json()["items"])
+
+
+def test_company_counts_overdue_not_in_pending(db_session, client):
+    admin = User(
+        username="admin_counts",
+        password_hash=hash_password("admin"),
+        role=Role.admin,
+        is_active=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+
+    company = Company(code="C777", name="Counts Co", amount=0, outbal=0, is_archived=False)
+    db_session.add(company)
+    db_session.commit()
+
+    today = date.today()
+    for i in range(4):
+        db_session.add(
+            Bill(
+                bill_number=f"OD{i}",
+                company_code="C777",
+                bill_date=today - timedelta(days=15 + i),
+                due_date=today + timedelta(days=30),
+                promise_date=today - timedelta(days=1 + i),
+                amount=Decimal("100.00"),
+                amount_paid=Decimal("0.00"),
+                status=BillStatus.pending,
+                is_archived=False,
+            )
+        )
+    db_session.commit()
+
+    hdr = {
+        "Authorization": f"Bearer {client.post('/auth/login', json={'username':'admin_counts','password':'admin'}).json()['access_token']}"
+    }
+    r = client.get("/companies", headers=hdr, params={"q": "C777"})
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["code"] == "C777"
+    assert items[0]["pending_count"] == 0
+    assert items[0]["overdue_count"] == 4
+
+
+def test_company_list_and_dashboard_totals_use_same_effective_due_rule(db_session, client):
+    admin = User(
+        username="admin_totals_sync",
+        password_hash=hash_password("admin"),
+        role=Role.admin,
+        is_active=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+
+    company = Company(code="CSYNC", name="Sync Co", amount=0, outbal=0, is_archived=False)
+    db_session.add(company)
+    db_session.commit()
+
+    today = date.today()
+    # Not overdue by effective rule because promise_date is in future.
+    db_session.add(
+        Bill(
+            bill_number="S1",
+            company_code="CSYNC",
+            bill_date=today - timedelta(days=20),
+            due_date=today - timedelta(days=10),
+            promise_date=today + timedelta(days=3),
+            amount=Decimal("200.00"),
+            amount_paid=Decimal("0.00"),
+            status=BillStatus.pending,
+            is_archived=False,
+        )
+    )
+    # Overdue by effective rule because bill_date + credit extension is already in past.
+    db_session.add(
+        Bill(
+            bill_number="S2",
+            company_code="CSYNC",
+            bill_date=today - timedelta(days=40),
+            due_date=today + timedelta(days=10),
+            promise_date=None,
+            amount=Decimal("300.00"),
+            amount_paid=Decimal("0.00"),
+            status=BillStatus.pending,
+            is_archived=False,
+        )
+    )
+    db_session.commit()
+
+    hdr = {
+        "Authorization": f"Bearer {client.post('/auth/login', json={'username':'admin_totals_sync','password':'admin'}).json()['access_token']}"
+    }
+
+    r_list = client.get("/companies", headers=hdr, params={"q": "CSYNC"})
+    assert r_list.status_code == 200
+    item = r_list.json()["items"][0]
+
+    r_dash = client.get("/companies/CSYNC/dashboard", headers=hdr)
+    assert r_dash.status_code == 200
+    dash = r_dash.json()
+
+    assert Decimal(str(item["amount"])) == Decimal(str(dash["amount"]))
+    assert Decimal(str(item["outbal"])) == Decimal(str(dash["outbal"]))
+    assert item["pending_count"] == 1
+    assert item["overdue_count"] == 1

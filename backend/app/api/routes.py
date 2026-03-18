@@ -10,7 +10,7 @@ from fastapi import (
 )
 from pathlib import Path
 from sqlalchemy.orm import Session
-from sqlalchemy import text, or_, func, literal
+from sqlalchemy import text, or_, func, literal, case
 from typing import Optional, List
 import httpx
 from datetime import date, datetime, timedelta
@@ -62,12 +62,15 @@ from app.services.company import (
     ensure_settings_row,
     recompute_company_amounts,
     resolve_promise_crossed_notifications,
+    effective_due_date_expr,
+    get_company_rollups,
 )
 from app.services.payments import create_payment_with_allocations, admin_approve_payment
 from app.services.payments import (
     create_payment_with_allocations,
     admin_approve_payment,
     reconcile_bill_promises,
+    get_reserved_totals_by_bill,
 )
 from app.services.notifications import run_notification_scan
 from app.core.scheduler import reschedule_jobs
@@ -244,57 +247,63 @@ def list_companies(
             .join(User, User.id == ExecAssignment.executive_id)
             .filter(User.username.ilike(exec_username.lower()))
         )
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
+    eff_due = effective_due_date_expr(credit_days)
+    residual = Bill.amount - Bill.amount_paid
+    positive_residual = func.coalesce(
+        func.sum(case((residual > 0, residual), else_=0)),
+        0,
+    )
+    overdue_positive = func.coalesce(
+        func.sum(case((((residual > 0) & (eff_due <= func.current_date())), residual), else_=0)),
+        0,
+    )
+    counts_agg = (
+        db.query(
+            Bill.company_code.label("code"),
+            positive_residual.label("amount_sum"),
+            overdue_positive.label("outbal_sum"),
+            func.count()
+            .filter((residual > 0) & (eff_due > func.current_date()))
+            .label("pending_count"),
+            func.count()
+            .filter((residual > 0) & (eff_due <= func.current_date()))
+            .label("overdue_count"),
+        )
+        .filter(Bill.status == "pending", Bill.is_archived == False)
+        .group_by(Bill.company_code)
+        .subquery()
+    )
+    base = base.outerjoin(counts_agg, counts_agg.c.code == Company.code)
+
     if balance == "positive":
-        base = base.filter(Company.outbal > 0)
+        base = base.filter(func.coalesce(counts_agg.c.outbal_sum, 0) > 0)
     elif balance == "zero":
-        base = base.filter(Company.outbal == 0)
+        base = base.filter(func.coalesce(counts_agg.c.outbal_sum, 0) == 0)
 
     total = base.count()
 
     # Sorting
     if sort in ("pending_desc", "overdue_desc"):
-        # Join aggregated bill counts when sorting by counts
-        settings_row = ensure_settings_row(db)
-        credit_days = settings_row.credit_extension_days or 0
-        eff_due = func.coalesce(
-            Bill.promise_date, Bill.bill_date + literal(credit_days), Bill.due_date
-        )
-        agg = (
-            db.query(
-                Bill.company_code.label("code"),
-                func.count()
-                .filter((Bill.status == "pending") & (Bill.is_archived == False))
-                .label("pending_count"),
-                func.count()
-                .filter(
-                    (Bill.status == "pending")
-                    & (Bill.is_archived == False)
-                    & (eff_due <= func.current_date())
-                )
-                .label("overdue_count"),
-            )
-            .group_by(Bill.company_code)
-            .subquery()
-        )
-        base = base.outerjoin(agg, agg.c.code == Company.code)
         if sort == "overdue_desc":
             base = base.order_by(
-                func.coalesce(agg.c.overdue_count, 0).desc(), Company.name.asc()
+                func.coalesce(counts_agg.c.overdue_count, 0).desc(), Company.name.asc()
             )
         else:
             base = base.order_by(
-                func.coalesce(agg.c.pending_count, 0).desc(), Company.name.asc()
+                func.coalesce(counts_agg.c.pending_count, 0).desc(), Company.name.asc()
             )
     elif sort == "code_asc":
         base = base.order_by(Company.code.asc())
     elif sort == "outbal_desc":
-        base = base.order_by(Company.outbal.desc())
+        base = base.order_by(func.coalesce(counts_agg.c.outbal_sum, 0).desc())
     elif sort == "outbal_asc":
-        base = base.order_by(Company.outbal.asc())
+        base = base.order_by(func.coalesce(counts_agg.c.outbal_sum, 0).asc())
     elif sort == "amount_desc":
-        base = base.order_by(Company.amount.desc())
+        base = base.order_by(func.coalesce(counts_agg.c.amount_sum, 0).desc())
     elif sort == "amount_asc":
-        base = base.order_by(Company.amount.asc())
+        base = base.order_by(func.coalesce(counts_agg.c.amount_sum, 0).asc())
     else:
         base = base.order_by(Company.name.asc(), Company.code.asc())
 
@@ -308,48 +317,7 @@ def list_companies(
     # Enrich via separate lightweight query (avoids duplicates / distinct complexity)
     code_list = [c.code for c in rows]
     if code_list:
-        # Compute counts for this page
-        settings_row = ensure_settings_row(db)
-        credit_days = settings_row.credit_extension_days or 0
-        eff_due = func.coalesce(
-            Bill.promise_date, Bill.bill_date + literal(credit_days), Bill.due_date
-        )
-        cnt_rows = (
-            db.query(
-                Bill.company_code.label("code"),
-                func.count()
-                .filter((Bill.status == "pending") & (Bill.is_archived == False))
-                .label("pending_count"),
-                func.count()
-                .filter(
-                    (Bill.status == "pending")
-                    & (Bill.is_archived == False)
-                    & (eff_due <= func.current_date())
-                )
-                .label("overdue_count"),
-            )
-            .filter(Bill.company_code.in_(code_list))
-            .group_by(Bill.company_code)
-            .all()
-        )
-        counts = {
-            r.code: (int(r.pending_count or 0), int(r.overdue_count or 0))
-            for r in cnt_rows
-        }
-        # Compute next_due_date (effective earliest due) for this page
-        next_due_rows = (
-            db.query(
-                Bill.company_code.label("code"), func.min(eff_due).label("next_due")
-            )
-            .filter(
-                Bill.company_code.in_(code_list),
-                Bill.status == "pending",
-                Bill.is_archived == False,
-            )
-            .group_by(Bill.company_code)
-            .all()
-        )
-        next_due_by_code = {r.code: r.next_due for r in next_due_rows}
+        rollups = get_company_rollups(db, code_list, credit_days)
         assignments = (
             db.query(ExecAssignment, User)
             .join(User, User.id == ExecAssignment.executive_id)
@@ -358,11 +326,12 @@ def list_companies(
         )
         by_code = {a.company_code: u for a, u in assignments}
         for c in rows:
-            pc, oc = counts.get(c.code, (0, 0))
-            setattr(c, "pending_count", pc)
-            setattr(c, "overdue_count", oc)
-            # Set effective earliest due date for UI sorting
-            setattr(c, "next_due_date", next_due_by_code.get(c.code))
+            roll = rollups.get(c.code, {})
+            setattr(c, "pending_count", int(roll.get("pending_count", 0)))
+            setattr(c, "overdue_count", int(roll.get("overdue_count", 0)))
+            setattr(c, "next_due_date", roll.get("next_due_date"))
+            setattr(c, "amount", roll.get("amount", Decimal("0")))
+            setattr(c, "outbal", roll.get("outbal", Decimal("0")))
             u = by_code.get(c.code)
             if u:
                 setattr(c, "assigned_executive_id", u.id)
@@ -434,6 +403,7 @@ def company_dashboard(request: Request, code: str, db: Session = Depends(get_db)
 
     pending_out = [map_bill(b) for b in pending]
     paid_out = [map_bill(b) for b in paid]
+    roll = get_company_rollups(db, [c.code], credit_days).get(c.code, {})
     return CompanyDashboard(
         code=c.code,
         name=c.name or c.code,
@@ -445,8 +415,8 @@ def company_dashboard(request: Request, code: str, db: Session = Depends(get_db)
             if getattr(c, "promise_date_source", None)
             else None
         ),
-        outbal=c.outbal,
-        amount=c.amount,
+        outbal=roll.get("outbal", Decimal("0")),
+        amount=roll.get("amount", Decimal("0")),
         pending_bills=pending_out,
         paid_bills=paid_out,
     )
@@ -562,10 +532,17 @@ def list_company_bills(
     settings_row = ensure_settings_row(db)
     credit_days = settings_row.credit_extension_days or 0
     items = []
+    bill_ids = [b.id for b in raw_items]
+    reserved_by_bill = get_reserved_totals_by_bill(db, bill_ids)
     for b in raw_items:
         dynamic_due = (
             (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
         )
+        remaining_amount = Decimal(str(b.amount)) - Decimal(str(b.amount_paid)) - Decimal(
+            str(reserved_by_bill.get(b.id, Decimal("0")))
+        )
+        if remaining_amount < 0:
+            remaining_amount = Decimal("0")
         items.append(
             BillOut(
                 id=b.id,
@@ -576,6 +553,7 @@ def list_company_bills(
                 promise_date=getattr(b, "promise_date", None),
                 amount=b.amount,
                 amount_paid=b.amount_paid,
+                remaining_amount=remaining_amount,
                 status=b.status.value if hasattr(b.status, "value") else str(b.status),
             )
         )
@@ -1758,48 +1736,14 @@ def get_executive_companies(
         code_list = [c.code for c in items]
         settings_row = ensure_settings_row(db)
         credit_days = settings_row.credit_extension_days or 0
-        # Fetch minimal fields from bills to compute next_due_date
-        pending = (
-            db.query(
-                Bill.company_code, Bill.promise_date, Bill.bill_date, Bill.due_date
-            )
-            .filter(
-                Bill.company_code.in_(code_list),
-                Bill.status == "pending",
-                Bill.is_archived == False,
-            )
-            .all()
-        )
-        from collections import defaultdict
-
-        best: dict[str, date] = {}
-        pending_counts = defaultdict(int)
-        overdue_counts = defaultdict(int)
-        today = date.today()
-        for company_code, promise_date, bill_date, due_date in pending:
-            # Effective due is bill.promise_date if set, else bill_date+credit_days, else bill.due_date
-            eff_due = None
-            if promise_date is not None:
-                eff_due = promise_date
-            elif bill_date is not None:
-                try:
-                    eff_due = bill_date + timedelta(days=credit_days)
-                except Exception:
-                    eff_due = bill_date
-            else:
-                eff_due = due_date
-            if eff_due is None:
-                continue
-            pending_counts[company_code] += 1
-            if eff_due <= today:
-                overdue_counts[company_code] += 1
-            prev = best.get(company_code)
-            if prev is None or eff_due < prev:
-                best[company_code] = eff_due
+        rollups = get_company_rollups(db, code_list, credit_days)
         for c in items:
-            setattr(c, "next_due_date", best.get(c.code))
-            setattr(c, "pending_count", int(pending_counts.get(c.code, 0)))
-            setattr(c, "overdue_count", int(overdue_counts.get(c.code, 0)))
+            roll = rollups.get(c.code, {})
+            setattr(c, "next_due_date", roll.get("next_due_date"))
+            setattr(c, "pending_count", int(roll.get("pending_count", 0)))
+            setattr(c, "overdue_count", int(roll.get("overdue_count", 0)))
+            setattr(c, "amount", roll.get("amount", Decimal("0")))
+            setattr(c, "outbal", roll.get("outbal", Decimal("0")))
     return {"items": items, "total": len(items)}
 
 
@@ -1826,46 +1770,14 @@ def my_companies(
         code_list = [c.code for c in items]
         settings_row = ensure_settings_row(db)
         credit_days = settings_row.credit_extension_days or 0
-        pending = (
-            db.query(
-                Bill.company_code, Bill.promise_date, Bill.bill_date, Bill.due_date
-            )
-            .filter(
-                Bill.company_code.in_(code_list),
-                Bill.status == "pending",
-                Bill.is_archived == False,
-            )
-            .all()
-        )
-        from collections import defaultdict
-
-        best: dict[str, date] = {}
-        pending_counts = defaultdict(int)
-        overdue_counts = defaultdict(int)
-        today = date.today()
-        for company_code, promise_date, bill_date, due_date in pending:
-            eff_due = None
-            if promise_date is not None:
-                eff_due = promise_date
-            elif bill_date is not None:
-                try:
-                    eff_due = bill_date + timedelta(days=credit_days)
-                except Exception:
-                    eff_due = bill_date
-            else:
-                eff_due = due_date
-            if eff_due is None:
-                continue
-            pending_counts[company_code] += 1
-            if eff_due <= today:
-                overdue_counts[company_code] += 1
-            prev = best.get(company_code)
-            if prev is None or eff_due < prev:
-                best[company_code] = eff_due
+        rollups = get_company_rollups(db, code_list, credit_days)
         for c in items:
-            setattr(c, "next_due_date", best.get(c.code))
-            setattr(c, "pending_count", int(pending_counts.get(c.code, 0)))
-            setattr(c, "overdue_count", int(overdue_counts.get(c.code, 0)))
+            roll = rollups.get(c.code, {})
+            setattr(c, "next_due_date", roll.get("next_due_date"))
+            setattr(c, "pending_count", int(roll.get("pending_count", 0)))
+            setattr(c, "overdue_count", int(roll.get("overdue_count", 0)))
+            setattr(c, "amount", roll.get("amount", Decimal("0")))
+            setattr(c, "outbal", roll.get("outbal", Decimal("0")))
     return {"items": items, "total": len(items)}
 
 

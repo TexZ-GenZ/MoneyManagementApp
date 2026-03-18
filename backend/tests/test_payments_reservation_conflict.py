@@ -58,6 +58,11 @@ def test_pending_reservation_conflict(db_session, client):
     }
     r1 = client.post("/payments", json=body1, headers=hdr)
     assert r1.status_code == 200
+    r_bills = client.get("/companies/RSV1/bills", headers=hdr, params={"status": "pending"})
+    assert r_bills.status_code == 200
+    items = r_bills.json().get("items", [])
+    assert len(items) == 1
+    assert Decimal(str(items[0].get("remaining_amount"))) == Decimal("40.00")
     # Second tries to allocate more than remaining (remaining 40, attempt 45)
     body2 = {
         "company_code": "RSV1",
@@ -68,7 +73,6 @@ def test_pending_reservation_conflict(db_session, client):
     }
     r2 = client.post("/payments", json=body2, headers=hdr)
     assert r2.status_code == 400, r2.text
-    assert (
-        "remaining" in r2.json()["detail"].lower()
-        or "exceed" in r2.json()["detail"].lower()
-    )
+    detail = r2.json()["detail"]
+    assert "bill=" in detail.lower()
+    assert "remaining=" in detail.lower()

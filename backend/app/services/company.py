@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func, case, and_
+from sqlalchemy import select, func, case, and_, literal
 from app.models.models import (
     Company,
     Bill,
@@ -12,6 +12,99 @@ from app.models.models import (
     NotificationStatus,
 )
 from app.core.config import settings as cfg
+
+
+def effective_due_date_expr(credit_days: int):
+    return func.coalesce(
+        Bill.promise_date, Bill.bill_date + literal(credit_days), Bill.due_date
+    )
+
+
+def get_company_rollups(db: Session, codes: list[str], credit_days: int) -> dict[str, dict]:
+    if not codes:
+        return {}
+    residual = Bill.amount - Bill.amount_paid
+    positive_residual = case((residual > 0, residual), else_=0)
+    overdue_positive = case(
+        (and_(residual > 0, effective_due_date_expr(credit_days) <= func.current_date()), residual),
+        else_=0,
+    )
+    eff_due = effective_due_date_expr(credit_days)
+
+    rows = (
+        db.query(
+            Bill.company_code.label("code"),
+            func.coalesce(func.sum(positive_residual), 0).label("amount"),
+            func.coalesce(func.sum(overdue_positive), 0).label("outbal"),
+            func.count()
+            .filter(
+                (residual > 0)
+                & (eff_due > func.current_date())
+            )
+            .label("pending_count"),
+            func.count()
+            .filter(
+                (residual > 0)
+                & (eff_due <= func.current_date())
+            )
+            .label("overdue_count"),
+        )
+        .filter(
+            Bill.company_code.in_(codes),
+            Bill.status == BillStatus.pending,
+            Bill.is_archived == False,
+        )
+        .group_by(Bill.company_code)
+        .all()
+    )
+    rollups = {
+        r.code: {
+            "amount": Decimal(str(r.amount or 0)),
+            "outbal": Decimal(str(r.outbal or 0)),
+            "pending_count": int(r.pending_count or 0),
+            "overdue_count": int(r.overdue_count or 0),
+            "next_due_date": None,
+        }
+        for r in rows
+    }
+
+    due_rows = (
+        db.query(Bill.company_code, Bill.promise_date, Bill.bill_date, Bill.due_date)
+        .filter(
+            Bill.company_code.in_(codes),
+            Bill.status == BillStatus.pending,
+            Bill.is_archived == False,
+            (Bill.amount - Bill.amount_paid) > 0,
+        )
+        .all()
+    )
+    for company_code, promise_date, bill_date, due_date in due_rows:
+        eff = None
+        if promise_date is not None:
+            eff = promise_date
+        elif bill_date is not None:
+            try:
+                eff = bill_date + timedelta(days=credit_days)
+            except Exception:
+                eff = bill_date
+        else:
+            eff = due_date
+        if eff is None:
+            continue
+        curr = rollups.get(company_code)
+        if curr is None:
+            curr = {
+                "amount": Decimal("0"),
+                "outbal": Decimal("0"),
+                "pending_count": 0,
+                "overdue_count": 0,
+                "next_due_date": eff,
+            }
+            rollups[company_code] = curr
+        prev = curr.get("next_due_date")
+        if prev is None or eff < prev:
+            curr["next_due_date"] = eff
+    return rollups
 
 
 def ensure_settings_row(db: Session) -> Setting:
@@ -42,7 +135,8 @@ def recalc_company_totals(db: Session, code: str) -> None:
     - credit_date: oldest due_date among positive-residual bills + extension days; cleared if none.
     - Negative residuals (credit notes / overpayments) excluded from sums.
     """
-    today = date.today()
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
     residual = Bill.amount - Bill.amount_paid
     positive_residual = case((residual > 0, residual), else_=0)
     total_due = Decimal(
@@ -55,13 +149,28 @@ def recalc_company_totals(db: Session, code: str) -> None:
         .scalar()
     )
     overdue_sum = Decimal(
-        db.query(func.coalesce(func.sum(positive_residual), 0))
+        db.query(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                (Bill.amount - Bill.amount_paid) > 0,
+                                effective_due_date_expr(credit_days)
+                                <= func.current_date(),
+                            ),
+                            Bill.amount - Bill.amount_paid,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            )
+        )
         .filter(
             Bill.company_code == code,
             Bill.status == BillStatus.pending,
             Bill.is_archived == False,
-            Bill.due_date <= today,
-            (Bill.amount - Bill.amount_paid) > 0,
         )
         .scalar()
     )
@@ -79,7 +188,7 @@ def recalc_company_totals(db: Session, code: str) -> None:
         )
         .scalar()
     )
-    s = ensure_settings_row(db)
+    s = settings_row
     if oldest_due is not None:
         # Persist the oldest due date for quick filtering in list APIs/UI
         comp.oldest_due_date = oldest_due
@@ -114,7 +223,8 @@ def recalc_company_totals(db: Session, code: str) -> None:
 
 def recompute_company_amounts(db: Session, code: str) -> None:
     """Recompute amount & outbal (overdue-only) without touching credit/promise dates."""
-    today = date.today()
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
     residual = Bill.amount - Bill.amount_paid
     positive_residual = case((residual > 0, residual), else_=0)
     amount_sum = Decimal(
@@ -127,13 +237,28 @@ def recompute_company_amounts(db: Session, code: str) -> None:
         .scalar()
     )
     overdue_sum = Decimal(
-        db.query(func.coalesce(func.sum(positive_residual), 0))
+        db.query(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                (Bill.amount - Bill.amount_paid) > 0,
+                                effective_due_date_expr(credit_days)
+                                <= func.current_date(),
+                            ),
+                            Bill.amount - Bill.amount_paid,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            )
+        )
         .filter(
             Bill.company_code == code,
             Bill.status == BillStatus.pending,
             Bill.is_archived == False,
-            Bill.due_date <= today,
-            (Bill.amount - Bill.amount_paid) > 0,
         )
         .scalar()
     )

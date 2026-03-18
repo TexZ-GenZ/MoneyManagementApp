@@ -13,6 +13,7 @@ class BillOut(BaseModel):
     promise_date: Optional[date] = None
     amount: Decimal
     amount_paid: Decimal
+    remaining_amount: Optional[Decimal] = None
     status: str
 
     class Config:
