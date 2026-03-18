@@ -26,7 +26,7 @@ export default function ExecutiveCompaniesScreen() {
   // UI state
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // all | active | zero
-  const [sortMode, setSortMode] = useState('overdue_desc'); // overdue_desc | pending_desc | outbal_desc | outbal_asc | oldest_due_asc
+  const [sortMode, setSortMode] = useState('alphabetic_asc'); // alphabetic_asc | overdue_desc | pending_desc | outbal_desc | outbal_asc | oldest_due_asc
   const [showFilters, setShowFilters] = useState(false); // default collapsed per request
   // Removed oldest-due bucket filters; use sort chip "Oldest Due" instead
 
@@ -95,6 +95,11 @@ export default function ExecutiveCompaniesScreen() {
     };
     list.sort((a, b) => {
       switch (sortMode) {
+        case 'alphabetic_asc': {
+          const an = (a?.name || a?.code || '').toString();
+          const bn = (b?.name || b?.code || '').toString();
+          return an.localeCompare(bn);
+        }
         case 'pending_desc':
           return (b.pending_count || 0) - (a.pending_count || 0);
         case 'overdue_desc':
@@ -186,6 +191,7 @@ export default function ExecutiveCompaniesScreen() {
   );
 
   const sortChips = [
+    { value: 'alphabetic_asc', label: 'Alphabetic' },
     { value: 'overdue_desc', label: 'Overdue High' },
     { value: 'pending_desc', label: 'Pending High' },
     { value: 'outbal_desc', label: 'Outbal High' },
