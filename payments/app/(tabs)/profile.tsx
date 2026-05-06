@@ -6,6 +6,7 @@ import { logoutUser } from '@/src/store/authSlice';
 import { useRouter } from 'expo-router';
 import Screen from '@/src/ui/components/Screen';
 import Card from '@/src/ui/components/Card';
+import Button from '@/src/components/common/Button';
 import { formatDateTime } from '@/src/ui/format';
 import { tokens } from '@/src/ui/tokens';
 import Constants from 'expo-constants';
@@ -57,6 +58,8 @@ export default function ProfileScreen() {
 
   const baseUrl = API_BASE_URL || '-';
   const appVersion = Constants.expoConfig?.version || '1.0.0';
+  const canEditCompanyPromise = (me?.role || '').toLowerCase() === 'executive'
+    || (me?.role || '').toLowerCase() === 'accountant';
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -148,6 +151,19 @@ export default function ProfileScreen() {
             <IconRow icon="timer-outline" label="Expires In" value={expiresInMin !== undefined ? `${expiresInMin} min` : '-'} />
             <IconRow icon="calendar-outline" label="Expires At" value={displayExpMs ? formatDateTime(displayExpMs) : '-'} last />
           </Card>
+          {canEditCompanyPromise && (
+            <Card style={styles.cardSection}>
+              <SectionTitle text="Company" />
+              <Text style={styles.helperText}>
+                Update a company-level promise date for pending or partial bills.
+              </Text>
+              <Button
+                title="Change Company Promise Date"
+                onPress={() => router.push('/company-promise')}
+                variant="outline"
+              />
+            </Card>
+          )}
           {/* Removed session, app version, and advanced details for a cleaner view */}
           <View style={{ marginTop: 16 }}>
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -226,6 +242,7 @@ const styles = StyleSheet.create({
   rowValue: { color: tokens.colors.text, fontSize: 14, fontWeight: '700', flex: 1, textAlign: 'right', paddingLeft: 16 },
   roleBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, alignSelf: 'flex-start' },
   roleBadgeText: { color: '#000', fontWeight: '700', fontSize: 12 },
+  helperText: { color: tokens.colors.textDim, fontSize: 12, marginBottom: 12 },
   actionBtn: { paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
   actionBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
   logoutBtn: {

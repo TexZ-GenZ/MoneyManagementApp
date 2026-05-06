@@ -425,7 +425,7 @@ def company_dashboard(request: Request, code: str, db: Session = Depends(get_db)
 @router.patch(
     "/companies/{code}/promise-date",
     response_model=CompanyBase,
-    dependencies=[Depends(require_roles("executive", "admin"))],
+    dependencies=[Depends(require_roles("executive", "accountant", "admin"))],
 )
 @user_limiter.limit(settings.RATE_LIMIT_PROMISE_UPDATE)
 def set_promise_date(
@@ -445,17 +445,43 @@ def set_promise_date(
         raise HTTPException(
             status_code=400, detail="promise_date cannot be in the past"
         )
-    c.promise_date = body.promise_date
+    target_date = body.promise_date
+    c.promise_date = target_date
     try:
         from app.models.models import Company as CompanyModel, Role as RoleEnum
 
+        is_admin = user.role == RoleEnum.admin
         c.promise_date_source = (
-            CompanyModel.PromiseSource.exec
-            if user.role == RoleEnum.executive
-            else CompanyModel.PromiseSource.admin
+            CompanyModel.PromiseSource.admin
+            if is_admin
+            else CompanyModel.PromiseSource.exec
         )
     except Exception:
         pass
+    # Apply company-level promise to pending/partial bills with earlier dates.
+    bills = (
+        db.query(Bill)
+        .filter(
+            Bill.company_code == code,
+            Bill.is_archived == False,
+            Bill.status.in_([BillStatus.pending, BillStatus.partial]),
+        )
+        .all()
+    )
+    for b in bills:
+        effective = b.promise_date or b.due_date
+        if effective and effective < target_date:
+            b.promise_date = target_date
+            try:
+                from app.models.models import Company as CompanyModel
+
+                b.promise_date_source = (
+                    CompanyModel.PromiseSource.admin
+                    if is_admin
+                    else CompanyModel.PromiseSource.exec
+                )
+            except Exception:
+                pass
     db.commit()
     db.refresh(c)
     recompute_company_amounts(db, c.code)

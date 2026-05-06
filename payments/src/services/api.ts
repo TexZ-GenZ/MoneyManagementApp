@@ -239,6 +239,20 @@ class ApiService {
     });
   }
 
+  async requestCompanyPromiseDateChange(params: {
+    companyCode: string;
+    newPromiseDate: string; // YYYY-MM-DD
+  }): Promise<Company> {
+    const payload = { promise_date: params.newPromiseDate };
+    return this.request<Company>(
+      `/companies/${params.companyCode}/promise-date`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }
+    );
+  }
+
   async getPendingPayments(): Promise<Payment[]> {
     return this.request<Payment[]>("/payments/pending");
   }

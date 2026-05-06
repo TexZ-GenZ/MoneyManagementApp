@@ -8,10 +8,13 @@ import { formatCurrency, formatDate } from '../../src/ui/format';
 import { StorageService } from '../../src/services/storageService';
 import { API_BASE_URL } from '../../src/utils/constants';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { Picker } from '@react-native-picker/picker';
 import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import { emitPaymentUpdate } from '../../src/events/paymentEvents';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const paymentMethods = ['Cash', 'UPI', 'Cheque', 'Bank Transfer'];
 
 export default function MultiPayScreen() {
   const { code, name, amount } = useLocalSearchParams();
@@ -38,7 +41,7 @@ export default function MultiPayScreen() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationErrorMsg, setLocationErrorMsg] = useState("");
   const [comment, setComment] = useState('');
-  const [method, setMethod] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]);
   const [submitting, setSubmitting] = useState(false);
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState('oldest'); // oldest | newest | amount_desc | amount_asc
@@ -225,7 +228,7 @@ export default function MultiPayScreen() {
         company_code: code,
         collected_at: new Date().toISOString(),
         amount_collected: to2(initialTotal),
-        method: method,
+        method: paymentMethod.toLowerCase(),
         comments: comment || undefined,
         next_promise_date: promiseDate ? promiseDate.toISOString().slice(0, 10) : undefined,
         bill_allocations: Object.entries(selected).map(([bill_id, amount]) => ({ bill_id: Number(bill_id), amount: to2(amount) })),
@@ -341,6 +344,21 @@ export default function MultiPayScreen() {
                         </TouchableOpacity>
                       </View>
                     ) : null}
+                  </Card>
+                  <Card style={{ marginBottom: 8, padding: 10 }}>
+                    <FieldLabel label="Payment Method" />
+                    <View style={styles.pickerShell}>
+                      <Picker
+                        selectedValue={paymentMethod}
+                        onValueChange={(itemValue) => setPaymentMethod(itemValue)}
+                        mode="dropdown"
+                        style={styles.picker}
+                      >
+                        {paymentMethods.map((m) => (
+                          <Picker.Item key={m} label={m} value={m} />
+                        ))}
+                      </Picker>
+                    </View>
                   </Card>
                   <Card style={{ marginBottom: 8, padding: 10 }}>
                     <TextInput
@@ -484,6 +502,9 @@ const styles = StyleSheet.create({
   sortChipText: { fontSize: 12, fontWeight: '700', color: tokens.colors.textSubtle },
   sortChipTextActive: { color: '#000' },
   // removed filter toggle styles
+  fieldLabel: { color: tokens.colors.textDim, fontSize: 11, fontWeight: '700', marginBottom: 6, letterSpacing: 0.5 },
+  pickerShell: { backgroundColor: tokens.colors.cardAlt, borderRadius: 12, borderWidth: 1, borderColor: tokens.colors.border },
+  picker: { color: tokens.colors.text, width: '100%' },
   comment: { backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: tokens.colors.text, marginTop: 0 },
   submit: { marginTop: 12, backgroundColor: tokens.colors.accent, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   submitText: { color: '#000', fontWeight: '800', fontSize: 16 },
@@ -493,3 +514,7 @@ const styles = StyleSheet.create({
   promiseOverdue: { color: tokens.colors.danger },
   promiseUpcoming: { color: (tokens.colors.warning || '#f5b100') },
 });
+
+function FieldLabel({ label }) {
+  return <Text style={styles.fieldLabel}>{label}</Text>;
+}
