@@ -151,19 +151,7 @@ export default function ProfileScreen() {
             <IconRow icon="timer-outline" label="Expires In" value={expiresInMin !== undefined ? `${expiresInMin} min` : '-'} />
             <IconRow icon="calendar-outline" label="Expires At" value={displayExpMs ? formatDateTime(displayExpMs) : '-'} last />
           </Card>
-          {canEditCompanyPromise && (
-            <Card style={styles.cardSection}>
-              <SectionTitle text="Company" />
-              <Text style={styles.helperText}>
-                Update a company-level promise date for pending or partial bills.
-              </Text>
-              <Button
-                title="Change Company Promise Date"
-                onPress={() => router.push('/company-promise')}
-                variant="outline"
-              />
-            </Card>
-          )}
+          
           {/* Removed session, app version, and advanced details for a cleaner view */}
           <View style={{ marginTop: 16 }}>
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
