@@ -178,7 +178,7 @@ export default function CompanyBillsList() {
         <Screen title={name} subtitle={`Code ${code}`}>
             <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
                 <TouchableOpacity
-                    style={{ alignSelf: 'flex-end', backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}
+                    style={{ alignSelf: 'flex-end', backgroundColor: tokens.colors.accent, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}
                     onPress={() => router.push({ pathname: '/company-promise', params: { code } })}
                 >
                     <Text style={{ color: tokens.colors.text, fontWeight: '700' }}>Change Promise Date</Text>
