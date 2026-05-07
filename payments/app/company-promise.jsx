@@ -13,14 +13,19 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export default function CompanyPromiseScreen() {
   const [companyCode, setCompanyCode] = useState('');
   const [promiseDate, setPromiseDate] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const canSubmit = useMemo(() => {
     return companyCode.trim().length > 0 && DATE_RE.test(promiseDate.trim());
   }, [companyCode, promiseDate]);
+
+  const onPickDate = (date) => {
+    setPromiseDate(date.toISOString().slice(0, 10));
+    setPickerOpen(false);
+  };
 
   const onSubmit = async () => {
     setError(null);
@@ -42,34 +47,29 @@ export default function CompanyPromiseScreen() {
         newPromiseDate: date,
       });
       setSuccess(`Promise date updated to ${date} for ${code}.`);
-    } catch (e: any) {
+    } catch (e) {
       setError(e?.message || 'Failed to update promise date.');
     } finally {
       setLoading(false);
     }
-
-    const onPickDate = (date: Date) => {
-      setPromiseDate(date.toISOString().slice(0, 10));
-      setPickerOpen(false);
-    };
   };
 
-      <Screen
-        title="Company Promise Date"
-        subtitle="Apply a company-level promise date"
-        rightActions={(
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Pick promise date"
-            onPress={() => setPickerOpen(true)}
-            style={styles.textBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.textBtnLabel}>Change Promise Date</Text>
-          </TouchableOpacity>
-        )}
-      >
-    <Screen title="Company Promise Date" subtitle="Apply a company-level promise date">
+  return (
+    <Screen
+      title="Company Promise Date"
+      subtitle="Apply a company-level promise date"
+      rightActions={(
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Pick promise date"
+          onPress={() => setPickerOpen(true)}
+          style={styles.textBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.textBtnLabel}>Change Promise Date</Text>
+        </TouchableOpacity>
+      )}
+    >
       <Card style={styles.card}>
         <Text style={styles.helperText}>
           Updates pending/partial bills with earlier dates to this promise date.
