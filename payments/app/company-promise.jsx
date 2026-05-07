@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Screen from '@/src/ui/components/Screen';
@@ -11,7 +12,9 @@ import { tokens } from '@/src/ui/tokens';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default function CompanyPromiseScreen() {
-  const [companyCode, setCompanyCode] = useState('');
+  const params = useLocalSearchParams();
+  const initialCode = params?.code || '';
+  const [companyCode, setCompanyCode] = useState(initialCode);
   const [promiseDate, setPromiseDate] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -26,6 +29,17 @@ export default function CompanyPromiseScreen() {
     setPromiseDate(date.toISOString().slice(0, 10));
     setPickerOpen(false);
   };
+
+  // If opened with a company code param, auto-open the date picker for quick selection
+  useEffect(() => {
+    if (initialCode && !companyCode) setCompanyCode(initialCode);
+    if (initialCode && !pickerOpen) {
+      // small delay to let screen render before opening modal
+      const t = setTimeout(() => setPickerOpen(true), 120);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [initialCode]);
 
   const onSubmit = async () => {
     setError(null);
@@ -55,21 +69,7 @@ export default function CompanyPromiseScreen() {
   };
 
   return (
-    <Screen
-      title="Company Promise Date"
-      subtitle="Apply a company-level promise date"
-      rightActions={(
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Pick promise date"
-          onPress={() => setPickerOpen(true)}
-          style={styles.textBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={styles.textBtnLabel}>Change Promise Date</Text>
-        </TouchableOpacity>
-      )}
-    >
+    <Screen title="Company Promise Date" subtitle="Apply a company-level promise date">
       <Card style={styles.card}>
         <Text style={styles.helperText}>
           Updates pending/partial bills with earlier dates to this promise date.
@@ -80,13 +80,24 @@ export default function CompanyPromiseScreen() {
           onChangeText={setCompanyCode}
           autoCapitalize="characters"
           placeholder="e.g. 9184"
+          labelStyle={{ color: tokens.colors.text }}
+          inputStyle={{
+            backgroundColor: tokens.colors.cardAlt,
+            borderBottomWidth: 0,
+            borderWidth: 1,
+            borderColor: tokens.colors.border,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+          }}
         />
-        <Input
-          label="Promise Date"
-          value={promiseDate}
-          placeholder="Pick from calendar"
-          editable={false}
-        />
+
+        <TouchableOpacity activeOpacity={0.8} onPress={() => setPickerOpen(true)}>
+          <Text style={[{ fontSize: 16, fontWeight: '400', color: tokens.colors.text, marginBottom: 8 }]}>Promise Date</Text>
+          <View style={{ backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, minHeight: 44, justifyContent: 'center' }}>
+            <Text style={{ color: promiseDate ? tokens.colors.text : tokens.colors.textDim }}>{promiseDate ? promiseDate : 'Pick from calendar'}</Text>
+          </View>
+        </TouchableOpacity>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         {success ? <Text style={styles.successText}>{success}</Text> : null}
         <View style={styles.actionRow}>
@@ -95,7 +106,10 @@ export default function CompanyPromiseScreen() {
             onPress={onSubmit}
             disabled={!canSubmit || loading}
             loading={loading}
-            style={styles.actionBtn}
+            variant="success"
+            size="large"
+            style={[styles.actionBtn, { borderRadius: 12 }]}
+            textStyle={{ color: '#000' }}
           />
         </View>
       </Card>
@@ -119,12 +133,12 @@ const styles = StyleSheet.create({
   errorText: { color: tokens.colors.danger, marginTop: 4 },
   successText: { color: tokens.colors.success, marginTop: 4 },
   actionRow: { marginTop: 8 },
-  actionBtn: { borderRadius: 12 },
+  actionBtn: { borderRadius: 12, backgroundColor:tokens.colors.accent },
   textBtn: {
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: tokens.colors.cardAlt,
+    backgroundColor: tokens.colors.accentAlt,
     borderWidth: 1,
     borderColor: tokens.colors.border,
     paddingHorizontal: 10,
