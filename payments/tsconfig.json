@@ -13,5 +13,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-, "app/executive/DashboardScreen.jsx", "app/(tabs)/_layout.jsx", "app/company-details/[code].jsx", "app/(others)/DeleteUser.jsx", "src/screens/auth/LoginScreen.jsx"  ]
+, "app/executive/DashboardScreen.jsx", "app/(tabs)/_layout.jsx", "app/company-details/[code].jsx", "app/(others)/DeleteUser.jsx", "src/screens/auth/LoginScreen.jsx", "app/company-promise.jsx"  ]
 }
