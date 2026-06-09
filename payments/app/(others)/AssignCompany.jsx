@@ -12,8 +12,7 @@ import {
   RefreshControl
 } from "react-native";
 import { StorageService } from "../../src/services/storageService";
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI;
+import { API_BASE_URL } from "../../src/utils/constants";
 
 export default function ExecutiveDetailsScreen() {
   const { execId, execMobile, execUsername } = useLocalSearchParams();

@@ -256,13 +256,16 @@ def list_companies(
         0,
     )
     overdue_positive = func.coalesce(
-        func.sum(case((((residual > 0) & (eff_due <= func.current_date())), residual), else_=0)),
+        func.sum(
+            case(
+                (((residual > 0) & (eff_due <= func.current_date())), residual), else_=0
+            )
+        ),
         0,
     )
     counts_agg = (
         db.query(
             Bill.company_code.label("code"),
-            positive_residual.label("amount_sum"),
             overdue_positive.label("outbal_sum"),
             func.count()
             .filter((residual > 0) & (eff_due > func.current_date()))
@@ -275,7 +278,33 @@ def list_companies(
         .group_by(Bill.company_code)
         .subquery()
     )
+    bill_sum_sub = (
+        db.query(
+            Bill.company_code.label("code"),
+            func.coalesce(func.sum(Bill.amount), 0).label("bill_sum"),
+        )
+        .filter(Bill.is_archived == False)
+        .group_by(Bill.company_code)
+        .subquery()
+    )
+    payment_sum_sub = (
+        db.query(
+            Payment.company_code.label("code"),
+            func.coalesce(func.sum(Payment.amount_collected), 0).label("pay_sum"),
+        )
+        .filter(Payment.status == PaymentStatus.admin_approved)
+        .group_by(Payment.company_code)
+        .subquery()
+    )
     base = base.outerjoin(counts_agg, counts_agg.c.code == Company.code)
+    base = base.outerjoin(bill_sum_sub, bill_sum_sub.c.code == Company.code)
+    base = base.outerjoin(payment_sum_sub, payment_sum_sub.c.code == Company.code)
+
+    amount_expr = (
+        func.coalesce(Company.opening_balance, 0)
+        + func.coalesce(bill_sum_sub.c.bill_sum, 0)
+        - func.coalesce(payment_sum_sub.c.pay_sum, 0)
+    )
 
     if balance == "positive":
         base = base.filter(func.coalesce(counts_agg.c.outbal_sum, 0) > 0)
@@ -301,9 +330,9 @@ def list_companies(
     elif sort == "outbal_asc":
         base = base.order_by(func.coalesce(counts_agg.c.outbal_sum, 0).asc())
     elif sort == "amount_desc":
-        base = base.order_by(func.coalesce(counts_agg.c.amount_sum, 0).desc())
+        base = base.order_by(amount_expr.desc())
     elif sort == "amount_asc":
-        base = base.order_by(func.coalesce(counts_agg.c.amount_sum, 0).asc())
+        base = base.order_by(amount_expr.asc())
     else:
         base = base.order_by(Company.name.asc(), Company.code.asc())
 
@@ -351,6 +380,11 @@ def get_company(request: Request, code: str, db: Session = Depends(get_db)):
     c = db.get(Company, code)
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
+    roll = get_company_rollups(db, [c.code], credit_days).get(c.code, {})
+    setattr(c, "amount", roll.get("amount", Decimal("0")))
+    setattr(c, "outbal", roll.get("outbal", Decimal("0")))
     return c
 
 
@@ -564,8 +598,10 @@ def list_company_bills(
         dynamic_due = (
             (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
         )
-        remaining_amount = Decimal(str(b.amount)) - Decimal(str(b.amount_paid)) - Decimal(
-            str(reserved_by_bill.get(b.id, Decimal("0")))
+        remaining_amount = (
+            Decimal(str(b.amount))
+            - Decimal(str(b.amount_paid))
+            - Decimal(str(reserved_by_bill.get(b.id, Decimal("0"))))
         )
         if remaining_amount < 0:
             remaining_amount = Decimal("0")

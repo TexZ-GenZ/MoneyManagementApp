@@ -39,6 +39,7 @@ class Company(Base):
     name: Mapped[str | None] = mapped_column(String(150))
     area: Mapped[str | None] = mapped_column(String(100))
     location: Mapped[str | None] = mapped_column(String(200))
+    opening_balance: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
     amount: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
     outbal: Mapped[Numeric] = mapped_column(Numeric(14, 2), default=0)
     credit_date: Mapped[date | None] = mapped_column(Date, nullable=True)

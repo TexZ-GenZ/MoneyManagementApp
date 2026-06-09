@@ -75,10 +75,11 @@ export default function ApprovedPayments() {
                 }
             };
 
-            // Use admin_approved_at as display time
+            // Pending approvals should show when the payment was collected, not
+            // whichever review/import timestamp happened most recently.
             const withDisplay = arr.map((it) => {
-                const display_time = it.admin_approved_at || it.last_activity_at || it.updated_at;
-                const display_type = 'approved';
+                const display_time = it.submitted_at || it.created_at || it.last_activity_at || it.updated_at;
+                const display_type = 'submitted';
                 return { ...it, display_time, display_type };
             });
 
@@ -140,13 +141,6 @@ export default function ApprovedPayments() {
         return s || '—';
     };
 
-    const labelForType = (type) => {
-        if (type === 'approved') return 'Approved';
-        if (type === 'declined') return 'Declined';
-        if (type === 'submitted') return 'Submitted';
-        return 'Activity';
-    };
-
     const openDetail = (it) => {
         router.push({ pathname: '/(others)/PaymentApprovalDetail', params: { payment_id: it.payment_id } });
     };
@@ -201,7 +195,7 @@ export default function ApprovedPayments() {
                 <View style={styles.metaRow}>
                     <View style={styles.metaPair}>
                         <Ionicons name="time-outline" size={14} color={tokens.colors.textSubtle} style={{ marginRight: 6 }} />
-                        <Text style={styles.metaText}>{formatDateTime(item.display_time || item.last_activity_at)} • {labelForType(item.display_type || item.last_activity_type)}</Text>
+                        <Text style={styles.metaText}>{formatDateTime(item.display_time || item.last_activity_at)} • Collected</Text>
                     </View>
                     {!!item.method && (
                         <View style={styles.metaPair}>

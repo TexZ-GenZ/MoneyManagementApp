@@ -10,7 +10,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import StatusBadge from '../../src/ui/components/StatusBadge';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
-import { useAppSelector } from '../../src/store/hooks';
 
 // Use central API base configured via EXPO_PUBLIC_API_BASE_URL
 
@@ -22,7 +21,6 @@ export default function UnifiedHistory() {
     const [refreshing, setRefreshing] = useState(false);
     const debounceRef = useRef(null);
     const router = useRouter();
-    const userRole = useAppSelector(s => s.auth.user?.role || 'accountant');
 
     const fetchData = useCallback(async (q, status = statusFilter) => {
         setLoading(true);
@@ -85,39 +83,12 @@ export default function UnifiedHistory() {
                 }
             };
 
-            // Map items to a simple role-specific display_time, then sort newest-first
+            // Show the actual collection date in history. Review timestamps are still
+            // available in detail, but imported payments share the import/approval day.
             const withDisplay = arr.map((it) => {
                 const submittedAt = it.submitted_at || it.created_at;
-                let display_time = null;
-                let display_type = 'submitted';
-
-                if (userRole === 'executive') {
-                    display_time = submittedAt || it.last_activity_at || it.updated_at;
-                    display_type = 'submitted';
-                } else if (userRole === 'accountant') {
-                    display_time = (
-                        it.accountant_approved_at ||
-                        it.accountant_declined_at ||
-                        it.accountant_reviewed_at ||
-                        it.last_accountant_activity_at ||
-                        it.last_activity_at ||
-                        it.updated_at ||
-                        submittedAt
-                    );
-                    display_type = 'accountant_review';
-                } else if (userRole === 'admin') {
-                    display_time = (
-                        it.admin_approved_at ||
-                        it.admin_declined_at ||
-                        it.admin_reviewed_at ||
-                        it.last_admin_activity_at ||
-                        it.last_activity_at ||
-                        it.updated_at ||
-                        it.accountant_approved_at ||
-                        submittedAt
-                    );
-                    display_type = 'admin_review';
-                }
+                const display_time = submittedAt || it.last_activity_at || it.updated_at;
+                const display_type = 'submitted';
 
                 return { ...it, display_time, display_type };
             });
@@ -221,7 +192,7 @@ export default function UnifiedHistory() {
                 <View style={styles.metaRow}>
                     <View style={styles.metaPair}>
                         <Ionicons name="time-outline" size={14} color={tokens.colors.textSubtle} style={{ marginRight: 6 }} />
-                        <Text style={styles.metaText}>{formatDateTime(item.display_time || item.last_activity_at)} • {labelForType(item.display_type || item.last_activity_type)}</Text>
+                        <Text style={styles.metaText}>{formatDateTime(item.display_time || item.last_activity_at)} • Collected</Text>
                     </View>
                     {!!item.method && (
                         <View style={styles.metaPair}>
@@ -283,12 +254,6 @@ export default function UnifiedHistory() {
             ) : null}
         </Screen>
     );
-}
-
-function labelForType(t) {
-    if (t === 'admin_review') return 'Admin Review';
-    if (t === 'accountant_review') return 'Accountant Review';
-    return 'Submitted';
 }
 
 function prettyStatus(s) {

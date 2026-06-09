@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import Screen from "../../src/ui/components/Screen";
 import Card from "../../src/ui/components/Card";
 import { tokens } from "../../src/ui/tokens";
+import { API_BASE_URL } from "../../src/utils/constants";
 
 export default function AddUserScreen() {
   const [name, setName] = useState("");
@@ -52,7 +53,7 @@ export default function AddUserScreen() {
         role: role,
         area: ""
       };
-      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users`, {
+      const res = await fetch(`${API_BASE_URL}/admin/users`, {
         method: "POST",
         headers: header,
         body: JSON.stringify(data)

@@ -283,121 +283,6 @@ def _get_or_create_executive(
         username = f"{slug}_{suffix}"
 
 
-def _sync_company_outstanding_to_target(
-    db: Session, company_code: str, target_amount: Decimal
-) -> dict:
-    """Reconcile company outstanding residual to an uploaded target amount.
-
-    Rules:
-    - Never reopen paid bills.
-    - Prefer adjustment bill for positive delta.
-    - For negative delta, reduce outstanding from adjustment bill first, then other open bills.
-    """
-    target = target_amount.quantize(Decimal("0.00"))
-    if target < 0:
-        target = Decimal("0.00")
-
-    adj_bill_no = "__MASTER_BALANCE_ADJ__"
-    open_bills = (
-        db.query(Bill)
-        .filter(
-            Bill.company_code == company_code,
-            Bill.is_archived == False,
-            Bill.status.in_([BillStatus.pending, BillStatus.partial]),
-        )
-        .order_by(Bill.bill_date.asc(), Bill.id.asc())
-        .all()
-    )
-
-    current_outstanding = Decimal("0.00")
-    for b in open_bills:
-        residual = (Decimal(str(b.amount)) - Decimal(str(b.amount_paid))).quantize(
-            Decimal("0.00")
-        )
-        if residual > 0:
-            current_outstanding += residual
-
-    delta = (target - current_outstanding).quantize(Decimal("0.00"))
-    if delta == 0:
-        return {"master_sync_adjusted": 0, "master_sync_unresolved": Decimal("0.00")}
-
-    adjusted_rows = 0
-    unresolved = Decimal("0.00")
-    adj = (
-        db.query(Bill)
-        .filter(Bill.company_code == company_code, Bill.bill_number == adj_bill_no)
-        .one_or_none()
-    )
-
-    if delta > 0:
-        if not adj:
-            today = datetime.date.today()
-            adj = Bill(
-                bill_number=adj_bill_no,
-                company_code=company_code,
-                bill_date=today,
-                due_date=today,
-                amount=delta,
-                amount_paid=Decimal("0.00"),
-                status=BillStatus.pending,
-                is_archived=False,
-            )
-            db.add(adj)
-            adjusted_rows += 1
-        else:
-            paid = Decimal(str(adj.amount_paid))
-            adj.amount = (paid + delta).quantize(Decimal("0.00"))
-            if paid >= Decimal(str(adj.amount)):
-                adj.status = BillStatus.paid
-            elif paid > 0:
-                adj.status = BillStatus.partial
-            else:
-                adj.status = BillStatus.pending
-            adj.is_archived = False
-            db.add(adj)
-            adjusted_rows += 1
-    else:
-        to_reduce = (-delta).quantize(Decimal("0.00"))
-        candidates = []
-        if adj and not adj.is_archived:
-            candidates.append(adj)
-        for b in open_bills:
-            if not adj or b.id != adj.id:
-                candidates.append(b)
-
-        for b in candidates:
-            if to_reduce <= 0:
-                break
-            amount = Decimal(str(b.amount))
-            paid = Decimal(str(b.amount_paid))
-            residual = (amount - paid).quantize(Decimal("0.00"))
-            if residual <= 0:
-                continue
-            cut = min(residual, to_reduce)
-            new_amount = (amount - cut).quantize(Decimal("0.00"))
-            if new_amount < paid:
-                new_amount = paid
-            b.amount = new_amount
-            if paid >= new_amount:
-                b.status = BillStatus.paid
-            elif paid > 0:
-                b.status = BillStatus.partial
-            else:
-                b.status = BillStatus.pending
-            db.add(b)
-            adjusted_rows += 1
-            to_reduce = (to_reduce - cut).quantize(Decimal("0.00"))
-
-        if to_reduce > 0:
-            unresolved = to_reduce
-
-    db.flush()
-    return {
-        "master_sync_adjusted": adjusted_rows,
-        "master_sync_unresolved": unresolved,
-    }
-
-
 def import_master(db: Session, filename: str = "master.dbf") -> dict:
     """Import the master DBF file (real data adaptation).
 
@@ -454,7 +339,6 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
         duplicate_codes = 0
         placeholder_area_skipped = 0
         seen_codes: set[str] = set()
-        master_amount_by_code: dict[str, Decimal] = {}
         # Preload existing to allow change detection without hitting ORM attribute history per row.
         existing_count = db.query(Company).count()
         # Open table (dbf/csv/xlsx). Tests may monkeypatch DBF; keep ValueError surface for corrupt cases.
@@ -491,13 +375,12 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                     name = str(
                         r.get("account_n") or r.get("name") or r.get("account") or code
                     ).strip()
-                    raw_master_amount = r.get("amount")
-                    master_amount: Decimal | None = None
-                    if raw_master_amount not in (None, ""):
-                        master_amount = _to_decimal(raw_master_amount).quantize(
+                    raw_opening = r.get("yr_bal")
+                    master_opening: Decimal | None = None
+                    if raw_opening not in (None, ""):
+                        master_opening = _to_decimal(raw_opening).quantize(
                             Decimal("0.00")
                         )
-                        master_amount_by_code[code] = master_amount
                     area_raw = str(
                         r.get("area") or r.get("zone") or r.get("region") or ""
                     ).strip()
@@ -524,9 +407,9 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                                 name=name,
                                 area=area,
                                 location=location,
-                                amount=(
-                                    master_amount
-                                    if master_amount is not None
+                                opening_balance=(
+                                    master_opening
+                                    if master_opening is not None
                                     else Decimal("0.00")
                                 ),
                                 is_archived=False,
@@ -550,12 +433,12 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
                         if comp.is_archived:
                             comp.is_archived = False
                             changed = True
-                        if master_amount is not None:
-                            current_amount = Decimal(str(comp.amount or 0)).quantize(
-                                Decimal("0.00")
-                            )
-                            if current_amount != master_amount:
-                                comp.amount = master_amount
+                        if master_opening is not None:
+                            current_opening = Decimal(
+                                str(getattr(comp, "opening_balance", 0) or 0)
+                            ).quantize(Decimal("0.00"))
+                            if current_opening != master_opening:
+                                comp.opening_balance = master_opening
                                 changed = True
                         if changed:
                             updated += 1
@@ -605,17 +488,7 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
         except Exception:
             db.rollback()
             raise
-        master_sync_adjusted = 0
-        master_sync_unresolved = Decimal("0.00")
-        for code, target in master_amount_by_code.items():
-            sync_stats = _sync_company_outstanding_to_target(db, code, target)
-            master_sync_adjusted += int(sync_stats.get("master_sync_adjusted", 0))
-            master_sync_unresolved += Decimal(
-                str(sync_stats.get("master_sync_unresolved", 0))
-            )
-            recalc_company_totals(db, code)
-
-        # Full recalculation after master upload (requested behavior)
+        # Full recalculation after master upload
         for (code,) in (
             db.query(Company.code).filter(Company.is_archived == False).all()
         ):
@@ -644,8 +517,6 @@ def import_master(db: Session, filename: str = "master.dbf") -> dict:
             "new_executives_created": new_executives_created,
             "assignments_added": assignments_added,
             "assignments_removed": assignments_removed,
-            "master_sync_adjusted": master_sync_adjusted,
-            "master_sync_unresolved": float(master_sync_unresolved),
             **verification,
         }
         log.info(
@@ -747,14 +618,6 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                             if raw_amount > 0:
                                 fallback_due_assigned += 1
                     new_amount = raw_amount.quantize(Decimal("0.00"))
-                    rec_amt_raw = (
-                        r.get("rec_amt")
-                        or r.get("recamt")
-                        or r.get("received_amt")
-                        or r.get("received")
-                    )
-                    rec_amount = _to_decimal(rec_amt_raw).quantize(Decimal("0.00"))
-                    is_cleared = _is_truthy(r.get("is_cleared") or r.get("cleared"))
                     if not db.get(Company, code):
                         db.add(Company(code=code, name=code, area=None))
                     bill = (
@@ -764,21 +627,14 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                     )
                     if not bill:
                         effective_amount = new_amount
-                        if is_cleared and rec_amount == 0:
-                            rec_amount = effective_amount
-                        status = BillStatus.pending
-                        if rec_amount >= effective_amount and effective_amount > 0:
-                            status = BillStatus.paid
-                        elif rec_amount > 0:
-                            status = BillStatus.partial
                         bill = Bill(
                             bill_number=bill_no,
                             company_code=code,
                             bill_date=bill_date,
                             due_date=due_date,
                             amount=effective_amount,
-                            amount_paid=rec_amount if rec_amount > 0 else Decimal(0),
-                            status=status,
+                            amount_paid=Decimal("0.00"),
+                            status=BillStatus.pending,
                             is_archived=False,
                         )
                         db.add(bill)
@@ -802,38 +658,13 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                         ):
                             bill.amount = effective_amount
                             changed = True
-                        was_paid = bill.status == BillStatus.paid or Decimal(
-                            str(bill.amount_paid)
-                        ) >= Decimal(str(effective_amount))
-                        if is_cleared and rec_amount == 0:
-                            rec_amount = effective_amount
-                        if was_paid:
-                            # Terminal behavior: once paid, keep paid and do not downgrade on re-import
-                            if Decimal(str(bill.amount_paid)) < Decimal(
-                                str(effective_amount)
-                            ):
-                                bill.amount_paid = effective_amount
-                                changed = True
-                            if bill.status != BillStatus.paid:
-                                bill.status = BillStatus.paid
-                                changed = True
-                        elif rec_amount > 0 or is_cleared or rec_amount == new_amount:
-                            if bill.amount_paid != rec_amount:
-                                bill.amount_paid = rec_amount
-                                changed = True
-                            if rec_amount >= effective_amount and effective_amount > 0:
-                                if bill.status != BillStatus.paid:
-                                    bill.status = BillStatus.paid
-                                    changed = True
-                            elif rec_amount > 0:
-                                if bill.status != BillStatus.partial:
-                                    bill.status = BillStatus.partial
-                                    changed = True
-                            else:
-                                if bill.status != BillStatus.pending:
-                                    bill.status = BillStatus.pending
-                                    changed = True
-                        if bill.is_archived and not was_paid:
+                        if bill.amount_paid != Decimal("0.00"):
+                            bill.amount_paid = Decimal("0.00")
+                            changed = True
+                        if bill.status != BillStatus.pending:
+                            bill.status = BillStatus.pending
+                            changed = True
+                        if bill.is_archived:
                             bill.is_archived = False
                             changed = True
                         if changed:

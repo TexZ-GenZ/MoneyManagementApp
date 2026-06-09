@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Card } from './Card';
 import StatusBadge from './StatusBadge';
 import { tokens } from '../tokens';
-import { formatCurrency, formatDateTime } from '../format';
+import { formatCurrency, formatDate, formatDateTime } from '../format';
 
 // Rich info card (company + payment meta). Approval happens in detail screen.
 export default function ApprovalItemCard({ item }) {
@@ -31,7 +31,7 @@ export default function ApprovalItemCard({ item }) {
                 </View>
                 <View style={styles.metaList}>
                     <Meta label="Collected" value={formatDateTime(item.collected_at)} />
-                    {item.next_promise_date ? <Meta label="Next Promise" value={formatDateTime(item.next_promise_date, true)} /> : null}
+                    {item.next_promise_date ? <Meta label="Next Promise" value={formatDate(item.next_promise_date)} /> : null}
                     <Meta label="Method" value={item.method?.charAt(0).toUpperCase() + item.method?.slice(1)} />
                     <Meta label="Location" value={hasCoords ? 'Captured' : '—'} valueColor={hasCoords ? tokens.colors.success : tokens.colors.textDim} />
                 </View>

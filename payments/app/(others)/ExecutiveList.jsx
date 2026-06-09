@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import Screen from "../../src/ui/components/Screen";
 import Card from "../../src/ui/components/Card";
 import { tokens } from "../../src/ui/tokens";
+import { API_BASE_URL } from "../../src/utils/constants";
 
 export default function AdminExecutiveList() {
   const [executives, setExecutives] = useState([]);
@@ -23,7 +24,7 @@ export default function AdminExecutiveList() {
     try {
       let header = await StorageService.getAuthHeader();
 
-      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`, {
+      const res = await fetch(`${API_BASE_URL}/admin/executives`, {
         headers: header
       });
 

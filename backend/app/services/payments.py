@@ -71,10 +71,13 @@ def _validate_allocations_against_effective_remaining(
     bill_ids = [a["bill_id"] for a in allocations]
     if len(bill_ids) != len(set(bill_ids)):
         raise ValueError("Duplicate bill allocations are not allowed")
-    if not bill_ids:
-        raise ValueError("At least one bill allocation is required")
-
-    bills = {b.id: b for b in db.query(Bill).filter(Bill.id.in_(bill_ids)).all()}
+    # Allow company-level surplus payments: a payment may have no bill allocations,
+    # or may intentionally allocate only part of amount_collected to bills.
+    bills = (
+        {b.id: b for b in db.query(Bill).filter(Bill.id.in_(bill_ids)).all()}
+        if bill_ids
+        else {}
+    )
 
     if zero_amount_promise_change and bill_ids:
         existing_pd_change = (
@@ -90,13 +93,17 @@ def _validate_allocations_against_effective_remaining(
             )
         )
         if exclude_payment_id is not None:
-            existing_pd_change = existing_pd_change.filter(Payment.id != exclude_payment_id)
+            existing_pd_change = existing_pd_change.filter(
+                Payment.id != exclude_payment_id
+            )
         existing_pd_change = existing_pd_change.first()
         if existing_pd_change:
             raise ValueError("A promise-date change is already pending for this bill")
 
-    reserved_by_bill = get_reserved_totals_by_bill(
-        db, bill_ids, exclude_payment_id=exclude_payment_id
+    reserved_by_bill = (
+        get_reserved_totals_by_bill(db, bill_ids, exclude_payment_id=exclude_payment_id)
+        if bill_ids
+        else {}
     )
 
     total_alloc = Decimal(0)
@@ -123,7 +130,9 @@ def _validate_allocations_against_effective_remaining(
             raise ValueError("Can only allocate to pending bills")
 
         already_reserved = reserved_by_bill.get(bid, Decimal(0))
-        effective_remaining = Decimal(b.amount) - Decimal(b.amount_paid) - already_reserved
+        effective_remaining = (
+            Decimal(b.amount) - Decimal(b.amount_paid) - already_reserved
+        )
         try:
             effective_remaining = effective_remaining.quantize(
                 TWO_DP, rounding=ROUND_HALF_UP
@@ -156,8 +165,6 @@ def _validate_allocations_against_effective_remaining(
         pass
     if total_alloc > amount_collected_dec:
         raise ValueError("Total allocations exceed amount_collected")
-    if total_alloc != amount_collected_dec:
-        raise ValueError("Allocation total must equal amount_collected")
 
     return bills, total_alloc, zero_amount_promise_change
 

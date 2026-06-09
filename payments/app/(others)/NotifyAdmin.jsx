@@ -8,8 +8,10 @@ import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 import { tokens } from '../../src/ui/tokens';
 import ApprovalItemCard from '../../src/ui/components/ApprovalItemCard';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function AdminNotifyScreen() {
+    const BASE = API_BASE_URL;
     const [search, setSearch] = useState('');
     const [approvalItems, setApprovalItems] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -62,7 +64,7 @@ export default function AdminNotifyScreen() {
     const fetchApprovalData = async () => {
         try {
             const token = await StorageService.getToken();
-            const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/payments/pending`, {
+            const response = await fetch(`${BASE}/admin/payments/pending`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -79,7 +81,7 @@ export default function AdminNotifyScreen() {
             const enriched = await Promise.all(items.map(async item => {
                 try {
                     const companyResponse = await fetch(
-                        `${process.env.EXPO_PUBLIC_APP_URI}/companies/${item.company_code}`,
+                        `${BASE}/companies/${item.company_code}`,
                         {
                             headers: {
                                 'Content-Type': 'application/json',
@@ -115,7 +117,7 @@ export default function AdminNotifyScreen() {
     const fetchExecutives = async () => {
         try {
             const token = await StorageService.getToken();
-            const response = await fetch(`${process.env.EXPO_PUBLIC_APP_URI}/admin/users`, {
+            const response = await fetch(`${BASE}/admin/users`, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token.access_token}`

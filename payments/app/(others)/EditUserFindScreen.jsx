@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { tokens } from "../../src/ui/tokens";
 import { StorageService } from "@/src/services/storageService";
 import GridBackground from '../(others)/GridBGComponent';
+import { API_BASE_URL } from "../../src/utils/constants";
 
 export default function EditUserFindScreen() {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function EditUserFindScreen() {
         };
 
         const res = await fetch(
-          `${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`,
+          `${API_BASE_URL}/admin/executives`,
           {
             method: "GET",
             headers: header,

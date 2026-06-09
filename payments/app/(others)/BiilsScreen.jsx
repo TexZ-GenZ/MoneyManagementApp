@@ -10,8 +10,7 @@ import { formatCurrency, formatDate } from '../../src/ui/format';
 import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
 import { useAppSelector } from '../../src/store/hooks';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_APP_URI; // unified base
+import { API_BASE_URL } from '../../src/utils/constants';
 
 export default function CompanyBillsList() {
     const { name, code, amount, outbal } = useLocalSearchParams();

@@ -6,6 +6,7 @@ import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
 import { formatCurrency } from '../../src/ui/format';
+import { API_BASE_URL } from '../../src/utils/constants';
 
 // Demo fetch -- replace with real API call
 // const fetchCompanies = async()=>{
@@ -43,10 +44,10 @@ export default function ExecutiveCompaniesScreen() {
       let url;
       if (execId) {
         // Explicit exec id passed (e.g., from an executive list) use that endpoint
-        url = `${process.env.EXPO_PUBLIC_APP_URI}/executives/${execId}/companies`;
+        url = `${API_BASE_URL}/executives/${execId}/companies`;
       } else {
         // Fallback: current logged-in executive's own companies
-        url = `${process.env.EXPO_PUBLIC_APP_URI}/me/companies`;
+        url = `${API_BASE_URL}/me/companies`;
       }
       const response = await fetch(url, { method: 'GET', headers: header });
       if (!response.ok) throw new Error('Failed to load');

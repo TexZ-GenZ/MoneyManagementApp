@@ -14,8 +14,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from "@expo/vector-icons";
 import GridBackground from '../(others)/GridBGComponent';
+import { API_BASE_URL } from "../../src/utils/constants";
 
-  const DeleteUserScreen = () => {
+const DeleteUserScreen = () => {
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [userDetails, setUserDetails] = useState(null);
@@ -31,7 +32,7 @@ import GridBackground from '../(others)/GridBGComponent';
         };
 
         const res = await fetch(
-          `${process.env.EXPO_PUBLIC_APP_URI}/admin/executives`,
+          `${API_BASE_URL}/admin/executives`,
           {
             method: "GET",
             headers: header,
@@ -90,7 +91,7 @@ import GridBackground from '../(others)/GridBGComponent';
       setError("Fetch user details first.");
       return;
     }
-    
+
     Alert.alert(
       "Confirm Deactivation",
       "Are you sure you want to deactivate this user?",
@@ -112,7 +113,7 @@ import GridBackground from '../(others)/GridBGComponent';
       };
 
       const res = await fetch(
-        `${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${userDetails.id}`,
+        `${API_BASE_URL}/admin/users/${userDetails.id}`,
         {
           method: "DELETE",
           headers: header,
@@ -160,7 +161,7 @@ import GridBackground from '../(others)/GridBGComponent';
       };
 
       const res = await fetch(
-        `${process.env.EXPO_PUBLIC_APP_URI}/admin/users/${userDetails.id}/hard-delete`,
+        `${API_BASE_URL}/admin/users/${userDetails.id}/hard-delete`,
         {
           method: "DELETE",
           headers: header,
@@ -254,8 +255,8 @@ import GridBackground from '../(others)/GridBGComponent';
 
               {/* Action Buttons */}
               <View style={styles.actionButtons}>
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.deactivateButton]} 
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deactivateButton]}
                   onPress={handleDeactivateUser}
                   disabled={loading}
                 >
@@ -263,8 +264,8 @@ import GridBackground from '../(others)/GridBGComponent';
                   <Text style={styles.deactivateButtonText}>Deactivate</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.deleteButton]} 
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
                   onPress={handleDeleteUser}
                   disabled={loading}
                 >
@@ -285,7 +286,7 @@ import GridBackground from '../(others)/GridBGComponent';
               keyExtractor={(item) => item.id.toString()}
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.executiveItem}
                   onPress={() => setInputValue(item.username)}
                 >

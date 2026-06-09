@@ -10,7 +10,7 @@ import { Card } from '../../src/ui/components/Card';
 import StatusBadge from '../../src/ui/components/StatusBadge';
 import { tokens } from '../../src/ui/tokens';
 import { StorageService } from '../../src/services/storageService';
-import { formatCurrency, formatDateTime } from '../../src/ui/format';
+import { formatCurrency, formatDate, formatDateTime } from '../../src/ui/format';
 
 import { API_BASE_URL } from '../../src/utils/constants';
 
@@ -184,7 +184,7 @@ export default function PaymentApprovalDetail() {
                                     </Text>
                                 ) : null}
                                 {payment.next_promise_date && (
-                                    <Text style={styles.bigLine}>Promise: {formatDateTime(payment.next_promise_date)}</Text>
+                                    <Text style={styles.bigLine}>Promise: {formatDate(payment.next_promise_date)}</Text>
                                 )}
                                 {payment?.status ? (
                                     <View style={styles.statusBelow}>
