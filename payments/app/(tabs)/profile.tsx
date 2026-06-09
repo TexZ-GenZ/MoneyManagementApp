@@ -12,6 +12,7 @@ import { tokens } from '@/src/ui/tokens';
 import Constants from 'expo-constants';
 import { API_BASE_URL } from '@/src/utils/constants';
 import { Ionicons } from '@expo/vector-icons';
+import * as Updates from 'expo-updates';
 
 // Avoid double-applying IST on this screen: formatDateTime already adds +05:30.
 const IST_OFFSET_MS = 330 * 60 * 1000;
@@ -52,6 +53,8 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [decoded, setDecoded] = useState<DecodedToken | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateCountdown, setUpdateCountdown] = useState<number | null>(null);
 
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -80,6 +83,36 @@ export default function ProfileScreen() {
   }, [baseUrl]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Countdown timer for OTA update
+  useEffect(() => {
+    if (updateCountdown === null || updateCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      setUpdateCountdown(updateCountdown - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [updateCountdown]);
+
+  const handleOTAUpdate = async () => {
+    if (updateCountdown !== null) return; // Already counting down
+    setIsUpdating(true);
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        // Start countdown instead of reloading immediately
+        setUpdateCountdown(180); // 3 minutes in seconds
+        setIsUpdating(false);
+      } else {
+        setIsUpdating(false);
+        setUpdateCountdown(null);
+      }
+    } catch (e) {
+      console.error('Update check failed:', e);
+      setIsUpdating(false);
+      setUpdateCountdown(null);
+    }
+  };
 
   const handleLogout = () => {
     dispatch(logoutUser());
@@ -150,6 +183,39 @@ export default function ProfileScreen() {
             <SectionTitle text="Session" />
             <IconRow icon="timer-outline" label="Expires In" value={expiresInMin !== undefined ? `${expiresInMin} min` : '-'} />
             <IconRow icon="calendar-outline" label="Expires At" value={displayExpMs ? formatDateTime(displayExpMs) : '-'} last />
+          </Card>
+
+          {/* OTA Update Button */}
+          <Card style={styles.cardSection}>
+            <SectionTitle text="App Update" />
+            <TouchableOpacity 
+              style={[
+                styles.updateBtn, 
+                { 
+                  backgroundColor: updateCountdown !== null ? tokens.colors.warning : tokens.colors.success,
+                  opacity: isUpdating || updateCountdown !== null ? 0.9 : 1
+                }
+              ]}
+              onPress={handleOTAUpdate}
+              disabled={isUpdating || updateCountdown !== null}
+            >
+              {isUpdating ? (
+                <ActivityIndicator color="#000" size="small" />
+              ) : updateCountdown !== null ? (
+                <Text style={styles.updateBtnText}>
+                  {updateCountdown > 0 
+                    ? `${Math.floor(updateCountdown / 60)}:${String(updateCountdown % 60).padStart(2, '0')}`
+                    : 'Quit app please'}
+                </Text>
+              ) : (
+                <Text style={styles.updateBtnText}>Check for Update</Text>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.updateHelper}>
+              {updateCountdown !== null 
+                ? 'Close and reopen the app to get the update.'
+                : 'Check and download the latest version.'}
+            </Text>
           </Card>
           
           {/* Removed session, app version, and advanced details for a cleaner view */}
@@ -242,5 +308,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   logoutText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-
+  updateBtn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 8,
+  },
+  updateBtnText: { color: '#000', fontWeight: '700', fontSize: 14 },
+  updateHelper: { fontSize: 12, color: tokens.colors.textDim, marginTop: 8, textAlign: 'center' },
 });
