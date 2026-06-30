@@ -250,7 +250,23 @@ def list_companies(
     settings_row = ensure_settings_row(db)
     credit_days = settings_row.credit_extension_days or 0
     eff_due = effective_due_date_expr(credit_days)
-    residual = Bill.amount - Bill.amount_paid
+    reserved_sub = (
+        db.query(
+            PaymentAllocation.bill_id.label("bill_id"),
+            func.coalesce(func.sum(PaymentAllocation.amount), 0).label("reserved"),
+        )
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .filter(
+            Payment.status.in_(
+                [PaymentStatus.submitted, PaymentStatus.accountant_approved]
+            )
+        )
+        .group_by(PaymentAllocation.bill_id)
+        .subquery()
+    )
+    residual = Bill.amount - Bill.amount_paid - func.coalesce(
+        reserved_sub.c.reserved, 0
+    )
     positive_residual = func.coalesce(
         func.sum(case((residual > 0, residual), else_=0)),
         0,
@@ -275,6 +291,7 @@ def list_companies(
             .label("overdue_count"),
         )
         .filter(Bill.status == "pending", Bill.is_archived == False)
+        .outerjoin(reserved_sub, reserved_sub.c.bill_id == Bill.id)
         .group_by(Bill.company_code)
         .subquery()
     )
@@ -292,7 +309,15 @@ def list_companies(
             Payment.company_code.label("code"),
             func.coalesce(func.sum(Payment.amount_collected), 0).label("pay_sum"),
         )
-        .filter(Payment.status == PaymentStatus.admin_approved)
+        .filter(
+            Payment.status.in_(
+                [
+                    PaymentStatus.submitted,
+                    PaymentStatus.accountant_approved,
+                    PaymentStatus.admin_approved,
+                ]
+            )
+        )
         .group_by(Payment.company_code)
         .subquery()
     )

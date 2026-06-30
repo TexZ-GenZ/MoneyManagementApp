@@ -204,7 +204,7 @@ export default function MultiPayScreen() {
     if (JSON.stringify(nextSel) !== JSON.stringify(selected)) setSelected(nextSel);
   }, [bills, initialTotal, selected]);
 
-  const canSubmit = remaining === 0 && Object.keys(selected).length > 0 && (!needsPromise() || !!promiseDate) && !!location;
+  const canSubmit = Object.keys(selected).length > 0 && (!needsPromise() || !!promiseDate) && !!location;
 
   function needsPromise() {
     // Needs promise if any allocation is partial on that bill
@@ -216,7 +216,6 @@ export default function MultiPayScreen() {
   }
 
   const submit = async () => {
-    if (remaining !== 0) { Alert.alert('Use Full Amount', 'Remaining must be 0 before submitting'); return; }
     if (needsPromise() && !promiseDate) { Alert.alert('Promise Required', 'Please choose next promise date for partial selection'); return; }
     if (!location) { Alert.alert('Location Needed', 'Enable and capture location before submitting.'); return; }
     setSubmitting(true);

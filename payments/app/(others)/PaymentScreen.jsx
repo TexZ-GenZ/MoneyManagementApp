@@ -250,13 +250,6 @@ export default function CollectPaymentScreen() {
       Alert.alert('Location Needed', 'Enable and capture location before submitting.');
       return false;
     }
-    if (billRemaining != null) {
-      const amt = Number(amountCollected);
-      if (amt - billRemaining > 0.009) { // allow small float tolerance
-        Alert.alert('Exceeds Remaining', 'Collected amount exceeds remaining outstanding (consider pending approvals).');
-        return false;
-      }
-    }
     return true;
   };
 
@@ -278,11 +271,13 @@ export default function CollectPaymentScreen() {
         next_promise_date: (!isFullPayment && nextPromiseDate) ? nextPromiseDate.toISOString().split('T')[0] : undefined
       };
 
-      // Backend requires bill_allocations with total == amount_collected
+      // Allocate up to the bill's remaining amount; extra collection is surplus.
       if (bill_id) {
-        payload.bill_allocations = [
-          { bill_id: Number(bill_id), amount: Number(amountCollected) }
-        ];
+        const collected = Number(amountCollected);
+        const allocatable = billRemaining != null ? Math.min(collected, Math.max(billRemaining, 0)) : collected;
+        payload.bill_allocations = allocatable > 0
+          ? [{ bill_id: Number(bill_id), amount: floor2(allocatable) }]
+          : [];
       }
 
       // Add coordinates if available
@@ -435,13 +430,7 @@ export default function CollectPaymentScreen() {
 
             <FieldLabel label={isFullPayment ? 'Amount (Full Payment)' : 'Amount Collected (₹)'} />
             <Text style={styles.helpText}>💡 Enter amounts in new format: ₹100 = ₹1.00, ₹12784 = ₹127.84</Text>
-            {isFullPayment ? (
-              <View style={[styles.fieldBtn, billRemaining === 0 && { backgroundColor: tokens.colors.border }]}>
-                <Text style={styles.fieldBtnText}>
-                  {billRemaining != null ? `₹${billRemaining.toFixed(2)}${pendingReserved ? ' (remaining)' : ''}` : (bill_amount ? `₹${bill_amount}` : '—')}
-                </Text>
-              </View>
-            ) : (
+            {isFullPayment && (
               <TextInput
                 style={styles.textInput}
                 keyboardType="numeric"
@@ -449,10 +438,25 @@ export default function CollectPaymentScreen() {
                 placeholder="0.00"
                 placeholderTextColor={tokens.colors.textFaint}
                 onChangeText={handlePartialAmountChange}
-                editable={!submitting && !isFullPayment}
+                editable={!submitting}
                 maxLength={12}
               />
             )}
+            {!isFullPayment && (
+              <TextInput
+                style={styles.textInput}
+                keyboardType="numeric"
+                value={amountCollected}
+                placeholder="0.00"
+                placeholderTextColor={tokens.colors.textFaint}
+                onChangeText={handlePartialAmountChange}
+                editable={!submitting}
+                maxLength={12}
+              />
+            )}
+            <Text style={styles.helpText}>
+              {billRemaining != null ? `Remaining to allocate: ${billRemaining.toFixed(2)}${pendingReserved ? ' after pending approvals' : ''}. Extra will be recorded as surplus.` : 'Extra collection above bill balance will be recorded as surplus.'}
+            </Text>
 
             <FieldLabel label="Payment Method" />
             <View style={styles.pickerShell}>

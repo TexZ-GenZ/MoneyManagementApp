@@ -278,24 +278,6 @@ export default function CompanyBillsList() {
                                     if (!multiAmount || Number.isNaN(v) || v <= 0) { Alert.alert('Invalid', 'Enter a valid amount'); return; }
                                     // Minimum amount validation: must be at least 100 (shows as ₹1.00 after division by 100)
                                     if (v < 100) { Alert.alert('Amount Too Small', 'Minimum bulk payment amount is ₹1.00 (enter 100 or more)'); return; }
-                                    // Compute max allowed = total outstanding across all pending bills (pending includes overdue)
-                                    const calcPendingOutstanding = (list) => (Array.isArray(list) ? list : []).filter(b => (b?.status === 'pending')).reduce((sum, b) => {
-                                        const amt = Number(b?.amount) || 0; const paid = Number(b?.amount_paid) || 0; const out = Math.max(0, amt - paid);
-                                        return sum + out;
-                                    }, 0);
-                                    let cap = calcPendingOutstanding(bills);
-                                    // If we don't have pending bills in current dataset (e.g., viewing paid), fetch pending to validate
-                                    if (cap <= 0) {
-                                        try {
-                                            const pendingUrl = `${API_BASE_URL}/companies/${code}/bills?status=pending&sort=oldest`;
-                                            const r = await fetch(pendingUrl);
-                                            if (r.ok) { const data = await r.json(); cap = calcPendingOutstanding(data?.items || data); }
-                                        } catch { }
-                                    }
-                                    if (v > cap) {
-                                        Alert.alert('Amount too large', `The entered amount exceeds total outstanding across pending bills (${formatCurrency(cap)}).`);
-                                        return;
-                                    }
                                     setMultiModalVisible(false);
                                     router.push({ pathname: '/(others)/MultiPayScreen', params: { name, code, outbal, amount: String(v) } });
                                 }}
