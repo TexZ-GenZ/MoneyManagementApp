@@ -620,6 +620,7 @@ def import_transactions(db: Session, filename: str = "transactions.dbf") -> dict
                     new_amount = raw_amount.quantize(Decimal("0.00"))
                     if not db.get(Company, code):
                         db.add(Company(code=code, name=code, area=None))
+                        db.flush()  # ensure company row exists in DB before bills referencing it are batch-flushed
                     bill = (
                         db.query(Bill)
                         .filter(Bill.company_code == code, Bill.bill_number == bill_no)
