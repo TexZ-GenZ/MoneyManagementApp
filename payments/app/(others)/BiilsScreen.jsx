@@ -2,6 +2,8 @@ import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Alert, ScrollView, TextInput, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
 import { tokens } from '../../src/ui/tokens';
@@ -11,6 +13,7 @@ import { SkeletonCard } from '../../src/ui/components/SkeletonBlock';
 import { onPaymentUpdate } from '../../src/events/paymentEvents';
 import { useAppSelector } from '../../src/store/hooks';
 import { API_BASE_URL } from '../../src/utils/constants';
+import { StorageService } from '../../src/services/storageService';
 
 export default function CompanyBillsList() {
     const { name, code, amount, outbal } = useLocalSearchParams();
@@ -25,6 +28,7 @@ export default function CompanyBillsList() {
     const router = useRouter();
     const [multiModalVisible, setMultiModalVisible] = useState(false);
     const [multiAmount, setMultiAmount] = useState('');
+    const [ledgerDownloading, setLedgerDownloading] = useState(false);
 
     const statusOptions = [
         { label: 'All', value: 'all' },
@@ -106,6 +110,44 @@ export default function CompanyBillsList() {
 
     const onRefresh = useCallback(() => { setRefreshing(true); fetchBills(); }, [sortFilter, statusFilter]);
 
+    const downloadLedger = async () => {
+        if (!code || ledgerDownloading) return;
+        setLedgerDownloading(true);
+        try {
+            const now = new Date();
+            const from = `${now.getFullYear()}-01-01`;
+            const to = now.toISOString().slice(0, 10);
+            const token = await StorageService.getToken();
+            const safeName = String(name || code || 'company').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 40);
+            const fileUri = `${FileSystem.documentDirectory}ledger_${code}_${from}_${to}_${safeName}.pdf`;
+            const result = await FileSystem.downloadAsync(
+                `${API_BASE_URL}/companies/${code}/statement?from=${from}&to=${to}`,
+                fileUri,
+                {
+                    headers: token ? { Authorization: `Bearer ${token.access_token}` } : {},
+                }
+            );
+            if (result.status < 200 || result.status >= 300) {
+                throw new Error(`Download failed (${result.status})`);
+            }
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(result.uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: 'Save Ledger PDF',
+                    UTI: 'com.adobe.pdf',
+                });
+            } else {
+                Alert.alert('Downloaded', `Ledger PDF saved locally:\n${result.uri}`);
+            }
+        } catch (e) {
+            console.error('ledger download failed', e);
+            Alert.alert('Error', 'Failed to download ledger PDF.');
+        } finally {
+            setLedgerDownloading(false);
+        }
+    };
+
     const normalize = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const visibleBills = useMemo(() => {
         const q = normalize(searchCode.trim());
@@ -175,12 +217,21 @@ export default function CompanyBillsList() {
 
     return (
         <Screen title={name} subtitle={`Code ${code}`}>
-            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+            <View style={styles.topActions}>
                 <TouchableOpacity
-                    style={{ alignSelf: 'flex-end', backgroundColor: tokens.colors.accent, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}
-                    onPress={() => router.push({ pathname: '/company-promise', params: { code } })}
+                    style={[styles.topActionBtn, ledgerDownloading && styles.topActionDisabled]}
+                    onPress={downloadLedger}
+                    disabled={ledgerDownloading}
+                    activeOpacity={0.75}
                 >
-                    <Text style={{ color: tokens.colors.text, fontWeight: '700' }}>Change Promise Date</Text>
+                    <Text style={styles.topActionText}>{ledgerDownloading ? 'Downloading...' : 'Ledger PDF'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.topActionBtn}
+                    onPress={() => router.push({ pathname: '/company-promise', params: { code } })}
+                    activeOpacity={0.75}
+                >
+                    <Text style={styles.topActionText}>Change Promise Date</Text>
                 </TouchableOpacity>
             </View>
             <FlatList
@@ -293,6 +344,10 @@ export default function CompanyBillsList() {
 }
 
 const styles = StyleSheet.create({
+    topActions: { paddingHorizontal: 16, marginBottom: 8, flexDirection: 'row', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' },
+    topActionBtn: { backgroundColor: tokens.colors.accent, borderWidth: 1, borderColor: tokens.colors.border, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+    topActionDisabled: { opacity: 0.65 },
+    topActionText: { color: tokens.colors.text, fontWeight: '700', fontSize: 12 },
     // Compact stat pills
     statPillsRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
     statPill: { flex: 1, backgroundColor: tokens.colors.cardAlt, borderWidth: 1, borderColor: tokens.colors.border, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },

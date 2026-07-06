@@ -24,7 +24,7 @@ import { API_BASE_URL } from '../../src/utils/constants';
 import { emitPaymentUpdate } from '../../src/events/paymentEvents';
 import { formatDate, formatDateTime } from '../../src/ui/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer"];
+const paymentMethods = ["Cash", "UPI", "Cheque", "Bank Transfer", "Goods Return"];
 
 // Simple UUID v4 generator
 const generateUUID = () => {
@@ -266,7 +266,7 @@ export default function CollectPaymentScreen() {
         company_code,
         collected_at: new Date().toISOString(),
         amount_collected: Number(amountCollected),
-        method: paymentMethod.toLowerCase(),
+        method: paymentMethod === "Goods Return" ? "goods_return" : paymentMethod.toLowerCase(),
         comments: comments.trim() || undefined,
         next_promise_date: (!isFullPayment && nextPromiseDate) ? nextPromiseDate.toISOString().split('T')[0] : undefined
       };

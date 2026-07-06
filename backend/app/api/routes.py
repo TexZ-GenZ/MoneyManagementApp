@@ -8,6 +8,7 @@ from fastapi import (
     Header,
     Request,
 )
+from fastapi.responses import Response
 from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import text, or_, func, literal, case
@@ -70,7 +71,7 @@ from app.services.payments import (
     create_payment_with_allocations,
     admin_approve_payment,
     reconcile_bill_promises,
-    get_reserved_totals_by_bill,
+    reverse_payment_allocations_from_bills,
 )
 from app.services.notifications import run_notification_scan
 from app.core.scheduler import reschedule_jobs
@@ -78,6 +79,7 @@ from app.services.imports import (
     import_master as do_import_master,
     import_transactions as do_import_transactions,
 )
+from app.services.statement import generate_statement_pdf
 from app.models.models import (
     User,
     Company,
@@ -250,23 +252,7 @@ def list_companies(
     settings_row = ensure_settings_row(db)
     credit_days = settings_row.credit_extension_days or 0
     eff_due = effective_due_date_expr(credit_days)
-    reserved_sub = (
-        db.query(
-            PaymentAllocation.bill_id.label("bill_id"),
-            func.coalesce(func.sum(PaymentAllocation.amount), 0).label("reserved"),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .filter(
-            Payment.status.in_(
-                [PaymentStatus.submitted, PaymentStatus.accountant_approved]
-            )
-        )
-        .group_by(PaymentAllocation.bill_id)
-        .subquery()
-    )
-    residual = Bill.amount - Bill.amount_paid - func.coalesce(
-        reserved_sub.c.reserved, 0
-    )
+    residual = Bill.amount - Bill.amount_paid
     positive_residual = func.coalesce(
         func.sum(case((residual > 0, residual), else_=0)),
         0,
@@ -290,25 +276,41 @@ def list_companies(
             .filter((residual > 0) & (eff_due <= func.current_date()))
             .label("overdue_count"),
         )
-        .filter(Bill.status == "pending", Bill.is_archived == False)
-        .outerjoin(reserved_sub, reserved_sub.c.bill_id == Bill.id)
+        .filter(Bill.status.in_((BillStatus.pending, BillStatus.partial)), Bill.is_archived == False)
         .group_by(Bill.company_code)
         .subquery()
     )
     bill_sum_sub = (
         db.query(
             Bill.company_code.label("code"),
-            func.coalesce(func.sum(Bill.amount), 0).label("bill_sum"),
+            func.coalesce(func.sum(Bill.amount - Bill.amount_paid), 0).label(
+                "bill_sum"
+            ),
         )
         .filter(Bill.is_archived == False)
         .group_by(Bill.company_code)
         .subquery()
     )
+    payment_alloc_sub = (
+        db.query(
+            PaymentAllocation.payment_id.label("payment_id"),
+            func.coalesce(func.sum(PaymentAllocation.amount), 0).label("allocated"),
+        )
+        .group_by(PaymentAllocation.payment_id)
+        .subquery()
+    )
     payment_sum_sub = (
         db.query(
             Payment.company_code.label("code"),
-            func.coalesce(func.sum(Payment.amount_collected), 0).label("pay_sum"),
+            func.coalesce(
+                func.sum(
+                    Payment.amount_collected
+                    - func.coalesce(payment_alloc_sub.c.allocated, 0)
+                ),
+                0,
+            ).label("pay_sum"),
         )
+        .outerjoin(payment_alloc_sub, payment_alloc_sub.c.payment_id == Payment.id)
         .filter(
             Payment.status.in_(
                 [
@@ -591,6 +593,60 @@ def set_credit_date(
     return c
 
 
+# Company Account Statement PDF
+@router.get(
+    "/companies/{code}/statement",
+    dependencies=[Depends(require_roles("admin", "accountant"))],
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "Account statement PDF for the company",
+        }
+    },
+)
+@user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
+def company_statement(
+    request: Request,
+    code: str,
+    from_date: date = Query(..., alias="from", description="Start date (YYYY-MM-DD)"),
+    to_date: date = Query(..., alias="to", description="End date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    """Generate and download an account statement PDF for the given company.
+
+    The PDF mirrors the paper ledger format:
+      - Opening balance B/F as-of from_date
+      - Bills in window as DEBIT rows
+      - Admin-approved payments in window as CREDIT rows
+      - Running balance column
+      - Totals footer
+    """
+    comp = db.get(Company, code)
+    if not comp:
+        raise HTTPException(status_code=404, detail="Company not found")
+    if from_date > to_date:
+        raise HTTPException(status_code=422, detail="'from' must be <= 'to'")
+    try:
+        pdf_bytes = generate_statement_pdf(
+            db=db,
+            company_code=code,
+            from_date=from_date,
+            to_date=to_date,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    filename = f"statement_{code}_{from_date}_{to_date}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
 # Bills
 @router.get("/companies/{code}/bills", response_model=BillList)
 @user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
@@ -604,7 +660,9 @@ def list_company_bills(
     limit: int = 100,
 ):
     q = db.query(Bill).filter(Bill.company_code == code, Bill.is_archived == False)
-    if status:
+    if status == "pending":
+        q = q.filter(Bill.status.in_((BillStatus.pending, BillStatus.partial)))
+    elif status:
         q = q.filter(Bill.status == status)
     if sort == "oldest":
         q = q.order_by(Bill.bill_date.asc())
@@ -617,8 +675,6 @@ def list_company_bills(
     settings_row = ensure_settings_row(db)
     credit_days = settings_row.credit_extension_days or 0
     items = []
-    bill_ids = [b.id for b in raw_items]
-    reserved_by_bill = get_reserved_totals_by_bill(db, bill_ids)
     for b in raw_items:
         dynamic_due = (
             (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
@@ -626,7 +682,6 @@ def list_company_bills(
         remaining_amount = (
             Decimal(str(b.amount))
             - Decimal(str(b.amount_paid))
-            - Decimal(str(reserved_by_bill.get(b.id, Decimal("0"))))
         )
         if remaining_amount < 0:
             remaining_amount = Decimal("0")
@@ -667,6 +722,9 @@ def get_bill(request: Request, bill_id: int, db: Session = Depends(get_db)):
         promise_date=getattr(b, "promise_date", None),
         amount=b.amount,
         amount_paid=b.amount_paid,
+        remaining_amount=max(
+            Decimal(str(b.amount)) - Decimal(str(b.amount_paid)), Decimal("0")
+        ),
         status=b.status.value if hasattr(b.status, "value") else str(b.status),
     )
 
@@ -2321,6 +2379,7 @@ def accountant_decline(
     p.accountant_review_at = datetime.utcnow()
     if comment:
         p.accountant_comment = comment
+    reverse_payment_allocations_from_bills(db, p.id)
     # Mark related notifications as stopped
     db.query(Notification).filter(
         Notification.company_code == p.company_code,
@@ -2330,6 +2389,7 @@ def accountant_decline(
         {Notification.status: NotificationStatus.stopped}, synchronize_session=False
     )
     db.commit()
+    recalc_company_totals(db, p.company_code)
     db.refresh(p)
     # Persist a history notification for decline (so it shows in in-app list)
     try:
@@ -2669,6 +2729,7 @@ def admin_decline(
     p.admin_review_at = datetime.utcnow()
     if comment:
         p.admin_comment = comment
+    reverse_payment_allocations_from_bills(db, p.id)
     # Mark related notifications as stopped
     db.query(Notification).filter(
         Notification.company_code == p.company_code,
@@ -2678,6 +2739,7 @@ def admin_decline(
         {Notification.status: NotificationStatus.stopped}, synchronize_session=False
     )
     db.commit()
+    recalc_company_totals(db, p.company_code)
     db.refresh(p)
     # Persist a history notification for decline (so it shows in in-app list)
     try:

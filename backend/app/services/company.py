@@ -30,12 +30,6 @@ ACTIVE_COLLECTION_STATUSES = (
 )
 
 
-RESERVED_COLLECTION_STATUSES = (
-    PaymentStatus.submitted,
-    PaymentStatus.accountant_approved,
-)
-
-
 def _get_company_amounts(db: Session, codes: list[str]) -> dict[str, Decimal]:
     if not codes:
         return {}
@@ -46,16 +40,35 @@ def _get_company_amounts(db: Session, codes: list[str]) -> dict[str, Decimal]:
     )
     opening_map = {code: Decimal(str(opening or 0)) for code, opening in opening_rows}
     bill_rows = (
-        db.query(Bill.company_code, func.coalesce(func.sum(Bill.amount), 0))
+        db.query(
+            Bill.company_code,
+            func.coalesce(func.sum(Bill.amount - Bill.amount_paid), 0),
+        )
         .filter(Bill.company_code.in_(codes), Bill.is_archived == False)
         .group_by(Bill.company_code)
         .all()
     )
     bill_sum = {code: Decimal(str(total)) for code, total in bill_rows}
+    payment_alloc_sub = (
+        db.query(
+            PaymentAllocation.payment_id.label("payment_id"),
+            func.coalesce(func.sum(PaymentAllocation.amount), 0).label("allocated"),
+        )
+        .group_by(PaymentAllocation.payment_id)
+        .subquery()
+    )
     payment_rows = (
         db.query(
-            Payment.company_code, func.coalesce(func.sum(Payment.amount_collected), 0)
+            Payment.company_code,
+            func.coalesce(
+                func.sum(
+                    Payment.amount_collected
+                    - func.coalesce(payment_alloc_sub.c.allocated, 0)
+                ),
+                0,
+            ),
         )
+        .outerjoin(payment_alloc_sub, payment_alloc_sub.c.payment_id == Payment.id)
         .filter(
             Payment.company_code.in_(codes),
             Payment.status.in_(ACTIVE_COLLECTION_STATUSES),
@@ -63,13 +76,13 @@ def _get_company_amounts(db: Session, codes: list[str]) -> dict[str, Decimal]:
         .group_by(Payment.company_code)
         .all()
     )
-    payment_sum = {code: Decimal(str(total)) for code, total in payment_rows}
+    unallocated_payment_sum = {code: Decimal(str(total)) for code, total in payment_rows}
     amounts: dict[str, Decimal] = {}
     for code in codes:
         opening = opening_map.get(code, Decimal("0"))
         bills = bill_sum.get(code, Decimal("0"))
-        paid = payment_sum.get(code, Decimal("0"))
-        amounts[code] = opening + bills - paid
+        surplus = unallocated_payment_sum.get(code, Decimal("0"))
+        amounts[code] = opening + bills - surplus
     return amounts
 
 
@@ -78,19 +91,7 @@ def get_company_rollups(
 ) -> dict[str, dict]:
     if not codes:
         return {}
-    reserved_sub = (
-        db.query(
-            PaymentAllocation.bill_id.label("bill_id"),
-            func.coalesce(func.sum(PaymentAllocation.amount), 0).label("reserved"),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .filter(Payment.status.in_(RESERVED_COLLECTION_STATUSES))
-        .group_by(PaymentAllocation.bill_id)
-        .subquery()
-    )
-    residual = Bill.amount - Bill.amount_paid - func.coalesce(
-        reserved_sub.c.reserved, 0
-    )
+    residual = Bill.amount - Bill.amount_paid
     overdue_positive = case(
         (
             and_(
@@ -117,10 +118,9 @@ def get_company_rollups(
         )
         .filter(
             Bill.company_code.in_(codes),
-            Bill.status == BillStatus.pending,
+            Bill.status.in_((BillStatus.pending, BillStatus.partial)),
             Bill.is_archived == False,
         )
-        .outerjoin(reserved_sub, reserved_sub.c.bill_id == Bill.id)
         .group_by(Bill.company_code)
         .all()
     )
@@ -218,19 +218,7 @@ def recalc_company_totals(db: Session, code: str) -> None:
     """
     settings_row = ensure_settings_row(db)
     credit_days = settings_row.credit_extension_days or 0
-    reserved_sub = (
-        db.query(
-            PaymentAllocation.bill_id.label("bill_id"),
-            func.coalesce(func.sum(PaymentAllocation.amount), 0).label("reserved"),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .filter(Payment.status.in_(RESERVED_COLLECTION_STATUSES))
-        .group_by(PaymentAllocation.bill_id)
-        .subquery()
-    )
-    residual = Bill.amount - Bill.amount_paid - func.coalesce(
-        reserved_sub.c.reserved, 0
-    )
+    residual = Bill.amount - Bill.amount_paid
     total_due = _get_company_amounts(db, [code]).get(code, Decimal("0"))
     overdue_sum = Decimal(
         db.query(
@@ -253,10 +241,9 @@ def recalc_company_totals(db: Session, code: str) -> None:
         )
         .filter(
             Bill.company_code == code,
-            Bill.status == BillStatus.pending,
+            Bill.status.in_((BillStatus.pending, BillStatus.partial)),
             Bill.is_archived == False,
         )
-        .outerjoin(reserved_sub, reserved_sub.c.bill_id == Bill.id)
         .scalar()
     )
     comp = db.get(Company, code)
@@ -267,11 +254,10 @@ def recalc_company_totals(db: Session, code: str) -> None:
         db.query(func.min(Bill.due_date))
         .filter(
             Bill.company_code == code,
-            Bill.status == BillStatus.pending,
+            Bill.status.in_((BillStatus.pending, BillStatus.partial)),
             Bill.is_archived == False,
             residual > 0,
         )
-        .outerjoin(reserved_sub, reserved_sub.c.bill_id == Bill.id)
         .scalar()
     )
     s = settings_row
@@ -312,19 +298,7 @@ def recompute_company_amounts(db: Session, code: str) -> None:
     settings_row = ensure_settings_row(db)
     credit_days = settings_row.credit_extension_days or 0
     amount_sum = _get_company_amounts(db, [code]).get(code, Decimal("0"))
-    reserved_sub = (
-        db.query(
-            PaymentAllocation.bill_id.label("bill_id"),
-            func.coalesce(func.sum(PaymentAllocation.amount), 0).label("reserved"),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .filter(Payment.status.in_(RESERVED_COLLECTION_STATUSES))
-        .group_by(PaymentAllocation.bill_id)
-        .subquery()
-    )
-    residual = Bill.amount - Bill.amount_paid - func.coalesce(
-        reserved_sub.c.reserved, 0
-    )
+    residual = Bill.amount - Bill.amount_paid
     overdue_sum = Decimal(
         db.query(
             func.coalesce(
@@ -346,10 +320,9 @@ def recompute_company_amounts(db: Session, code: str) -> None:
         )
         .filter(
             Bill.company_code == code,
-            Bill.status == BillStatus.pending,
+            Bill.status.in_((BillStatus.pending, BillStatus.partial)),
             Bill.is_archived == False,
         )
-        .outerjoin(reserved_sub, reserved_sub.c.bill_id == Bill.id)
         .scalar()
     )
     comp = db.get(Company, code)
@@ -360,11 +333,10 @@ def recompute_company_amounts(db: Session, code: str) -> None:
         db.query(func.min(Bill.due_date))
         .filter(
             Bill.company_code == code,
-            Bill.status == BillStatus.pending,
+            Bill.status.in_((BillStatus.pending, BillStatus.partial)),
             Bill.is_archived == False,
             residual > 0,
         )
-        .outerjoin(reserved_sub, reserved_sub.c.bill_id == Bill.id)
         .scalar()
     )
     comp.oldest_due_date = oldest_due

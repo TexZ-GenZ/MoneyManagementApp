@@ -14,7 +14,7 @@ import * as Linking from 'expo-linking';
 import { emitPaymentUpdate } from '../../src/events/paymentEvents';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const paymentMethods = ['Cash', 'UPI', 'Cheque', 'Bank Transfer'];
+const paymentMethods = ['Cash', 'UPI', 'Cheque', 'Bank Transfer', 'Goods Return'];
 
 export default function MultiPayScreen() {
   const { code, name, amount } = useLocalSearchParams();
@@ -227,7 +227,7 @@ export default function MultiPayScreen() {
         company_code: code,
         collected_at: new Date().toISOString(),
         amount_collected: to2(initialTotal),
-        method: paymentMethod.toLowerCase(),
+        method: paymentMethod === 'Goods Return' ? 'goods_return' : paymentMethod.toLowerCase(),
         comments: comment || undefined,
         next_promise_date: promiseDate ? promiseDate.toISOString().slice(0, 10) : undefined,
         bill_allocations: Object.entries(selected).map(([bill_id, amount]) => ({ bill_id: Number(bill_id), amount: to2(amount) })),

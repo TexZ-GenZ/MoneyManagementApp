@@ -30,25 +30,59 @@ def get_reserved_totals_by_bill(
     *,
     exclude_payment_id: int | None = None,
 ) -> dict[int, Decimal]:
-    if not bill_ids:
-        return {}
-    q = (
-        db.query(
-            PaymentAllocation.bill_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .filter(
-            PaymentAllocation.bill_id.in_(bill_ids),
-            Payment.status.in_(
-                [PaymentStatus.submitted, PaymentStatus.accountant_approved]
-            ),
-        )
+    # Submitted/accountant allocations are applied directly to Bill.amount_paid
+    # when a payment is collected, so there is no separate reserved balance to
+    # subtract. Keep this helper for callers that still ask for it.
+    return {}
+
+
+def _refresh_bill_status(bill: Bill) -> None:
+    paid = Decimal(str(bill.amount_paid or 0))
+    amount = Decimal(str(bill.amount or 0))
+    if paid >= amount:
+        bill.amount_paid = amount
+        bill.status = BillStatus.paid
+    elif paid > 0:
+        bill.status = BillStatus.partial
+    else:
+        bill.amount_paid = Decimal("0")
+        bill.status = BillStatus.pending
+
+
+def apply_payment_allocations_to_bills(db: Session, payment_id: int) -> None:
+    allocs = (
+        db.query(PaymentAllocation).filter(PaymentAllocation.payment_id == payment_id).all()
     )
-    if exclude_payment_id is not None:
-        q = q.filter(Payment.id != exclude_payment_id)
-    rows = q.group_by(PaymentAllocation.bill_id).all()
-    return {bid: Decimal(str(total)) for bid, total in rows}
+    for alloc in allocs:
+        if Decimal(str(alloc.amount or 0)) <= 0:
+            continue
+        bill = db.query(Bill).with_for_update().filter(Bill.id == alloc.bill_id).one_or_none()
+        if not bill:
+            continue
+        remaining = Decimal(str(bill.amount or 0)) - Decimal(str(bill.amount_paid or 0))
+        to_apply = min(remaining, Decimal(str(alloc.amount or 0)))
+        if to_apply <= 0:
+            continue
+        bill.amount_paid = Decimal(str(bill.amount_paid or 0)) + to_apply
+        _refresh_bill_status(bill)
+        db.add(bill)
+
+
+def reverse_payment_allocations_from_bills(db: Session, payment_id: int) -> None:
+    allocs = (
+        db.query(PaymentAllocation).filter(PaymentAllocation.payment_id == payment_id).all()
+    )
+    for alloc in allocs:
+        if Decimal(str(alloc.amount or 0)) <= 0:
+            continue
+        bill = db.query(Bill).with_for_update().filter(Bill.id == alloc.bill_id).one_or_none()
+        if not bill:
+            continue
+        bill.amount_paid = Decimal(str(bill.amount_paid or 0)) - Decimal(str(alloc.amount or 0))
+        if bill.amount_paid < 0:
+            bill.amount_paid = Decimal("0")
+        _refresh_bill_status(bill)
+        db.add(bill)
 
 
 def _validate_allocations_against_effective_remaining(
@@ -100,12 +134,6 @@ def _validate_allocations_against_effective_remaining(
         if existing_pd_change:
             raise ValueError("A promise-date change is already pending for this bill")
 
-    reserved_by_bill = (
-        get_reserved_totals_by_bill(db, bill_ids, exclude_payment_id=exclude_payment_id)
-        if bill_ids
-        else {}
-    )
-
     total_alloc = Decimal(0)
     for a in allocations:
         bid = a["bill_id"]
@@ -126,13 +154,10 @@ def _validate_allocations_against_effective_remaining(
             raise ValueError("Allocation bill does not belong to company")
         if getattr(b, "is_archived", False):
             raise ValueError("Cannot allocate to archived bill")
-        if b.status != BillStatus.pending:
-            raise ValueError("Can only allocate to pending bills")
+        if b.status not in (BillStatus.pending, BillStatus.partial):
+            raise ValueError("Can only allocate to open bills")
 
-        already_reserved = reserved_by_bill.get(bid, Decimal(0))
-        effective_remaining = (
-            Decimal(b.amount) - Decimal(b.amount_paid) - already_reserved
-        )
+        effective_remaining = Decimal(b.amount) - Decimal(b.amount_paid)
         try:
             effective_remaining = effective_remaining.quantize(
                 TWO_DP, rounding=ROUND_HALF_UP
@@ -277,6 +302,7 @@ def create_payment_with_allocations(
         except Exception:
             pass
         db.add(PaymentAllocation(payment_id=p.id, bill_id=a["bill_id"], amount=amt))
+    apply_payment_allocations_to_bills(db, p.id)
     # Create a notification for accountant review
     # Guarantee at most one pending review notification: lock existing pending rows and reuse or stop extras
     pending_reviews = (
@@ -331,6 +357,8 @@ def create_payment_with_allocations(
                 return existing_after
         # Re-raise if not an idempotency collision scenario
         raise
+    db.refresh(p)
+    recalc_company_totals(db, p.company_code)
     db.refresh(p)
     # Immediate push notification to accountants for new submitted payment
     try:
@@ -467,21 +495,9 @@ def admin_approve_payment(
         pass
     else:
         raise ValueError("Invalid state for admin approval")
-    # allocate amounts
     allocs = (
         db.query(PaymentAllocation).filter(PaymentAllocation.payment_id == p.id).all()
     )
-    for a in allocs:
-        b = db.query(Bill).with_for_update().filter(Bill.id == a.bill_id).one_or_none()
-        if not b:
-            continue
-        remaining = Decimal(b.amount) - Decimal(b.amount_paid)
-        pay = Decimal(a.amount)
-        to_apply = min(remaining, pay)
-        b.amount_paid = Decimal(b.amount_paid) + to_apply
-        if b.amount_paid >= b.amount:
-            b.status = BillStatus.paid
-        db.add(b)
     # update per-bill promise date if provided (do not set company-wide)
     if p.next_promise_date:
         # Apply the provided next_promise_date to allocated bills (not earlier than today)
