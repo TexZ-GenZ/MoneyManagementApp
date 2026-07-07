@@ -34,7 +34,7 @@
     "expo-notifications": "~0.31.4",
     "expo-router": "~5.1.4",
     "expo-secure-store": "^14.2.3",
-    "expo-sharing": "^57.0.2",
+    "expo-sharing": "~13.1.5",
     "expo-splash-screen": "~0.30.10",
     "expo-status-bar": "~2.2.3",
     "expo-updates": "~0.28.17",
