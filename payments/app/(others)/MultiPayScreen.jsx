@@ -17,9 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const paymentMethods = ['Cash', 'UPI', 'Cheque', 'Bank Transfer', 'Goods Return'];
 
 export default function MultiPayScreen() {
-  const { code, name, amount } = useLocalSearchParams();
+  const { code, name, amount, openingBalance } = useLocalSearchParams();
   const router = useRouter();
   const initialTotal = Math.max(0, Number(amount || 0));
+  const hasOpeningBalance = Number(openingBalance || 0) > 0;
   const insets = useSafeAreaInsets();
   // Ensure comfortable bottom space even when safe-area inset is 0 (e.g., Android 3-button nav)
   const DEFAULT_BOTTOM_PADDING_IOS = 12;
@@ -204,7 +205,8 @@ export default function MultiPayScreen() {
     if (JSON.stringify(nextSel) !== JSON.stringify(selected)) setSelected(nextSel);
   }, [bills, initialTotal, selected]);
 
-  const canSubmit = Object.keys(selected).length > 0 && (!needsPromise() || !!promiseDate) && !!location;
+  // Allow submit with no bill allocations — payment reduces opening balance outstanding
+  const canSubmit = (!needsPromise() || !!promiseDate) && !!location;
 
   function needsPromise() {
     // Needs promise if any allocation is partial on that bill
@@ -324,6 +326,15 @@ export default function MultiPayScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 + insets.top : 100}>
         {loading ? <ActivityIndicator color={tokens.colors.accent} style={{ marginTop: 40 }} /> : (
           <>
+            {/* Opening balance notice — shown when no pending bills exist */}
+            {bills.length === 0 && (
+              <Card style={{ margin: 12, padding: 16, borderColor: tokens.colors.accent, borderWidth: 1 }}>
+                <Text style={{ color: tokens.colors.accent, fontWeight: '800', fontSize: 13, marginBottom: 4 }}>No Pending Bills</Text>
+                <Text style={{ color: tokens.colors.textDim, fontSize: 12, lineHeight: 18 }}>
+                  This company has no open bills right now. The payment of {formatCurrency(initialTotal)} will be applied directly against the outstanding opening balance.
+                </Text>
+              </Card>
+            )}
             <FlatList
               data={visibleBills}
               keyExtractor={it => String(it.id)}
