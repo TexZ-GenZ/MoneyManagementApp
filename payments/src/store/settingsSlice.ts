@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { StorageService } from '../services/storageService';
+import { getApiUrl } from '../utils/config';
 
 export interface SettingsState {
   creditExtensionDays: number | null;
@@ -21,11 +22,9 @@ const initialState: SettingsState = {
   lastUpdated: null,
 };
 
-const API_BASE = process.env.APP_URI || process.env.EXPO_PUBLIC_APP_URI;
-
 export const fetchSettings = createAsyncThunk('settings/fetch', async () => {
   const tok = await StorageService.getToken();
-  const r = await fetch(`${API_BASE}/settings`, { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok?.access_token}` } });
+  const r = await fetch(getApiUrl('/settings'), { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok?.access_token}` } });
   if (!r.ok) throw new Error('Failed to load settings');
   return await r.json();
 });
@@ -35,7 +34,7 @@ export const updateCreditExtensionDays = createAsyncThunk(
   async (days: number, { rejectWithValue }) => {
     try {
       const tok = await StorageService.getToken();
-      const r = await fetch(`${API_BASE}/settings`, {
+      const r = await fetch(getApiUrl('/settings'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok?.access_token}` },
         body: JSON.stringify({ credit_extension_days: days }),
@@ -55,7 +54,7 @@ export const updateSettings = createAsyncThunk(
   async (payload: { credit_extension_days?: number; notif_every_hours?: number; exec_window_start_hour?: number; exec_window_end_hour?: number }, { rejectWithValue }) => {
     try {
       const tok = await StorageService.getToken();
-      const r = await fetch(`${API_BASE}/settings`, {
+      const r = await fetch(getApiUrl('/settings'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok?.access_token}` },
         body: JSON.stringify(payload),
