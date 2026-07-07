@@ -327,10 +327,9 @@ export default function CompanyBillsList() {
                                 onPress={async () => {
                                     const v = Number(multiAmount);
                                     if (!multiAmount || Number.isNaN(v) || v <= 0) { Alert.alert('Invalid', 'Enter a valid amount'); return; }
-                                    // Minimum amount validation: must be at least 100 (shows as ₹1.00 after division by 100)
                                     if (v < 100) { Alert.alert('Amount Too Small', 'Minimum bulk payment amount is ₹1.00 (enter 100 or more)'); return; }
                                     setMultiModalVisible(false);
-                                    router.push({ pathname: '/(others)/MultiPayScreen', params: { name, code, outbal, amount: String(v) } });
+                                    router.push({ pathname: '/(others)/MultiPayScreen', params: { name, code, outbal, amount: String(v), openingBalance: amount } });
                                 }}
                             >
                                 <Text style={styles.modalDoneText}>Done</Text>
