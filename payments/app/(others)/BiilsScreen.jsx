@@ -2,7 +2,7 @@ import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Alert, ScrollView, TextInput, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import Screen from '../../src/ui/components/Screen';
 import { Card } from '../../src/ui/components/Card';
