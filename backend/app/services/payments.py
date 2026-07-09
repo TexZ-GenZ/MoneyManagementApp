@@ -303,6 +303,10 @@ def create_payment_with_allocations(
             pass
         db.add(PaymentAllocation(payment_id=p.id, bill_id=a["bill_id"], amount=amt))
     apply_payment_allocations_to_bills(db, p.id)
+    
+    from app.services.company import recalc_company_totals
+    recalc_company_totals(db, company_code)
+
     # Create a notification for accountant review
     # Guarantee at most one pending review notification: lock existing pending rows and reuse or stop extras
     pending_reviews = (

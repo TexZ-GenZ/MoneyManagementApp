@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StorageService } from '../../src/services/storageService';
@@ -175,10 +176,12 @@ export default function AccountantNotifyScreen() {
         }
     };
 
-    useEffect(() => {
-        fetchApprovalData();
-        fetchExecutives();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            fetchApprovalData();
+            fetchExecutives();
+        }, [])
+    );
 
     useEffect(() => {
         const unsubscribe = onPaymentUpdate(event => {

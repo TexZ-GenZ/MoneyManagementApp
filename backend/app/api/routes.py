@@ -2380,6 +2380,8 @@ def accountant_decline(
     if comment:
         p.accountant_comment = comment
     reverse_payment_allocations_from_bills(db, p.id)
+    from app.services.company import recalc_company_totals
+    recalc_company_totals(db, p.company_code)
     # Mark related notifications as stopped
     db.query(Notification).filter(
         Notification.company_code == p.company_code,
@@ -2657,7 +2659,8 @@ def admin_pending(
     total = q.count()
     items = (
         q.order_by(
-            (Payment.status != PaymentStatus.submitted),
+            # accountant_approved first (False=0), submitted after (True=1)
+            (Payment.status != PaymentStatus.accountant_approved),
             Payment.collected_at.desc(),
         )
         .offset(skip)
@@ -2730,6 +2733,8 @@ def admin_decline(
     if comment:
         p.admin_comment = comment
     reverse_payment_allocations_from_bills(db, p.id)
+    from app.services.company import recalc_company_totals
+    recalc_company_totals(db, p.company_code)
     # Mark related notifications as stopped
     db.query(Notification).filter(
         Notification.company_code == p.company_code,

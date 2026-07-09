@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert, RefreshControl, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StorageService } from '../../src/services/storageService';
@@ -142,10 +143,12 @@ export default function AdminNotifyScreen() {
         }
     };
 
-    useEffect(() => {
-        fetchApprovalData();
-        fetchExecutives();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            fetchApprovalData();
+            fetchExecutives();
+        }, [])
+    );
 
     useEffect(() => {
         const unsubscribe = onPaymentUpdate(event => {
