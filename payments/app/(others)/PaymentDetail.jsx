@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl, ScrollView, Linking } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl, ScrollView, Linking, TextInput } from 'react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StorageService } from '../../src/services/storageService';
@@ -29,6 +29,15 @@ export default function PaymentDetails() {
     const [bill, setBill] = useState(null); // BillOut
     const [company, setCompany] = useState(null); // CompanyBase
     const [showPromisePicker, setShowPromisePicker] = useState(false);
+    // Bill edit states
+    const [editingBill, setEditingBill] = useState(false);
+    const [editBillNumber, setEditBillNumber] = useState('');
+    const [editBillDate, setEditBillDate] = useState(new Date());
+    const [editDueDate, setEditDueDate] = useState(new Date());
+    const [editAmount, setEditAmount] = useState('');
+    const [billDatePickerVisible, setBillDatePickerVisible] = useState(false);
+    const [dueDatePickerVisible, setDueDatePickerVisible] = useState(false);
+    const [savingBill, setSavingBill] = useState(false);
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const userRole = useAppSelector(s => s.auth.user?.role || '');
@@ -144,6 +153,62 @@ export default function PaymentDetails() {
                 { text: 'Yes, Continue', style: 'destructive', onPress: () => doSubmitPromiseDate(iso) },
             ]
         );
+    };
+
+    // -- Bill edit handlers --
+    const canEditBill = (userRole === 'accountant' || userRole === 'admin');
+
+    const startEditBill = () => {
+        if (!bill) return;
+        setEditBillNumber(bill.bill_number || bill_number || '');
+        setEditBillDate(bill.bill_date ? new Date(bill.bill_date) : new Date());
+        setEditDueDate(bill.due_date ? new Date(bill.due_date) : new Date());
+        setEditAmount(String(bill.amount || amount || ''));
+        setEditingBill(true);
+    };
+
+    const cancelEditBill = () => {
+        setEditingBill(false);
+        setSavingBill(false);
+    };
+
+    const handleSaveBill = async () => {
+        if (!bill_id || savingBill) return;
+        const amt = Number(editAmount);
+        if (isNaN(amt) || amt <= 0) {
+            Alert.alert('Invalid', 'Enter a valid bill amount.');
+            return;
+        }
+        setSavingBill(true);
+        try {
+            const tok = await StorageService.getToken();
+            const payload = {
+                bill_number: editBillNumber.trim() || undefined,
+                bill_date: editBillDate.toISOString().slice(0, 10),
+                due_date: editDueDate.toISOString().slice(0, 10),
+                amount: amt,
+            };
+            const r = await fetch(`${API_BASE_URL}/accountant/bills/${bill_id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${tok.access_token}`,
+                },
+                body: JSON.stringify(payload),
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                throw new Error(err.detail || 'Update failed');
+            }
+            const updated = await r.json();
+            setBill(updated);
+            setEditingBill(false);
+            Alert.alert('Saved', 'Bill updated successfully.');
+        } catch (e) {
+            Alert.alert('Error', String(e.message || 'Failed to update bill'));
+        } finally {
+            setSavingBill(false);
+        }
     };
 
     const minPickDate = useMemo(() => {
@@ -279,25 +344,79 @@ export default function PaymentDetails() {
                 </View>
             </Card>
             <Card style={styles.infoCard}>
-                <View style={styles.billHeadlineRow}>
-                    <View style={styles.headLeftRow}>
-                        <Text style={styles.billHeadline}>{bill?.bill_number || bill_number}</Text>
-                    </View>
-                    <StatusBadge status={(bill?.status || status || 'pending')} />
-                </View>
-                <Text style={styles.billDates}>
-                    {formatDate(bill?.bill_date || bill_date)}  •  Promise {formatDate(bill?.promise_date || resolvedPromiseDateParam || bill?.due_date)}
-                </Text>
-                <InfoRow label="Bill Amount" value={formatCurrency(billAmountNum)} accent />
-                <InfoRow label="Status" value={(bill?.status || status)} />
-                <InfoRow label="Paid" value={formatCurrency(totalPaid)} />
-                <InfoRow label="Outstanding" value={formatCurrency(outstandingNum)} danger />
-                <InfoRow label="Bill Date" value={bill?.bill_date ? formatDate(bill.bill_date) : (bill_date ? formatDate(bill_date) : '—')} />
-                <InfoRow label="Promise Date" value={bill?.promise_date ? formatDate(bill.promise_date) : (resolvedPromiseDateParam ? formatDate(resolvedPromiseDateParam) : (bill?.due_date ? formatDate(bill.due_date) : '—'))} />
-                <View style={styles.divider} />
-                <InfoRow label="Company Code" value={company?.code || code} />
-                <InfoRow label="Company Name" value={company?.name || name} />
-                <InfoRow label="Executive" value={company?.area || '—'} />
+                {!editingBill ? (
+                    <>
+                        <View style={styles.billHeadlineRow}>
+                            <View style={styles.headLeftRow}>
+                                <Text style={styles.billHeadline}>{bill?.bill_number || bill_number}</Text>
+                            </View>
+                            <StatusBadge status={(bill?.status || status || 'pending')} />
+                        </View>
+                        <Text style={styles.billDates}>
+                            {formatDate(bill?.bill_date || bill_date)}  •  Promise {formatDate(bill?.promise_date || resolvedPromiseDateParam || bill?.due_date)}
+                        </Text>
+                        <InfoRow label="Bill Amount" value={formatCurrency(billAmountNum)} accent />
+                        <InfoRow label="Status" value={(bill?.status || status)} />
+                        <InfoRow label="Paid" value={formatCurrency(totalPaid)} />
+                        <InfoRow label="Outstanding" value={formatCurrency(outstandingNum)} danger />
+                        <InfoRow label="Bill Date" value={bill?.bill_date ? formatDate(bill.bill_date) : (bill_date ? formatDate(bill_date) : '—')} />
+                        <InfoRow label="Promise Date" value={bill?.promise_date ? formatDate(bill.promise_date) : (resolvedPromiseDateParam ? formatDate(resolvedPromiseDateParam) : (bill?.due_date ? formatDate(bill.due_date) : '—'))} />
+                        <View style={styles.divider} />
+                        <InfoRow label="Company Code" value={company?.code || code} />
+                        <InfoRow label="Company Name" value={company?.name || name} />
+                        <InfoRow label="Executive" value={company?.area || '—'} />
+                        {canEditBill && (
+                            <TouchableOpacity style={styles.editBillBtn} onPress={startEditBill}>
+                                <Text style={styles.editBillBtnText}>Edit Bill</Text>
+                            </TouchableOpacity>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <Text style={styles.sectionTitle}>Editing Bill</Text>
+                        <Text style={styles.fieldLabel}>Bill Number</Text>
+                        <TextInput
+                            style={styles.editInput}
+                            value={editBillNumber}
+                            onChangeText={setEditBillNumber}
+                            placeholder="Bill number"
+                            placeholderTextColor={tokens.colors.textFaint}
+                        />
+                        <Text style={styles.fieldLabel}>Bill Date</Text>
+                        <TouchableOpacity onPress={() => setBillDatePickerVisible(true)} style={styles.fieldBtn}>
+                            <Text style={styles.fieldBtnText}>{formatDate(editBillDate)}</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.fieldLabel}>Due Date</Text>
+                        <TouchableOpacity onPress={() => setDueDatePickerVisible(true)} style={styles.fieldBtn}>
+                            <Text style={styles.fieldBtnText}>{formatDate(editDueDate)}</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.fieldLabel}>Amount</Text>
+                        <TextInput
+                            style={styles.editInput}
+                            keyboardType="numeric"
+                            value={editAmount}
+                            onChangeText={setEditAmount}
+                            placeholder="Bill amount"
+                            placeholderTextColor={tokens.colors.textFaint}
+                        />
+                        <View style={styles.editBillActions}>
+                            <TouchableOpacity
+                                style={[styles.editBillActionBtn, styles.saveBillBtn, savingBill && { opacity: 0.5 }]}
+                                onPress={handleSaveBill}
+                                disabled={savingBill}
+                            >
+                                <Text style={styles.editBillActionText}>Save</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.editBillActionBtn, styles.cancelBillBtn]}
+                                onPress={cancelEditBill}
+                                disabled={savingBill}
+                            >
+                                <Text style={[styles.editBillActionText, { color: '#fff' }]}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </>
+                )}
             </Card>
             <Card style={styles.filtersCard}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
@@ -351,6 +470,18 @@ export default function PaymentDetails() {
                 onConfirm={submitPromiseDate}
                 onCancel={() => setShowPromisePicker(false)}
                 minimumDate={minPickDate}
+            />
+            <DateTimePickerModal
+                isVisible={billDatePickerVisible}
+                mode="date"
+                onConfirm={(d) => { setEditBillDate(d); setBillDatePickerVisible(false); }}
+                onCancel={() => setBillDatePickerVisible(false)}
+            />
+            <DateTimePickerModal
+                isVisible={dueDatePickerVisible}
+                mode="date"
+                onConfirm={(d) => { setEditDueDate(d); setDueDatePickerVisible(false); }}
+                onCancel={() => setDueDatePickerVisible(false)}
             />
         </Screen>
     );
@@ -430,4 +561,16 @@ const styles = StyleSheet.create({
     pageSubtitle: { fontSize: 18, color: 'rgba(255,255,255,0.75)', marginTop: 8, flex: 1 },
     promiseBtnHeader: { backgroundColor: tokens.colors.accent, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
     promiseBtnHeaderText: { color: '#000', fontWeight: '700', fontSize: 12 },
+    // Bill edit styles
+    editBillBtn: { marginTop: 12, backgroundColor: tokens.colors.accent, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+    editBillBtnText: { color: '#000', fontWeight: '700', fontSize: 13 },
+    fieldLabel: { color: tokens.colors.textDim, fontSize: 11, fontWeight: '700', marginBottom: 4, marginTop: 10, letterSpacing: 0.5 },
+    editInput: { backgroundColor: tokens.colors.cardAlt, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, fontSize: 14, color: tokens.colors.text, borderWidth: 1, borderColor: tokens.colors.border, marginBottom: 8 },
+    fieldBtn: { backgroundColor: tokens.colors.cardAlt, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: tokens.colors.border, marginBottom: 8 },
+    fieldBtnText: { color: tokens.colors.text, fontSize: 13, fontWeight: '600' },
+    editBillActions: { flexDirection: 'row', gap: 12, marginTop: 14 },
+    editBillActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+    saveBillBtn: { backgroundColor: tokens.colors.accent },
+    cancelBillBtn: { backgroundColor: tokens.colors.danger },
+    editBillActionText: { fontWeight: '700', fontSize: 13, color: '#000' },
 });

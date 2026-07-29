@@ -32,6 +32,7 @@ from app.schemas.company import (
 from app.schemas.bill import (
     BillList,
     BillOut,
+    BillUpdate,
     BillUpdatePromise,
     UpcomingPromiseBuckets,
     UpcomingPromiseBill,
@@ -825,6 +826,78 @@ def admin_update_bill_promise(
     db.commit()
     db.refresh(b)
     # Return BillOut with dynamic due consistent with get_bill
+    settings_row = ensure_settings_row(db)
+    credit_days = settings_row.credit_extension_days or 0
+    dynamic_due = (
+        (b.bill_date + timedelta(days=credit_days)) if b.bill_date else b.due_date
+    )
+    return BillOut(
+        id=b.id,
+        bill_number=b.bill_number,
+        company_code=b.company_code,
+        bill_date=b.bill_date,
+        due_date=dynamic_due,
+        promise_date=getattr(b, "promise_date", None),
+        amount=b.amount,
+        amount_paid=b.amount_paid,
+        status=b.status.value if hasattr(b.status, "value") else str(b.status),
+    )
+
+
+@router.patch(
+    "/accountant/bills/{bill_id}",
+    response_model=BillOut,
+    dependencies=[Depends(require_roles("accountant", "admin"))],
+)
+@user_limiter.limit(settings.RATE_LIMIT_DATA_READ)
+def edit_bill(
+    request: Request,
+    bill_id: int,
+    body: BillUpdate,
+    db: Session = Depends(get_db),
+):
+    """Edit bill fields (bill_number, bill_date, due_date, amount).
+    If amount changes, company totals are recalculated.
+    Amount cannot be reduced below current amount_paid.
+    """
+    b = db.get(Bill, bill_id)
+    if not b or b.is_archived:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    if body.amount is not None:
+        new_amount = Decimal(str(body.amount))
+        if new_amount < Decimal(str(b.amount_paid or 0)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reduce amount below amount_paid ({b.amount_paid})",
+            )
+        b.amount = new_amount
+
+    if body.bill_number is not None:
+        b.bill_number = body.bill_number.strip()
+
+    if body.bill_date is not None:
+        b.bill_date = body.bill_date
+
+    if body.due_date is not None:
+        b.due_date = body.due_date
+
+    # Refresh bill status in case amount changed
+    if b.amount_paid >= b.amount:
+        b.status = BillStatus.paid
+    elif b.amount_paid > 0:
+        b.status = BillStatus.partial
+    else:
+        b.status = BillStatus.pending
+
+    db.add(b)
+    db.commit()
+
+    # Recalculate company totals since bill amount may have changed
+    from app.services.company import recalc_company_totals
+    recalc_company_totals(db, b.company_code)
+
+    db.refresh(b)
     settings_row = ensure_settings_row(db)
     credit_days = settings_row.credit_extension_days or 0
     dynamic_due = (

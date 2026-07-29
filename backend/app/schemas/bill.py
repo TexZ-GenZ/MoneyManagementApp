@@ -25,6 +25,14 @@ class BillList(BaseModel):
     total: int
 
 
+class BillUpdate(BaseModel):
+    """Fields for updating a bill. All fields optional — only provided fields are changed."""
+    bill_number: Optional[str] = None
+    bill_date: Optional[date] = None
+    due_date: Optional[date] = None
+    amount: Optional[Decimal] = None
+
+
 class BillUpdatePromise(BaseModel):
     promise_date: date
 
