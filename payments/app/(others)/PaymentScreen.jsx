@@ -42,7 +42,8 @@ export default function CollectPaymentScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [collectedAt, setCollectedAt] = useState(new Date()); // auto-updated, readonly
+  const [collectedAt, setCollectedAt] = useState(new Date());
+  const [isCollectedAtPickerVisible, setCollectedAtPickerVisibility] = useState(false);
   const [nextPromiseDate, setNextPromiseDate] = useState(null);
   const [isNextPromiseDatePickerVisible, setNextPromiseDatePickerVisibility] = useState(false);
 
@@ -211,11 +212,20 @@ export default function CollectPaymentScreen() {
     })();
   }, [bill_id]);
 
-  // Keep collectedAt ticking (minute precision) but not editable
-  useEffect(() => {
-    const id = setInterval(() => setCollectedAt(new Date()), 60000);
-    return () => clearInterval(id);
-  }, []);
+  // Collected-at handlers for the date picker
+  const showCollectedAtPicker = () => setCollectedAtPickerVisibility(true);
+  const hideCollectedAtPicker = () => setCollectedAtPickerVisibility(false);
+  const handleConfirmCollectedAt = (date) => {
+    // Preserve current time, only change date
+    const merged = new Date(date);
+    merged.setHours(
+      collectedAt.getHours(),
+      collectedAt.getMinutes(),
+      collectedAt.getSeconds()
+    );
+    setCollectedAt(merged);
+    hideCollectedAtPicker();
+  };
 
   const validateInputs = () => {
     if (!amountCollected || isNaN(Number(amountCollected)) || Number(amountCollected) <= 0) {
@@ -264,7 +274,7 @@ export default function CollectPaymentScreen() {
 
       const payload = {
         company_code,
-        collected_at: new Date().toISOString(),
+        collected_at: collectedAt.toISOString(),
         amount_collected: Number(amountCollected),
         method: paymentMethod === "Goods Return" ? "goods_return" : paymentMethod.toLowerCase(),
         comments: comments.trim() || undefined,
@@ -415,8 +425,10 @@ export default function CollectPaymentScreen() {
 
           <Card style={styles.cardSection}>
             <SectionHeader title="Collection" />
-            <FieldLabel label="Collected At (Now)" />
-            <View style={styles.fieldBtn}><Text style={styles.fieldBtnText}>{formatDateTime(collectedAt)}</Text></View>
+            <FieldLabel label="Collected At" />
+            <TouchableOpacity onPress={showCollectedAtPicker} style={styles.fieldBtn} disabled={submitting}>
+              <Text style={styles.fieldBtnText}>{formatDateTime(collectedAt)}</Text>
+            </TouchableOpacity>
 
             <FieldLabel label="Payment Type" />
             <View style={styles.toggleRow}>
@@ -478,6 +490,7 @@ export default function CollectPaymentScreen() {
                   <Text style={styles.fieldBtnText}>{nextPromiseDate ? formatDate(nextPromiseDate) : 'Select date'}</Text>
                 </TouchableOpacity>
                 <DateTimePickerModal isVisible={isNextPromiseDatePickerVisible} mode="date" minimumDate={new Date()} onConfirm={handleConfirmNextPromiseDate} onCancel={hideNextPromiseDatePicker} />
+              <DateTimePickerModal isVisible={isCollectedAtPickerVisible} mode="date" onConfirm={handleConfirmCollectedAt} onCancel={hideCollectedAtPicker} maximumDate={new Date()} />
               </>
             )}
           </Card>

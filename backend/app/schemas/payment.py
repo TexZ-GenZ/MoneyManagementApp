@@ -31,6 +31,25 @@ class PaymentSubmit(BaseModel):
         return s.lower()
 
 
+class PaymentUpdate(BaseModel):
+    """Fields for updating an existing payment. All fields optional — only provided fields are changed."""
+    amount_collected: Optional[Decimal] = None
+    method: Optional[str] = None
+    collected_at: Optional[datetime] = None
+    comments: Optional[str] = None
+    next_promise_date: Optional[date] = None
+    bill_allocations: Optional[List[BillAllocationIn]] = None
+
+    @field_validator("method")
+    @classmethod
+    def normalize_method(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            return v
+        return v.strip().lower()
+
+
 class PaymentOut(BaseModel):
     id: int
     company_code: str

@@ -584,3 +584,169 @@ def reconcile_bill_promises(db: Session) -> int:
             updated += 1
     db.commit()
     return updated
+
+
+def update_payment(
+    db: Session,
+    *,
+    payment_id: int,
+    amount_collected: float | None = None,
+    method: str | None = None,
+    collected_at: datetime | None = None,
+    comments: str | None = None,
+    next_promise_date: date | None = None,
+    bill_allocations: List[dict] | None = None,
+) -> Payment:
+    """Update an existing payment's fields and optionally its bill allocations.
+
+    Only editable when status is submitted or accountant_approved (not yet final).
+    If allocations or amount change, old allocations are reversed, new ones applied,
+    and company totals recalculated.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+
+    TWO_DP = Decimal("0.01")
+
+    p = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not p:
+        raise ValueError("Payment not found")
+
+    editable_statuses = {
+        PaymentStatus.submitted,
+        PaymentStatus.accountant_approved,
+        PaymentStatus.admin_approved,
+    }
+    if p.status not in editable_statuses:
+        raise ValueError(
+            f"Cannot edit payment with status '{p.status.value if hasattr(p.status, 'value') else p.status}'. "
+            "Only submitted, accountant-approved, or admin-approved payments can be edited."
+        )
+
+    allocations_changed = bill_allocations is not None
+    amount_changed = (
+        amount_collected is not None
+        and Decimal(str(amount_collected)) != Decimal(str(p.amount_collected))
+    )
+
+    if amount_changed and not allocations_changed:
+        raise ValueError(
+            "When changing amount_collected, you must also provide updated bill_allocations"
+        )
+
+    # If allocations or amount are changing, reverse old ones first
+    if allocations_changed or amount_changed:
+        reverse_payment_allocations_from_bills(db, payment_id)
+
+        # Delete old allocation rows
+        db.query(PaymentAllocation).filter(
+            PaymentAllocation.payment_id == payment_id
+        ).delete()
+        db.flush()
+
+    # Update payment fields
+    if amount_collected is not None:
+        p.amount_collected = Decimal(str(amount_collected))
+    if method is not None:
+        p.method = method.strip().lower()
+    if collected_at is not None:
+        p.collected_at = collected_at
+    if comments is not None:
+        p.comments = comments
+    if next_promise_date is not None:
+        if next_promise_date < date.today():
+            raise ValueError("next_promise_date cannot be in the past")
+        p.next_promise_date = next_promise_date
+
+    db.add(p)
+    db.flush()
+
+    # Create new allocations if provided
+    if bill_allocations is not None:
+        # Validate new allocations
+        amt = float(p.amount_collected) if p.amount_collected is not None else 0
+        _validate_allocations_against_effective_remaining(
+            db,
+            company_code=p.company_code,
+            allocations=bill_allocations,
+            amount_collected=amt,
+            next_promise_date=p.next_promise_date,
+            exclude_payment_id=p.id,
+        )
+        for a in bill_allocations:
+            alloc_amt = Decimal(str(a["amount"]))
+            try:
+                alloc_amt = alloc_amt.quantize(TWO_DP, rounding=ROUND_HALF_UP)
+            except Exception:
+                pass
+            db.add(
+                PaymentAllocation(
+                    payment_id=p.id,
+                    bill_id=a["bill_id"],
+                    amount=alloc_amt,
+                )
+            )
+        apply_payment_allocations_to_bills(db, p.id)
+
+    # Recalculate company totals
+    from app.services.company import recalc_company_totals
+
+    recalc_company_totals(db, p.company_code)
+
+    # Reconcile bill promise dates
+    reconcile_bill_promises(db, p.company_code)
+
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def delete_payment(
+    db: Session,
+    *,
+    payment_id: int,
+) -> None:
+    """Delete a payment and reverse its effects on bills and company totals.
+
+    Only deletable when status is submitted or accountant_approved.
+    Also cleans up any pending notifications tied to this payment.
+    """
+    p = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not p:
+        raise ValueError("Payment not found")
+
+    deletable_statuses = {
+        PaymentStatus.submitted,
+        PaymentStatus.accountant_approved,
+        PaymentStatus.admin_approved,
+    }
+    if p.status not in deletable_statuses:
+        raise ValueError(
+            f"Cannot delete payment with status '{p.status.value if hasattr(p.status, 'value') else p.status}'. "
+            "Only submitted, accountant-approved, or admin-approved payments can be deleted."
+        )
+
+    company_code = p.company_code
+
+    # Reverse allocations from bills
+    reverse_payment_allocations_from_bills(db, payment_id)
+
+    # Delete allocation rows
+    db.query(PaymentAllocation).filter(
+        PaymentAllocation.payment_id == payment_id
+    ).delete()
+
+    # Clean up pending notifications tied to this payment
+    db.query(Notification).filter(
+        Notification.payment_id == payment_id,
+        Notification.status == NotificationStatus.pending,
+    ).delete()
+
+    # Delete the payment
+    db.delete(p)
+
+    # Recalculate company totals
+    from app.services.company import recalc_company_totals
+
+    recalc_company_totals(db, company_code)
+
+    db.commit()

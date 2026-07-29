@@ -38,6 +38,7 @@ from app.schemas.bill import (
 )
 from app.schemas.payment import (
     PaymentSubmit,
+    PaymentUpdate,
     PaymentOut,
     PaymentList,
     BillPaymentHistory,
@@ -66,12 +67,13 @@ from app.services.company import (
     effective_due_date_expr,
     get_company_rollups,
 )
-from app.services.payments import create_payment_with_allocations, admin_approve_payment
 from app.services.payments import (
     create_payment_with_allocations,
     admin_approve_payment,
     reconcile_bill_promises,
     reverse_payment_allocations_from_bills,
+    update_payment,
+    delete_payment,
 )
 from app.services.notifications import run_notification_scan
 from app.core.scheduler import reschedule_jobs
@@ -596,7 +598,7 @@ def set_credit_date(
 # Company Account Statement PDF
 @router.get(
     "/companies/{code}/statement",
-    dependencies=[Depends(require_roles("admin", "accountant"))],
+    dependencies=[Depends(require_roles("admin", "accountant", "executive"))],
     response_class=Response,
     responses={
         200: {
@@ -612,6 +614,7 @@ def company_statement(
     from_date: date = Query(..., alias="from", description="Start date (YYYY-MM-DD)"),
     to_date: date = Query(..., alias="to", description="End date (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Generate and download an account statement PDF for the given company.
 
@@ -625,6 +628,23 @@ def company_statement(
     comp = db.get(Company, code)
     if not comp:
         raise HTTPException(status_code=404, detail="Company not found")
+
+    # Executives can only download ledgers for their assigned companies
+    if user.role == Role.executive:
+        assignment = (
+            db.query(ExecAssignment)
+            .filter(
+                ExecAssignment.executive_id == user.id,
+                ExecAssignment.company_code == code,
+            )
+            .first()
+        )
+        if not assignment:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only download ledgers for your assigned companies",
+            )
+
     if from_date > to_date:
         raise HTTPException(status_code=422, detail="'from' must be <= 'to'")
     try:
@@ -2503,6 +2523,65 @@ def accountant_decline(
         # Never block decline flow on push failures
         pass
     return p
+
+
+@router.patch(
+    "/accountant/payments/{payment_id}",
+    response_model=PaymentOut,
+    dependencies=[Depends(require_roles("executive", "accountant", "admin"))],
+)
+@user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
+def edit_payment(
+    request: Request,
+    payment_id: int,
+    body: PaymentUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Edit an existing payment. Accountant can edit submitted/accountant_approved payments.
+    All fields are optional — only provided fields are updated.
+    """
+    try:
+        p = update_payment(
+            db,
+            payment_id=payment_id,
+            amount_collected=(
+                float(body.amount_collected)
+                if body.amount_collected is not None
+                else None
+            ),
+            method=body.method,
+            collected_at=body.collected_at,
+            comments=body.comments,
+            next_promise_date=body.next_promise_date,
+            bill_allocations=(
+                [a.model_dump() for a in body.bill_allocations]
+                if body.bill_allocations is not None
+                else None
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return p
+
+
+@router.delete(
+    "/accountant/payments/{payment_id}",
+    status_code=204,
+    dependencies=[Depends(require_roles("executive", "accountant", "admin"))],
+)
+@user_limiter.limit(settings.RATE_LIMIT_PAYMENT_APPROVAL)
+def remove_payment(
+    request: Request,
+    payment_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a payment. Only submitted or accountant_approved payments can be deleted."""
+    try:
+        delete_payment(db, payment_id=payment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return Response(status_code=204)
 
 
 # Push token management - client sends FCM token on login
